@@ -1,0 +1,138 @@
+-- |
+-- The sequent calculus: the first IR of the native pipeline, after Core.
+--
+-- It is a focused, call by value λμμ̃ calculus with no types. A program is
+-- made of producers, which make values, consumers, which use them, and
+-- statements, which are what runs. The one way to compute is a cut: a
+-- producer set against a consumer.
+--
+-- Haskell is lazy and this calculus is not, so laziness is written out. A
+-- variable stands for either a value or a thunk. Forcing it evaluates a
+-- thunk, once, and leaves a value alone. Every thunk that is made and every
+-- force is visible here, so that a later pass can remove the ones it can
+-- prove are not needed.
+module Sequent.Tree where
+
+import Data.Int (Int32)
+import Data.Map (Map)
+import Data.Set (Set)
+import qualified Data.Set as Set
+import Data.Text (Text)
+import Generate.Global (Global)
+import Sequent.Primitive (Primitive)
+
+-- |
+-- How a binder is evaluated. This follows the strictness design in the
+-- roadmap.
+data Strategy
+  = -- | Evaluated at first use and then kept: the variable may hold a thunk.
+    ByNeed
+  | -- | Evaluated when bound: the variable always holds a value.
+    ByValue
+  | -- | Evaluated at every use and never kept. Nothing makes these yet.
+    ByName
+  deriving (Eq, Show)
+
+data Binder = Binder
+  { name :: !Text,
+    strategy :: !Strategy
+  }
+
+data Literal
+  = -- | An @Int@ or a @Char@.
+    Int !Int32
+  | Integer !Integer
+  | Text !Text
+  deriving (Eq, Show)
+
+data Producer
+  = Variable !Text
+  | -- | A definition at the top of the program.
+    Global !Global
+  | Literal !Literal
+  | -- | A constructor's tag and its fields. The fields are not forced.
+    Constructor !Int [Producer]
+  | -- | @μα. s@: run the statement, with α naming whatever consumes this.
+    Mu !Text Statement
+  | -- | A function: its parameters, the consumer of its result and its body.
+    -- A function is a value.
+    Function [Binder] !Text Statement
+  | -- | Something not yet evaluated. Forcing it runs the statement, whose
+    -- consumer is given the value. The value is kept, so it runs once.
+    Thunk !Text Statement
+
+data Consumer
+  = Covariable !Text
+  | -- | @μ̃x. s@: name the value and go on.
+    MuTilde !Binder Statement
+  | -- | Take a constructed value apart by its tag. If no alternative has
+    -- the tag, the last statement runs.
+    Case [Alternative] (Maybe Statement)
+  | -- | Call a function with all of its arguments, the result going to a
+    -- consumer.
+    Apply [Producer] Consumer
+  | -- | Evaluate a thunk, the value going to a consumer. A value goes
+    -- straight there.
+    Force Consumer
+
+data Alternative = Alternative !Int [Binder] Statement
+
+data Statement
+  = Cut Producer Consumer
+  | -- | A primitive of values that are already evaluated.
+    Primitive !Primitive [Producer] Consumer
+  | -- | Functions and thunks that may refer to each other, and then a
+    -- statement in their scope.
+    LetRec [(Text, Producer)] Statement
+  | -- | No pattern matched.
+    Abort
+  | -- | The program is over.
+    Halt
+
+-- |
+-- A program: its definitions, each a function or a thunk, and the statement
+-- that starts it.
+data Program = Program
+  { definitions :: Map Global Producer,
+    entry :: Statement
+  }
+
+-- |
+-- The definitions something mentions.
+class Globals a where
+  globals :: a -> Set Global
+
+instance (Globals a) => Globals [a] where
+  globals = foldMap globals
+
+instance (Globals a) => Globals (Maybe a) where
+  globals = foldMap globals
+
+instance Globals Producer where
+  globals = \case
+    Variable _ -> Set.empty
+    Global global -> Set.singleton global
+    Literal _ -> Set.empty
+    Constructor _ fields -> globals fields
+    Mu _ statement -> globals statement
+    Function _ _ body -> globals body
+    Thunk _ body -> globals body
+
+instance Globals Consumer where
+  globals = \case
+    Covariable _ -> Set.empty
+    MuTilde _ statement -> globals statement
+    Case alternatives otherwise -> globals alternatives <> globals otherwise
+    Apply arguments consumer -> globals arguments <> globals consumer
+    Force consumer -> globals consumer
+
+instance Globals Alternative where
+  globals (Alternative _ _ statement) = globals statement
+
+instance Globals Statement where
+  globals = \case
+    Cut producer consumer -> globals producer <> globals consumer
+    Primitive _ arguments consumer -> globals arguments <> globals consumer
+    LetRec bindings statement -> globals (map snd bindings) <> globals statement
+    Abort -> Set.empty
+    Halt -> Set.empty

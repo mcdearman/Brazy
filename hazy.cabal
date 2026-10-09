@@ -11,9 +11,53 @@ maintainer: Hexagonalstar64@gmail.com
 copyright: Copyright © 2026 Freddy Angel Cubas "superstar64"
 category: Development
 
+library diagnostics
+  exposed-modules:
+    Diagnostics
+
+  build-depends:
+    base,
+    containers >=0.7 && <0.8,
+    diagnose >=2.5 && <2.6,
+    prettyprinter >=1.7 && <1.8,
+    text >=2.1.2 && <2.2,
+
+  default-extensions:
+    LambdaCase
+    NamedFieldPuns
+
+  hs-source-dirs:
+    diagnostics
+
+  default-language: Haskell2010
+
+library viewer
+  exposed-modules:
+    Viewer
+
+  build-depends:
+    base,
+    brick >=2.9 && <2.11,
+    containers >=0.7 && <0.8,
+    text >=2.1.2 && <2.2,
+    vty >=6.2 && <6.6,
+
+  default-extensions:
+    LambdaCase
+    NamedFieldPuns
+
+  hs-source-dirs:
+    viewer
+
+  default-language: Haskell2010
+
 executable hazy
   main-is: Main.hs
   other-modules:
+    AxCut.Lower
+    AxCut.Machine
+    AxCut.Printer
+    AxCut.Tree
     Builtin
     Builtin.Applicative
     Builtin.Bool
@@ -181,6 +225,8 @@ executable hazy
     Javascript.Tree.Statement
     Order
     Package
+    Repl
+    Repl.Entry
     Semantic.Check.ClassInstance
     Semantic.Check.ConstructorInstance
     Semantic.Check.Context
@@ -405,6 +451,11 @@ executable hazy
     Semantic.Unify.Solve
     Semantic.Unify.Type
     Semantic.Unify.Zonk
+    Sequent.FromCore
+    Sequent.Primitive
+    Sequent.Printer
+    Sequent.Runtime
+    Sequent.Tree
     Syntax.Extensions
     Syntax.FreeVariables
     Syntax.Lexer
@@ -462,11 +513,14 @@ executable hazy
   build-depends:
     base,
     containers >=0.7 && <0.8,
+    diagnostics,
     directory >=1.3.9 && <1.4,
     filepath >=1.5.4 && <1.6,
+    lambline >=0.1 && <0.2,
     parser-combinators >=1.3.0 && <1.4,
     text >=2.1.2 && <2.2,
     vector >=0.13.2 && <0.14,
+    viewer,
 
   default-extensions:
     DataKinds
@@ -492,6 +546,7 @@ executable hazy
 
   default-language: Haskell2010
   ghc-options:
+    -threaded
     -Wno-unrecognised-pragmas
     -Wno-x-partial
     -Werror=incomplete-uni-patterns

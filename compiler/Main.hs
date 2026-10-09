@@ -1,5 +1,8 @@
 module Main (main) where
 
+import qualified AxCut.Lower as AxCut (lower)
+import qualified AxCut.Machine as AxCut (run)
+import qualified AxCut.Printer as AxCut (print)
 import Control.Exception (catch)
 import Control.Monad (zipWithM_)
 import qualified Core.Tree.Module as Core (Module, name)
@@ -16,6 +19,7 @@ import qualified Data.Text.Lazy.Builder as Builder
 import qualified Data.Text.Lazy.IO as Text.Lazy.IO
 import Data.Vector (Vector)
 import qualified Data.Vector as Vector
+import Error (HazyError)
 import qualified Error (allow, fail, types)
 import qualified Generate.Go.Module as Module (generate)
 import qualified Generate.Go.Module as Stage5
@@ -24,6 +28,8 @@ import qualified Javascript.Printer.Lexer as Javascript (print, run)
 import qualified Javascript.Tree.Module as Module (print)
 import Package as X (Module (Module), Package (Package))
 import qualified Package
+import Repl (Compiler (..), repl)
+import qualified Repl (source)
 import qualified Semantic.Check.Go.Module as Module (check)
 import qualified Semantic.Layout as Layout
 import qualified Semantic.Resolve.Go.Module as Module (resolve)
@@ -31,6 +37,9 @@ import qualified Semantic.Scope as Scope
 import qualified Semantic.Stage as Stage
 import qualified Semantic.Tree.Module as Module (connect, seperate)
 import qualified Semantic.Tree.Module as Semantic (Module, name)
+import qualified Sequent.FromCore as Sequent (generate)
+import qualified Sequent.Printer as Sequent (print)
+import qualified Sequent.Runtime as Runtime (main)
 import Syntax.Extensions (Extensions, hazy)
 import Syntax.Lexer
   ( FullQualifiers (..),
@@ -50,8 +59,8 @@ import System.Directory (createDirectoryIfMissing, listDirectory)
 import System.Environment (getArgs, getExecutablePath)
 import System.Exit (exitFailure)
 import System.FilePath (dropExtension, dropFileName, hasDrive, pathSeparators, takeDirectory, takeExtension, (</>))
-import System.IO (IOMode (..), hClose, hSetEncoding, openFile, utf8)
-import System.IO.Unsafe (unsafeInterleaveIO)
+import System.IO (IOMode (..), hClose, hSetEncoding, openFile, stdout, utf8)
+import System.IO.Unsafe (unsafeInterleaveIO, unsafePerformIO)
 import Verbose (runVerbose)
 import Prelude hiding (Show (show))
 import qualified Prelude
@@ -190,6 +199,10 @@ data Mode
   | Group
   | Check
   | Simplify
+  | Sequent
+  | AxCut
+  | Run
+  | Repl
   | Generate FilePath
 
 data Verbose
@@ -270,6 +283,10 @@ options =
     Option [] ["bare-runtime"] (NoArg bareRuntime) "Don't include base package",
     Option [] ["debug-group"] (NoArg group) "Group source",
     Option [] ["debug-simplify"] (NoArg simplify) "Simplify source",
+    Option [] ["debug-sequent"] (NoArg sequent) "Show the program in the sequent calculus",
+    Option [] ["debug-axcut"] (NoArg axcut) "Show the program in AxCut",
+    Option [] ["run-axcut"] (NoArg runAxCut) "Run the program on the AxCut machine",
+    Option [] ["repl"] (NoArg interactive) "Start an interactive session",
     Option [] ["debug-message"] (NoArg debug) "Show debug messages",
     Option [] ["debug-show"] (NoArg show) "Show internal AST",
     Option [] ["debug-fail"] (ReqArg fail "ERROR") "Expect failure"
@@ -281,6 +298,10 @@ options =
     group execute = execute {mode = Group}
     check execute = execute {mode = Check}
     simplify execute = execute {mode = Simplify}
+    sequent execute = execute {mode = Sequent}
+    axcut execute = execute {mode = AxCut}
+    runAxCut execute = execute {mode = Run}
+    interactive execute = execute {mode = Repl}
     generate path execute = execute {mode = Generate path}
     debug execute = execute {debug = Debug}
     fail error execute = execute {failure = Expect error}
@@ -338,6 +359,7 @@ main'' args = case getOpt order options args of
           _ | hasDrive name -> name
           _ -> package </> name
     packages <- traverse (Package.load . pathize) (builtin ++ toList packages)
+    let given = modules
     let system = Vector.fromList $ concatMap loadPackage packages
     include <- Vector.fromList . concat <$> traverse (loadModules extensions) (toList include)
     modules <- Vector.fromList . concat <$> traverse (loadModules extensions) (toList modules)
@@ -346,6 +368,7 @@ main'' args = case getOpt order options args of
         all = headers <> modules
         help = putStr $ usageInfo "hazy [options] folders..." options
         run = case mode of
+          Repl -> repl session (toList given)
           _ | null modules -> help
           Help -> help
           Parse -> do
@@ -371,6 +394,18 @@ main'' args = case getOpt order options args of
             all <- stage3 debug all
             all <- stage4 debug all
             forceModules "Simplifying" show verbose Core.name (Vector.drop split all)
+          Sequent -> do
+            program <- whole all
+            hSetEncoding stdout utf8
+            Text.Lazy.IO.putStr $ Builder.toLazyText $ Sequent.print program
+          AxCut -> do
+            program <- whole all
+            hSetEncoding stdout utf8
+            Text.Lazy.IO.putStr $ Builder.toLazyText $ AxCut.print $ AxCut.lower program
+          Run -> do
+            program <- whole all
+            hSetEncoding stdout utf8
+            AxCut.run $ AxCut.lower program
           Generate target -> do
             all <- stage1 debug all
             all <- stage2 debug all
@@ -442,6 +477,39 @@ main'' args = case getOpt order options args of
                 Text.IO.hPutStr handle meta
                 hClose handle
               _ -> pure ()
+        -- The native pipeline takes the whole program, packages included.
+        whole all = do
+          all <- stage1 debug all
+          all <- stage2 debug all
+          all <- stage3 debug all
+          all <- stage4 debug all
+          pure $ Sequent.generate Runtime.main all
+        -- What an interactive session asks of the compiler. The session's
+        -- module comes after the packages and the files that were loaded.
+        session =
+          Compiler
+            { parses = \text -> unsafePerformIO $ do
+                -- A parse error is thrown from pure code, so it has to be
+                -- caught to be answered as a Bool. Nothing else is done here.
+                parsed <- stage1 Normal (Vector.singleton (entered text))
+                succeeded <$> attempt (pure $! length (Prelude.show parsed)),
+              check = \files text -> do
+                all <- together files text
+                -- The same hack as forceModules: showing a module finds its errors.
+                () <- pure $! seq (length (Prelude.show (Vector.drop split all))) ()
+                pure (),
+              core = together
+            }
+        entered text = Root {extensions, name = Repl.source, contents = text}
+        together files text = do
+          loaded <- Vector.fromList . concat <$> traverse (loadModules extensions) files
+          all <- stage1 debug (headers <> loaded <> Vector.singleton (entered text))
+          all <- stage2 debug all
+          all <- stage3 debug all
+          stage4 debug all
+        attempt :: IO a -> IO (Either HazyError a)
+        attempt action = (Right <$> action) `catch` (pure . Left)
+        succeeded = either (const False) (const True)
         noFail = do
           putStrLn "Code didn't fail"
           exitFailure

@@ -1,0 +1,127 @@
+=== Core ===
+double =
+TypeLambdaOver {
+  parameters = [],
+  constraints = None,
+  result = Lambda {
+    body = Join {
+      statements = LetOne {
+        declaration = Variable {
+          variable = SimpleDeclaration,
+          instanciation = Mono
+        },
+        body = Let {
+          declarations = Declarations {
+            terms = [],
+            types = [],
+            typeExtras = [],
+            classInstances = [],
+            dataInstances = []
+          },
+          letBody = Done {
+            done = Call {
+              function = Call {
+                function = Method {
+                  method = Index {
+                    typeIndex = Num,
+                    methodIndex = 0
+                  },
+                  evidence = Variable {
+                    variable = (Direct Num Int),
+                    instanciation = Mono
+                  },
+                  instanciation = Mono,
+                  methodInfo = MethodInfo {
+                    constraintCount = 0
+                  }
+                },
+                argument = Variable {
+                  variable = Shift SimpleDeclaration,
+                  instanciation = Mono
+                }
+              },
+              argument = Variable {
+                variable = Shift SimpleDeclaration,
+                instanciation = Mono
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+=== Sequent ===
+@Repl.double = fun(a; b).
+    <a | mu~ c.
+      <@Hazy.Helper.instance Hazy.Num HelperInt | force(mu~ !d.
+        Field 0(d; mu~ e.
+          <e | force(apply(c; apply(c; b)))>))>>
+=== AxCut ===
+@Repl.double = Closure[] { Apply(a b) =>
+    substitute [b, c := a]
+    global x%0 = @Hazy.Helper.instance Hazy.Num HelperInt
+    substitute [x%0, b, c]
+    new k%1 = Closure[b c] { Return(d) =>
+        substitute [b, c, d]
+        primitive e = Field 0
+        substitute [e, b, c]
+        new k%2 = Closure[b c] { Return(x%3) =>
+            substitute [x%3, c, b, c]
+            new k%4 = Closure[b c] { Return(x%5) =>
+                substitute [c, b, x%5]
+                invoke Apply }
+            substitute [c, k%4, x%3]
+            invoke Apply }
+        substitute [k%2, e]
+        force }
+    substitute [k%1, x%0]
+    force }
+=== Javascript ===
+const f = {
+  a : 0,
+  b : a => {
+    const c = a ;
+    const e = ( d . a ? d . b ( ) : d . b ) . a ;
+    return ( e . a ? e . b ( ) : e . b ) ( c ) ( c ) ;
+    b ( ) ;
+  }
+} ;
+export {
+  f as "double"
+} ;
+const i = {
+  a : 1,
+  b ( ) {
+    g : {
+      this . b = h . a ? h . b ( ) : h . b ;
+      break g ;
+      b ( ) ;
+    } this . a = 0;
+    return this . b ;
+  }
+} ;
+export {
+  i as "it\u{27}repl"
+} ;
+import {
+  "double" as h
+} from "./Repl.mjs" ;
+import {
+  "abort" as b
+} from "./Hazy.mjs" ;
+import {
+  "numInt" as d
+} from "./Hazy.mjs" ;
+@Repl.double = fun(a; b).
+    <a | mu~ c.
+      <@Hazy.Helper.instance Hazy.Num HelperInt | force(mu~ !d.
+        Field 0(d; mu~ e.
+          <e | force(apply(c; apply(c; b)))>))>>
+@Repl.it'repl = thunk(a).
+    <@Repl.double | force(apply(thunk(b).
+      <@Hazy.Helper.instance Hazy.Num HelperInt | force(mu~ !c.
+        Field 6(c; mu~ d.
+          <d | force(apply(1n; b))>))>; a))>
+entry = <@Repl.it'repl | force(apply(; mu~ _.
+    halt))>

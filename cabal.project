@@ -1,1 +1,11 @@
 packages: hazy.cabal
+
+-- diagnose 2.5.1 asks for text <=2.0, and GHC ships a newer one. Without this
+-- cabal picks diagnose 2.0.0, which has a different API.
+allow-newer: diagnose:*
+
+-- The line editor of the interactive session.
+source-repository-package
+  type: git
+  location: https://github.com/mcdearman/lambline.git
+  tag: a300c7fd57453db46ce4d54cae10ff689227447d

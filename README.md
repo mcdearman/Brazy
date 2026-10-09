@@ -48,6 +48,58 @@ hazy test/run/hello/source -o .hello
 node .hello/index.mjs
 ```
 
+# Interactive Session
+
+`hazy --repl` starts a prompt. An expression is evaluated: an `IO` action is
+run and any other value is shown. Declarations are added to the session, and
+declaring a name again replaces the entry that declared it.
+
+```
+> double :: Int -> Int
+  double x = x + x
+
+> double 21
+42
+```
+
+Enter submits an entry once it parses. An entry that does not parse yet is
+carried on to the next line, and a blank line ends it. Alt-Enter or Ctrl-J
+starts a new line whatever the entry looks like. `:help` lists the commands,
+which include `:load PATH`, `:sequent EXPR` and `:axcut EXPR`.
+
+`:ir EXPR` opens a full-screen viewer on an expression, or on a definition if
+it is given the name of one, with a page for each form the compiler puts it
+in: Core, the sequent calculus, AxCut and Javascript. Tab moves to the next
+page, Shift-Tab to the one before, the arrow keys and Page Up and Page Down
+scroll, and `q` closes it. The viewer is the small library in `viewer`, which
+wraps the `brick` package.
+
+Entries are compiled as a whole module each time and run on the AxCut machine,
+so the session is subject to everything the compiler is: there is no numeric
+defaulting yet, so write `(1 + 2 :: Int)`.
+
+The line editor is [lambline](https://github.com/mcdearman/lambline), which
+`cabal.project` fetches at a pinned commit.
+
+# Errors
+
+Errors are shown against the source they are in. The drawing is done by the
+small library in `diagnostics`, which wraps the `diagnose` package and knows
+nothing about the compiler. `Error.report` turns a `HazyError` into one of its
+reports.
+
+# Running From Source
+
+The `Makefile` in the project root builds the compiler and its packages when
+their sources have changed, and runs them:
+
+```sh
+make                 # build
+make run             # start an interactive session
+make run ARGS="test/run/hello/source --run-axcut"
+make test            # run the tests
+```
+
 # Packages
 
 Hazy has a bare minimum package system at the moment. A package is a directory

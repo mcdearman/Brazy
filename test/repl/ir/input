@@ -1,0 +1,6 @@
+double :: Int -> Int
+double x = x + x
+
+:ir double
+:sequent double 1
+:quit

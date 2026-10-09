@@ -11,3 +11,21 @@ throw = placeholder
 
 catch :: (Exception e) => IO a -> (e -> IO a) -> IO a
 catch = placeholder
+
+data SomeException
+
+instance Show SomeException where
+  showsPrec = placeholder
+
+instance Exception SomeException
+
+data AsyncException
+  = StackOverflow
+  | HeapOverflow
+  | ThreadKilled
+  | UserInterrupt
+
+instance Show AsyncException where
+  showsPrec = placeholder
+
+instance Exception AsyncException

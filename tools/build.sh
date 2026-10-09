@@ -25,7 +25,11 @@ cabal build hazy
 HAZY=$(cabal list-bin hazy)
 
 # Copy the compiler while preserving the file extension
-cp $HAZY $DIST/bin/$(basename $HAZY)
+# It is copied beside its place and then moved there, so that the old file is
+# replaced and never written over: macOS kills, and can hang, a program whose
+# file was overwritten in place.
+cp $HAZY $DIST/bin/$(basename $HAZY).new
+mv -f $DIST/bin/$(basename $HAZY).new $DIST/bin/$(basename $HAZY)
 
 # Copy and Compile the runtime
 mkdir $PACKAGE/hazy-internal

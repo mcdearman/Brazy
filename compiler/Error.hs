@@ -1,7 +1,8 @@
 module Error
-  ( HazyError,
+  ( HazyError (..),
     Type,
     types,
+    report,
     fail,
     allow,
     digit,
@@ -103,8 +104,10 @@ import Data.List (intersperse)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import qualified Data.Text.Lazy as Lazy (Text)
+import qualified Data.Text as Text (pack)
+import qualified Data.Text.Lazy as Lazy.Text (toStrict)
 import Data.Text.Lazy.Builder (Builder, fromString, fromText, toLazyText)
-import qualified Data.Text.Lazy.IO as Text.Lazy.IO
+import qualified Diagnostics
 import Syntax.ParserCombinator
   ( Position,
     column,
@@ -112,23 +115,46 @@ import Syntax.ParserCombinator
     line,
   )
 import System.Exit (exitFailure)
+import System.IO (hSetEncoding, stdout, utf8)
 import Prelude hiding (fail)
 
-data HazyError = HazyError !Type Lazy.Text
+-- |
+-- An error in the program being compiled: its kind, where it is, the other
+-- places it is about, and what to say. Errors are thrown from pure code and
+-- caught by whoever started the compiler.
+data HazyError = HazyError !Type !Position [Position] Lazy.Text
   deriving (Show)
 
 instance Exception HazyError
 
-hazyError :: Type -> Lazy.Text -> a
-hazyError = (throw .) . HazyError
+-- |
+-- An error as the diagnostics library takes it.
+report :: HazyError -> Diagnostics.Report
+report (HazyError typex position others message) =
+  Diagnostics.Report
+    { Diagnostics.code = Just (Text.pack (show typex)),
+      Diagnostics.message = Lazy.Text.toStrict message,
+      Diagnostics.location = location position,
+      Diagnostics.related = [(location other, Text.pack "also here") | other <- others]
+    }
+  where
+    location position =
+      Diagnostics.Location
+        { Diagnostics.file = file position,
+          Diagnostics.line = line position,
+          Diagnostics.column = column position
+        }
 
 fail :: HazyError -> IO ()
-fail (HazyError _ message) = do
-  Text.Lazy.IO.putStrLn message
+fail error = do
+  let reports = [report error]
+  sources <- Diagnostics.load reports
+  hSetEncoding stdout utf8
+  Diagnostics.print stdout sources reports
   exitFailure
 
 allow :: Type -> HazyError -> IO ()
-allow typex' error@(HazyError typex _)
+allow typex' error@(HazyError typex _ _ _)
   | typex == typex' = pure ()
   | otherwise = throw error
 
@@ -216,15 +242,6 @@ locate position =
       fromString (show (column position))
     ]
 
-formatError :: Position -> Builder -> Builder
-formatError position error = mconcat builders
-  where
-    builders =
-      [ locate position,
-        fromString " error: ",
-        error
-      ]
-
 data Type
   = Expected
   | MissingVariableDeclaration
@@ -290,7 +307,12 @@ types :: Map String Type
 types = Map.fromList [(show error, error) | error <- [minBound .. maxBound]]
 
 errorAt :: Type -> Position -> Builder -> a
-errorAt typex position message = hazyError typex $ toLazyText $ formatError position message
+errorAt typex position = errorAlso typex position []
+
+-- |
+-- An error that is about other places as well.
+errorAlso :: Type -> Position -> [Position] -> Builder -> a
+errorAlso typex position others message = throw $ HazyError typex position others (toLazyText message)
 
 expected :: Position -> [Builder] -> Builder -> a
 expected position expect found = errorAt Expected position (mconcat builders)
@@ -326,7 +348,7 @@ missingTypeDeclaration = missingDeclaration MissingTypeDeclaration typex
 
 duplicateEntries :: Type -> Builder -> [Position] -> a
 duplicateEntries typex brand entries =
-  errorAt typex (head entries) (mconcat builders)
+  errorAlso typex (head entries) (tail entries) (mconcat builders)
   where
     builders =
       [ fromString "duplicate ",
@@ -394,7 +416,7 @@ mismatchSelectors :: Position -> a
 mismatchSelectors position = errorAt MismatchSelectors position $ fromString "mismatched selectors"
 
 unstableImports :: [Position] -> a
-unstableImports positions = errorAt UnstableImport (head positions) $ mconcat builders
+unstableImports positions = errorAlso UnstableImport (head positions) (tail positions) $ mconcat builders
   where
     builders =
       [ fromString "at most one import may be unstable: ",
@@ -479,7 +501,8 @@ badRunSTCall position =
   errorAt BadRunSTCall position $ fromString "bad runST call"
 
 overlappingInstances :: [Position] -> a
-overlappingInstances positions = errorAt OverlappingInstances (head positions) (mconcat builders)
+overlappingInstances positions =
+  errorAlso OverlappingInstances (head positions) (tail positions) (mconcat builders)
   where
     builders =
       [ fromString "overlapping instance definitions:",

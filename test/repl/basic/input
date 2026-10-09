@@ -1,0 +1,37 @@
+(1 + 2 :: Int)
+double :: Int -> Int
+double x = x + x
+
+double 21
+putStrLn "hello"
+map double [1, 2, 3]
+data Colour = Red | Green
+deriving instance Show Colour
+Red
+double :: Int -> Int
+double x = x * 3
+
+double 2
+fact :: Integer -> Integer
+fact 0 = 1
+fact n = n * fact (n - 1)
+
+fact 20
+let y = (5 :: Int) in
+  y * y
+
+not "a"
+missing
+double
+head ([] :: [Int])
+import Hazy.Prelude (trace)
+trace "seen" (7 :: Int)
+x :: Int
+x = 1
+
+x :: Int
+x = 2
+
+:nope
+double x
+:quit
