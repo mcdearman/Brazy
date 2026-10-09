@@ -25,6 +25,7 @@ import qualified Generate.Go.Module as Module (generate)
 import qualified Generate.Go.Module as Stage5
 import qualified Generate.Mangle as Mangle
 import qualified Javascript.Printer.Lexer as Javascript (print, run)
+import qualified LLVM.FromAxCut as LLVM (arm64, generate)
 import qualified Javascript.Tree.Module as Module (print)
 import Package as X (Module (Module), Package (Package))
 import qualified Package
@@ -60,6 +61,7 @@ import System.Environment (getArgs, getExecutablePath)
 import System.Exit (exitFailure)
 import System.FilePath (dropExtension, dropFileName, hasDrive, pathSeparators, takeDirectory, takeExtension, (</>))
 import System.IO (IOMode (..), hClose, hSetEncoding, openFile, stdout, utf8)
+import System.Process (callProcess)
 import System.IO.Unsafe (unsafeInterleaveIO, unsafePerformIO)
 import Verbose (runVerbose)
 import Prelude hiding (Show (show))
@@ -202,6 +204,8 @@ data Mode
   | Sequent
   | AxCut
   | Run
+  | LLVM
+  | Native FilePath
   | Repl
   | Generate FilePath
 
@@ -286,6 +290,8 @@ options =
     Option [] ["debug-sequent"] (NoArg sequent) "Show the program in the sequent calculus",
     Option [] ["debug-axcut"] (NoArg axcut) "Show the program in AxCut",
     Option [] ["run-axcut"] (NoArg runAxCut) "Run the program on the AxCut machine",
+    Option [] ["debug-llvm"] (NoArg llvm) "Show the program in LLVM IR",
+    Option [] ["native"] (ReqArg native "PATH") "Compile the program to a native executable",
     Option [] ["repl"] (NoArg interactive) "Start an interactive session",
     Option [] ["debug-message"] (NoArg debug) "Show debug messages",
     Option [] ["debug-show"] (NoArg show) "Show internal AST",
@@ -302,6 +308,8 @@ options =
     axcut execute = execute {mode = AxCut}
     runAxCut execute = execute {mode = Run}
     interactive execute = execute {mode = Repl}
+    llvm execute = execute {mode = LLVM}
+    native path execute = execute {mode = Native path}
     generate path execute = execute {mode = Generate path}
     debug execute = execute {debug = Debug}
     fail error execute = execute {failure = Expect error}
@@ -406,6 +414,21 @@ main'' args = case getOpt order options args of
             program <- whole all
             hSetEncoding stdout utf8
             AxCut.run $ AxCut.lower program
+          LLVM -> do
+            program <- whole all
+            hSetEncoding stdout utf8
+            Text.Lazy.IO.putStr $ Builder.toLazyText $ LLVM.generate LLVM.arm64 $ AxCut.lower program
+          Native target -> do
+            program <- whole all
+            -- The IR is kept beside the executable, to be looked at.
+            let source = target ++ ".ll"
+            createDirectoryIfMissing True (dropFileName target)
+            handle <- openFile source WriteMode
+            hSetEncoding handle utf8
+            Text.Lazy.IO.hPutStr handle $ Builder.toLazyText $ LLVM.generate LLVM.arm64 $ AxCut.lower program
+            hClose handle
+            let runtime = root </> "lib" </> "hazy" </> "native" </> "libhazy_runtime.a"
+            callProcess "clang" ["-O1", "-Wno-override-module", source, runtime, "-o", target]
           Generate target -> do
             all <- stage1 debug all
             all <- stage2 debug all

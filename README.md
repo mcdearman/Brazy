@@ -48,6 +48,21 @@ hazy test/run/hello/source -o .hello
 node .hello/index.mjs
 ```
 
+# Native Code
+
+`hazy SOURCE --native PATH` compiles a program to a native executable. It
+writes LLVM IR to `PATH.ll` and has `clang` compile it and link it with the
+runtime in `runtime/native`, which is written in Rust. Both `clang` and
+`cargo` are needed, and only arm64 is generated for so far.
+
+```sh
+make run ARGS="test/run/hello/source --native .hello"
+./.hello
+```
+
+The whole program is compiled at once, packages included. Nothing is freed
+yet, `Integer` is limited to 64 bits and `generalCategory` is missing.
+
 # Interactive Session
 
 `hazy --repl` starts a prompt. An expression is evaluated: an `IO` action is
@@ -69,7 +84,7 @@ which include `:load PATH`, `:sequent EXPR` and `:axcut EXPR`.
 
 `:ir EXPR` opens a full-screen viewer on an expression, or on a definition if
 it is given the name of one, with a page for each form the compiler puts it
-in: Core, the sequent calculus, AxCut and Javascript. Tab moves to the next
+in: Core, the sequent calculus, AxCut, LLVM IR and Javascript. Tab moves to the next
 page, Shift-Tab to the one before, the arrow keys and Page Up and Page Down
 scroll, and `q` closes it. The viewer is the small library in `viewer`, which
 wraps the `brick` package.

@@ -47,6 +47,7 @@ import qualified Generate.Global as Global (Global (..))
 import qualified Generate.Go.Module as Javascript (Module (..), generate)
 import qualified Generate.Mangle as Mangle (mangle)
 import qualified Javascript.Printer.Lexer as Javascript (print, run)
+import qualified LLVM.FromAxCut as LLVM (arm64, generateBody, generateDefinitions)
 import qualified Javascript.Tree.Module as Module (print)
 import Lambline
   ( Candidate,
@@ -419,6 +420,10 @@ forms =
       Builder.toLazyText $ case selection of
         Definition _ -> AxCut.printDefinitions (AxCut.definitions (AxCut.lower (chosen selection modules)))
         Asked -> AxCut.print (AxCut.lower (chosen selection modules)),
+    Form "LLVM" llvmWords $ \selection modules ->
+      Builder.toLazyText $ case selection of
+        Definition _ -> LLVM.generateDefinitions LLVM.arm64 (AxCut.lower (chosen selection modules))
+        Asked -> LLVM.generateBody LLVM.arm64 (AxCut.lower (chosen selection modules)),
     Form "Javascript" ["const", "let", "return", "if", "break", "export", "import", "from", "this"] $
       \selection modules ->
         let home = case selection of
@@ -454,6 +459,34 @@ forms =
         "abort",
         "halt",
         "entry"
+      ]
+    llvmWords =
+      [ "define",
+        "declare",
+        "internal",
+        "global",
+        "private",
+        "constant",
+        "tailcc",
+        "musttail",
+        "call",
+        "ret",
+        "store",
+        "load",
+        "getelementptr",
+        "inttoptr",
+        "ptrtoint",
+        "lshr",
+        "and",
+        "switch",
+        "label",
+        "unreachable",
+        "align",
+        "to",
+        "void",
+        "ptr",
+        "i64",
+        "i8"
       ]
     -- The program for the entry, with only the definitions that are wanted.
     chosen selection modules =
@@ -686,7 +719,6 @@ loop compiler editor session = do
     Left Eof -> pure ()
     -- Ctrl-C abandons the entry being typed.
     Left Interrupted -> loop compiler editor session
-    Left failure -> hPutStrLn stderr (show failure)
     Right text
       | all isSpace text -> loop compiler editor session
       | otherwise -> do

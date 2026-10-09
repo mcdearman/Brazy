@@ -1,0 +1,17 @@
+[package]
+name = "hazy-runtime"
+version = "0.1.0"
+edition = "2021"
+license = "BSL-1.0"
+description = "The runtime of natively compiled Hazy programs"
+publish = false
+
+[lib]
+name = "hazy_runtime"
+crate-type = ["staticlib"]
+
+[profile.release]
+panic = "abort"
+
+[profile.dev]
+panic = "abort"

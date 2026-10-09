@@ -70,6 +70,17 @@ for run_dir in test/run/*/; do
     diff "test/run/$run/result" ".test/$run/axcut"
 done
 
+# Run the execution tests natively. Only the ones the native runtime can run
+# so far are listed.
+echo "=== Execution (native) ==="
+for run in hello; do
+    mkdir -p ".test/native"
+    echo "Running $run"
+    $HAZY -q "test/run/$run/source" --native ".test/native/$run"
+    ".test/native/$run" > ".test/native/$run.result"
+    diff "test/run/$run/result" ".test/native/$run.result"
+done
+
 # Run the interactive session tests
 echo "=== Interactive ==="
 for repl_dir in test/repl/*/; do

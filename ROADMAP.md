@@ -203,26 +203,51 @@ Not a milestone of the native backend, but built alongside it.
 
 ### M2. Native hello
 
-- [ ] LLVM IR generation from AxCut for one target (arm64 macOS), behind a
-      target flag beside Javascript
-- [ ] Rust runtime crate under `runtime/`: allocation, thunks, the primitives
-      `hello` needs, program entry
-- [ ] `tools/build.sh` builds the runtime; the compiler links a native
-      executable
-- [ ] Native packages: a package's `artifacts` can hold native objects as
-      well as Javascript
-- [ ] An LLVM page in `:ir`: one more entry in the table of forms in
-      `compiler/Repl.hs`
-- [ ] Check: `test/run/hello` runs natively
+Done on the `m2-native` branch. `test/run/hello` runs natively, and so do 21
+of the other 29 programs; the rest need a primitive that is M3's.
+
+- [x] LLVM IR generation from AxCut (`compiler/LLVM/FromAxCut.hs`) for arm64,
+      behind `--native PATH`. `--debug-llvm` prints the IR
+- [x] Rust runtime crate in `runtime/native`: allocation and the primitives.
+      Forcing a thunk and giving a value to a consumer are emitted as LLVM IR
+      with every program, because they end in tail calls into the program
+- [x] `tools/build.sh` builds the runtime, and the compiler has `clang`
+      compile the IR and link the executable
+- [x] An LLVM page in `:ir`
+- [x] Check: `test/run/hello` runs natively, in `tools/test.sh`
+
+How it works, and what it leaves:
+
+- A value is one 64-bit word. An odd word is an `Int` or a `Char`. An even
+  word is the address of a block, whose first word says what it is.
+- Every method of an object is a function, entered with a guaranteed tail
+  call (`tailcc` and `musttail`), so a program runs in constant stack. AxCut's
+  environment exists only in the compiler: inside a function each value is
+  an LLVM value and `substitute` costs nothing.
+- A call passes eight arguments in registers and the rest through a fixed
+  area of memory, after Silo, to stay clear of stack arguments in tail calls.
+  That number is the one thing in a `Target` so far.
+- Nothing is freed. That is M4.
+- `Integer` is held in 64 bits and the program stops if one does not fit.
+  `generalCategory` is not there. Both are M3.
+- The whole program is still compiled at once. Compiling a package on its
+  own, with native objects among a package's `artifacts`, has moved to its
+  own step after M3.
 
 ### M3. The whole test suite, natively
 
-- [ ] The remaining primitives and builtin classes, to parity with
-      `Hazy.mjs`
+- [ ] The remaining primitives: `Integer` of any size and
+      `generalCategory`. The builtin classes need nothing more, since the
+      instances for tuples are generated in `Sequent.Runtime`
 - [ ] Check: every `test/run` program agrees across Javascript, the AxCut
       machine and native
 - [ ] Where the three disagree and Javascript is the one that is wrong, fix
       or record it under Track A
+
+### Separate compilation
+
+- [ ] A package compiled on its own: its `artifacts` can hold native objects
+      as well as Javascript, and a program links against them
 
 ### M4. The linear discipline
 
