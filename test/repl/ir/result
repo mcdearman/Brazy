@@ -164,29 +164,6 @@ const f = {
 export {
   f as "double"
 } ;
-const i = {
-  a : 1,
-  b ( ) {
-    g : {
-      this . b = h . a ? h . b ( ) : h . b ;
-      break g ;
-      b ( ) ;
-    } this . a = 0;
-    return this . b ;
-  }
-} ;
-export {
-  i as "it\u{27}repl"
-} ;
-import {
-  "double" as h
-} from "./Repl.mjs" ;
-import {
-  "abort" as b
-} from "./Hazy.mjs" ;
-import {
-  "numInt" as d
-} from "./Hazy.mjs" ;
 @Repl.double = fun(a; b).
     <a | mu~ c.
       <@Hazy.Helper.instance Hazy.Num HelperInt | force(mu~ !d.
