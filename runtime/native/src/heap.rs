@@ -70,6 +70,9 @@ pub const WORKING: u64 = 3;
 pub const DONE: u64 = 4;
 pub const INTEGER: u64 = 5;
 pub const TEXT: u64 = 6;
+/// What is left of a value that was taken apart, kept for one of as many
+/// fields to be built in. It holds nothing.
+pub const HUSK: u64 = 7;
 /// A slot that holds no block.
 const FREE: u64 = 15;
 
@@ -138,7 +141,7 @@ fn counted(value: Value) -> Option<*mut u64> {
 unsafe fn words(block: *mut u64) -> usize {
     let head = *block;
     match head & KIND {
-        DATA => 1 + count(head),
+        DATA | HUSK => 1 + count(head),
         CLOSURE | THUNK | WORKING | DONE => 2 + count(head),
         INTEGER => 2,
         TEXT => 2 + (*block.add(1) as usize + 7) / 8,

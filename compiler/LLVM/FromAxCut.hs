@@ -157,7 +157,7 @@ generate' shape target defined shared start = do
   taken <- newSTRef Set.empty
   let state = State {target, counter, extra, mentioned, scope = fromString "entry", taken}
       global linkage (name, object@Object {kind}) = do
-        function state {scope = symbol name} (symbol name <> fromString ".code") (comment name) object
+        function state {scope = symbol name} (symbol name <> fromString ".code") (comment name) Nothing object
         pure $
           mconcat
             [ quoted (symbol name),
@@ -190,10 +190,11 @@ generate' shape target defined shared start = do
 
 -- Block layouts -------------------------------------------------------------
 
-dataKind, closureKind, thunkKind :: Integer
+dataKind, closureKind, thunkKind, huskKind :: Integer
 dataKind = 0
 closureKind = 1
 thunkKind = 2
+huskKind = 7
 
 kindOf :: Kind -> Integer
 kindOf = \case
@@ -525,8 +526,13 @@ safepoint state roots
 -- to it, when the closure is freed and what it captured is simply taken. A
 -- thunk is entered once, and what it captured is taken; the thunk itself
 -- belongs to whoever is forcing it.
-function :: State s -> Builder -> Builder -> Object -> ST s ()
-function state@State {target = Target {registers}, extra} name comment Object {kind, captured, parameters, body} = do
+--
+-- An object may also have been given the block of a value that was taken
+-- apart, to build a value of as many fields in: see 'Token'. It is held
+-- after what the object captured.
+function :: State s -> Builder -> Builder -> Maybe Int -> Object -> ST s ()
+function state@State {target = Target {registers}, extra} name comment husk object = do
+  let Object {kind, captured, parameters, body} = object
   self <- local state
   arguments <- for parameters $ \_ -> local state
   let (passed, spilled) = splitAt (registers - 1) arguments
@@ -538,8 +544,14 @@ function state@State {target = Target {registers}, extra} name comment Object {k
   let taken = case kind of
         Closure -> open self
         Thunk -> mempty
-  check <- safepoint state (arguments ++ map snd captures)
-  body <- statement state Nothing (zip parameters arguments ++ zip captured (map snd captures)) body
+  (carrying, carried, token) <- case husk of
+    Nothing -> pure (mempty, [], Nothing)
+    Just size -> do
+      (loading, held) <- load state pointer (capturesAt + length captured)
+      (code, block) <- unpacked state held
+      pure (loading, [(held, code)], Just (block, size))
+  check <- safepoint state (arguments ++ map snd captures ++ map fst carried)
+  body <- statement state token (zip parameters arguments ++ zip captured (map snd captures)) body
   modifySTRef' extra $ \known ->
     mconcat
       [ known,
@@ -551,9 +563,10 @@ function state@State {target = Target {registers}, extra} name comment Object {k
         commas [fromString "i64 " <> argument | argument <- self : passed],
         fromString ") {\n",
         unspill,
-        if null captured then mempty else code <> foldMap fst captures,
+        if null captured && null carried then mempty else code <> foldMap fst captures <> carrying,
         taken,
         check,
+        foldMap snd carried,
         body,
         fromString "}\n"
       ]
@@ -561,18 +574,19 @@ function state@State {target = Target {registers}, extra} name comment Object {k
 -- |
 -- A function for an object that is made as the program runs, and its name,
 -- given what AxCut calls the object.
-anonymous :: State s -> Text -> Object -> ST s Builder
-anonymous state hint object = do
+anonymous :: State s -> Text -> Maybe Int -> Object -> ST s Builder
+anonymous state hint husk object = do
   name <- named state hint
-  function state {scope = name} name mempty object
+  function state {scope = name} name mempty husk object
   pure name
 
 -- |
 -- Make an object, apart from what it captures.
-object' :: State s -> Text -> Object -> ST s (Builder, Builder)
-object' state hint object@Object {kind, captured} = do
-  name <- anonymous state hint object
-  (code, block) <- allocate state (capturesAt + length captured) (header (kindOf kind) 0 (length captured))
+object' :: State s -> Text -> Maybe Int -> Object -> ST s (Builder, Builder)
+object' state hint husk object@Object {kind, captured} = do
+  name <- anonymous state hint husk object
+  let held = length captured + length husk
+  (code, block) <- allocate state (capturesAt + held) (header (kindOf kind) 0 held)
   (code', place) <- slot state block codeAt
   pure
     ( mconcat
@@ -664,30 +678,130 @@ continuation outer@State {target = Target {registers}, extra} hint Object {captu
 -- The block of a value that was just taken apart, and how many fields it
 -- had, when the value was the only reference to it: a constructed value
 -- with as many fields is built in its place. The block is zero when there
--- were other references. See 'reusable'.
+-- were other references.
+--
+-- The value may be built at once, or after control divides, or by a
+-- consumer that is made here and entered later, when something that was
+-- called returns: then the block goes with the consumer, as one more thing
+-- it holds. So @insert@ into a tree builds each node on the way back up in
+-- the block of the one it took apart on the way down. See 'wants'.
+--
+-- While it waits the block is a husk: a block that holds nothing, which can
+-- be given up like any other if no value comes to be built in it.
 type Token = Maybe (Builder, Int)
 
 -- |
--- Whether a constructed value with some number of fields is built before
--- anything else can happen: before control goes elsewhere or divides. Then
--- the block of a value that was taken apart can be kept back for it.
-reusable :: Int -> Statement -> Bool
-reusable size = \case
-  Substitute _ rest -> reusable size rest
-  Let _ _ count rest -> count == size || reusable size rest
-  New _ _ rest -> reusable size rest
-  Literal _ _ rest -> reusable size rest
-  Global _ _ rest -> reusable size rest
-  Primitive _ _ rest -> reusable size rest
-  Rec _ rest -> reusable size rest
-  Switch {} -> False
+-- Whether a constructed value with some number of fields may be built by
+-- what a statement goes on to do, so that a block is worth keeping back
+-- for it.
+wants :: Int -> Statement -> Bool
+wants size = \case
+  Substitute _ rest -> wants size rest
+  Let _ _ count rest -> count == size || wants size rest
+  New _ object rest -> wants size rest || carries size object rest
+  Literal _ _ rest -> wants size rest
+  Global _ _ rest -> wants size rest
+  Primitive _ _ rest -> wants size rest
+  Rec _ rest -> wants size rest
+  Switch clauses fallback -> or [wants size body | Clause _ _ body <- clauses] || any (wants size) fallback
   Invoke {} -> False
   Force -> False
   Abort -> False
   Halt -> False
 
+-- |
+-- Whether a block can go with an object to where a value is built in it:
+-- the object is a consumer, which is entered once, and it builds one. A
+-- consumer of what is forced is made differently and is left out.
+carries :: Int -> Object -> Statement -> Bool
+carries size Object {kind = Closure, method = Return, body} rest = case rest of
+  Substitute _ Force -> False
+  _ -> wants size body
+carries _ _ _ = False
+
+-- |
+-- A block that was kept back, as something an object can hold: itself, or
+-- a number if there is none.
+packed :: State s -> Builder -> ST s (Builder, Builder)
+packed state block = do
+  none <- local state
+  held <- local state
+  pure
+    ( mconcat
+        [ line [none, fromString " = icmp eq i64 ", block, fromString ", 0"],
+          line [held, fromString " = select i1 ", none, fromString ", i64 1, i64 ", block]
+        ],
+      held
+    )
+
+-- |
+-- What an object held as a block that was kept back, or zero. A consumer is
+-- entered once, but nothing here knows that it is: if the block has come to
+-- be shared, it is not used.
+unpacked :: State s -> Builder -> ST s (Builder, Builder)
+unpacked state held = do
+  odd' <- local state
+  small <- local state
+  (pointing, pointer) <- address state held
+  (loading, head') <- load state pointer 0
+  references <- local state
+  only <- local state
+  boxed <- label state
+  shared <- label state
+  none <- label state
+  joined <- label state
+  block <- local state
+  pure
+    ( mconcat
+        [ line [odd', fromString " = and i64 ", held, fromString ", 1"],
+          line [small, fromString " = icmp ne i64 ", odd', fromString ", 0"],
+          line [fromString "br i1 ", small, fromString ", label %", none, fromString ", label %", boxed],
+          boxed <> fromString ":\n",
+          pointing,
+          loading,
+          line [references, fromString " = lshr i64 ", head', fromString ", 32"],
+          line [only, fromString " = icmp eq i64 ", references, fromString ", 1"],
+          line [fromString "br i1 ", only, fromString ", label %", joined, fromString ", label %", shared],
+          shared <> fromString ":\n",
+          erase held,
+          line [fromString "br label %", none],
+          none <> fromString ":\n",
+          line [fromString "br label %", joined],
+          joined <> fromString ":\n",
+          line
+            [ block,
+              fromString " = phi i64 [ ",
+              held,
+              fromString ", %",
+              boxed,
+              fromString " ], [ 0, %",
+              none,
+              fromString " ]"
+            ]
+        ],
+      block
+    )
+
+-- |
+-- Give up a block that was kept back and that nothing will be built in.
+discard :: State s -> Builder -> ST s Builder
+discard state block = do
+  (code, held) <- packed state block
+  pure $ code <> erase held
+
 statement :: State s -> Token -> Environment -> Statement -> ST s Builder
-statement state token environment = \case
+statement state (Just (block, size)) environment body
+  | not (wants size body) = do
+      code <- discard state block
+      rest <- statement state Nothing environment body
+      pure $ code <> rest
+statement state token environment body = wanted state token environment body
+
+-- |
+-- A statement, when the block that was kept back, if there is one, is
+-- wanted by it.
+wanted :: State s -> Token -> Environment -> Statement -> ST s Builder
+wanted state token environment = \case
   Substitute pairs rest -> do
     let (adjust, after) = substitute environment pairs
     rest <- statement state token after rest
@@ -771,8 +885,15 @@ statement state token environment = \case
       -- The fields are read, and then the value they were in is given up.
       -- If a value of the same size is built next, its block is kept back
       -- for that, when this was the only reference to it.
-      (given, token) <-
-        if reusing && size > 0 && counted scrutinee && reusable size body
+      -- A block that is kept back already goes on, if this clause wants it.
+      (dropped, incoming) <- case token of
+        Just (old, wanted) | not (wants wanted body) -> do
+          code <- discard state old
+          pure (code, Nothing)
+        _ -> pure (mempty, token)
+      (given, token) <- case incoming of
+        Just _ -> pure (open scrutinee, incoming)
+        Nothing -> if reusing && size > 0 && counted scrutinee && wants size body
           then do
             held <- local state
             only <- local state
@@ -789,6 +910,7 @@ statement state token environment = \case
                     line [fromString "call void @hazy_split(i64 ", scrutinee, fromString ")"],
                     line [fromString "br label %", joined],
                     last' <> fromString ":\n",
+                    line [fromString "store i64 ", number (header huskKind 0 size + one), fromString ", ptr ", pointer],
                     line [fromString "br label %", joined],
                     joined <> fromString ":\n",
                     line
@@ -806,10 +928,10 @@ statement state token environment = \case
               )
           else pure (open scrutinee, Nothing)
       body <- statement state token (kept ++ zip names (map snd fields)) body
-      pure (tag, target, foldMap fst fields <> given <> body)
+      pure (tag, target, foldMap fst fields <> dropped <> given <> body)
     fallback <- case fallback of
       Just body -> do
-        body <- statement state Nothing kept body
+        body <- statement state token kept body
         pure $ erase scrutinee <> body
       Nothing -> pure $ line [fromString "call void @hazy_abort()"] <> line [fromString "unreachable"]
     pure $
@@ -890,9 +1012,23 @@ statement state token environment = \case
       -- Stands for the consumer while the environment is worked out. It is
       -- never written.
       unmade = fromString "%unmade"
+  -- A consumer that builds a value the block kept back can be used for: the
+  -- block goes with it.
+  New name object@Object {captured} rest
+    | Just (husk, size) <- token,
+      not (wants size rest),
+      carries size object rest -> do
+        let (kept, taken) = splitEnd (length captured) environment
+        (code, block) <- object' state name (Just size) object
+        captures <- for (zip [capturesAt ..] taken) $ \(index, (_, value)) -> store state block index value
+        (packing, held) <- packed state husk
+        carried <- store state block (capturesAt + length captured) held
+        (code', value) <- word state block
+        rest <- statement state Nothing (kept ++ [(name, value)]) rest
+        pure $ mconcat [code, mconcat captures, packing, carried, code', rest]
   New name object@Object {captured} rest -> do
     let (kept, taken) = splitEnd (length captured) environment
-    (code, block) <- object' state name object
+    (code, block) <- object' state name Nothing object
     captures <- for (zip [capturesAt ..] taken) $ \(index, (_, value)) -> store state block index value
     (code', value) <- word state block
     rest <- statement state token (kept ++ [(name, value)]) rest
@@ -976,7 +1112,7 @@ statement state token environment = \case
         -- the objects that capture it.
         references name = 1 + length [() | Recursive {others} <- objects, other <- others, other == name]
     made <- for objects $ \Recursive {name, object} -> do
-      (code, block) <- object' state name object
+      (code, block) <- object' state name Nothing object
       let Object {kind, captured} = object
           counted' = header (kindOf kind) 0 (length captured) + toInteger (references name) * one
       count <- store state block 0 (number counted')
