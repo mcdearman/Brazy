@@ -1,4 +1,6 @@
 3
+3
+18446744073709551616
 42
 hello
 [2,4,6]
@@ -7,21 +9,21 @@ Red
 2432902008176640000
 25
 [error UnificationError]: unification error: couldn't match `Hazy.Bool` with `[ ] Hazy.Char`
-     ╭──▶ <entry 14>@1:5-1:6
+     ╭──▶ <entry 16>@1:5-1:6
      │
    1 │ not "a"
      •     ┬ 
      •     ╰╸ here
 ─────╯
 [error VariableNotInScope]: variable not in scope
-     ╭──▶ <entry 15>@1:1-1:8
+     ╭──▶ <entry 17>@1:1-1:8
      │
    1 │ missing
      • ┬──────
      • ╰╸ here
 ─────╯
 [error ConstraintError]: constraint error: unable to satify `Hazy.Show ( Hazy.Int -> Hazy.Int )`
-     ╭──▶ <entry 16>@1:1-1:7
+     ╭──▶ <entry 18>@1:1-1:7
      │
    1 │ double
      • ┬─────
