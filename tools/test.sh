@@ -57,7 +57,7 @@ for run_dir in test/run/*/; do
     mkdir -p ".test/$run"
     echo "Running $run"
     $HAZY -q "test/run/$run/source" -o ".test/$run"
-    node ".test/$run/index.mjs" > ".test/$run/result"
+    bun ".test/$run/index.mjs" > ".test/$run/result"
     diff "test/run/$run/result" ".test/$run/result"
 done
 
@@ -106,7 +106,7 @@ for package_dir in test/package/*/; do
     $HAZY -q "test/package/$package/library" -o "$out/library" --pack
     $HAZY -q "test/package/$package/library" --native-object "$out/library/native.o"
     $HAZY -q "test/package/$package/source" --package "./$out/library" -o "$out/javascript"
-    node "$out/javascript/index.mjs" > "$out/javascript.result"
+    bun "$out/javascript/index.mjs" > "$out/javascript.result"
     diff "test/package/$package/result" "$out/javascript.result"
     $HAZY -q "test/package/$package/source" --package "./$out/library" --native "$out/native"
     "$out/native" > "$out/native.result"

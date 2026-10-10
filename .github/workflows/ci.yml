@@ -28,6 +28,9 @@ jobs:
           ghc-version: "9.12.2"
           cabal-version: "3.14"
 
+      # The generated Javascript is run with Bun.
+      - uses: oven-sh/setup-bun@v2
+
       - name: Restore what cabal built before
         uses: actions/cache@v4
         with:

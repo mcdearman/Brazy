@@ -29,7 +29,8 @@ Haskell features are missing, only a test Javascript backend is implemented.
 # Quickstart
 
 Ensure that GHC 9.14 and Cabal 3.16 are downloaded. Other GHC and Cabal versions
-will probably work too but aren't tested regularly.
+will probably work too but aren't tested regularly. The generated Javascript is
+run with [Bun](https://bun.sh).
 
 ```sh
 # (optional) Tell Cabal to use GHC 9.14
@@ -45,7 +46,7 @@ export PATH=.dist/bin:$PATH
 hazy test/run/hello/source -o .hello
 
 # Run hello world
-node .hello/index.mjs
+bun .hello/index.mjs
 ```
 
 # Native Code

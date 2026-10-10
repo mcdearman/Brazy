@@ -67,6 +67,8 @@ All by Chris on 2026-10-09 unless noted.
   wants to experiment with linearity, Perceus-style reference counting and
   functional-but-in-place reuse, and the linear form of AxCut gives all three
   a place to live.
+- **Javascript is run with Bun, not Node.** Decided by Chris later the same
+  day.
 - **The Javascript backend is the oracle.** Native output is checked against
   what the Javascript backend produces, except where the Javascript backend
   is itself wrong.
@@ -83,7 +85,7 @@ All by Chris on 2026-10-09 unless noted.
   fields, and two universe levels (`Small` and `Large`).
 - Tests: parse, resolve and check failures, files that must compile, and
   programs that are run and compared against expected output (27 at the time
-  of forking, under Node only).
+  of forking, under Node only; they are run with Bun now).
 
 ## The native pipeline
 
@@ -153,7 +155,7 @@ whichever milestone first needs them.
 ### M1. Sequent and AxCut, run on a reference machine
 
 Done on the `m1-sequent` branch. Every `test/run` program prints the same on
-the AxCut machine as it does under Node.
+the AxCut machine as it does as Javascript.
 
 - [x] `Sequent` IR (`compiler/Sequent/Tree.hs`) and the translation from Core
       (`Sequent/FromCore.hs`), which follows the Javascript generator case
@@ -234,7 +236,7 @@ How it works, and what it leaves:
 ### M3. The whole test suite, natively
 
 Done on the `m3-native-suite` branch. Every `test/run` program prints the
-same natively as on the AxCut machine and under Node, and `tools/test.sh`
+same natively as on the AxCut machine and as Javascript, and `tools/test.sh`
 checks all three.
 
 - [x] The remaining primitives: `Integer` of any size (the `num-bigint`
@@ -259,7 +261,7 @@ together with its packages: `hello` goes from 3,142 lines of LLVM IR to 330.
       the old way, with everything compiled together
 - [x] `tools/build.sh` builds the objects of `hazy-internal` and `base`
 - [x] Check: a test package (`test/package/shapes`) built and used from a
-      program, under Node and natively, in `tools/test.sh`
+      program, as Javascript and natively, in `tools/test.sh`
 
 How it works, and what it leaves:
 
