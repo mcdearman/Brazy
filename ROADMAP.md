@@ -367,15 +367,27 @@ Done:
 - [x] A benchmark set (`bench/`, `tools/bench.sh`) that reports what each
       program allocated with and without reuse
 
-Measured on 2026-10-09 (allocations, with and without reuse):
+- [x] A method of a known instance is used directly. Every instance at the
+      top of a module that needs nothing has its methods as definitions of
+      their own, and `x + 1` at `Int` goes straight to the one for `+`
+      without looking at the instance
+- [x] Numbers written at `Int` and at `Integer` are numbers in the compiled
+      program, and are not made from an `Integer` as it runs
+- [x] Forcing something that is already a value allocates nothing. The code
+      that takes the value is entered with it, and the consumer that would
+      have waited for it is never made
 
-| Program | With | Without | Reused |
+Blocks allocated, on 2026-10-09 with reuse alone and on 2026-10-10 with the
+three changes above:
+
+| Program | 9 October | 10 October | Reused |
 | - | - | - | - |
-| `reverse`: reverse 100,000 numbers ten times | 14,001,149 | 15,001,149 | 1,000,000 |
-| `map`: three maps over 100,000 numbers | 19,302,200 | 19,602,210 | 300,010 |
-| `tree`: 20,000 insertions into a search tree | 35,909,660 | 35,909,664 | 4 |
+| `reverse`: reverse 100,000 numbers ten times | 14,001,149 | 8,100,632 | 1,000,000 |
+| `map`: three maps over 100,000 numbers | 19,302,200 | 11,901,656 | 300,010 |
+| `tree`: 20,000 insertions into a search tree | 35,909,660 | 22,708,303 | 4 |
 
-`reverse` rebuilds every cell in place. The other two show what is left.
+`reverse` rebuilds every cell in place. They run in 0.12, 0.17 and about 0.4
+seconds.
 
 Left:
 
@@ -384,11 +396,12 @@ Left:
       cannot be kept back for it. It has to travel with the continuation, as
       a value in its own right
 - [ ] Borrow inference
-- [ ] The cost of arithmetic. Over a hundred blocks are allocated for each
-      number in `map`. Every `+` goes through the evidence for `Num`, and
-      every literal is an `Integer` turned into an `Int` as the program runs.
-      Calling known functions directly, and specialising the builtin
-      instances, would remove most of it. This is now the largest cost by far
+- [ ] The rest of the cost of arithmetic. It is still about 120 blocks for
+      each number in `map`. What is left is mostly functions being applied
+      one argument at a time: each application of a function of two
+      arguments makes a function of one, and a consumer to wait for it.
+      Calling a known function with all of its arguments at once would
+      remove that, and is where strict, multi-argument functions come in
 - [ ] The rest of decision trees: tests on different variables, and on what
       is inside a constructor
 

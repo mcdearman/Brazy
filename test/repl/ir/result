@@ -53,120 +53,83 @@ TypeLambdaOver {
 }
 === Sequent ===
 @Repl.double = fun(a; b).
-    <@Hazy.Helper.instance Hazy.Num HelperInt | force(mu~ !c.
-      Field 0(c; mu~ d.
-        <d | force(apply(a; apply(a; b)))>))>
+    <@Hazy.Helper.instance Hazy.Num HelperInt #0 | force(apply(a; apply(a; b)))>
 === AxCut ===
 @Repl.double = Closure[] { Apply(a b) =>
-    global x%0 = @Hazy.Helper.instance Hazy.Num HelperInt
+    global x%0 = @Hazy.Helper.instance Hazy.Num HelperInt #0
     substitute [x%0, a, b]
-    new k%1 = Closure[a b] { Return(c) =>
-        substitute [a, b, c]
-        primitive d = Field 0
-        substitute [d, a, b]
-        new k%2 = Closure[a b] { Return(x%3) =>
-            substitute [x%3, a, a, b]
-            new k%4 = Closure[a b] { Return(x%5) =>
-                substitute [a, b, x%5]
-                invoke Apply }
-            substitute [a, k%4, x%3]
+    new k%1 = Closure[a b] { Return(x%2) =>
+        substitute [x%2, a, a, b]
+        new k%3 = Closure[a b] { Return(x%4) =>
+            substitute [a, b, x%4]
             invoke Apply }
-        substitute [k%2, d]
-        force }
+        substitute [a, k%3, x%2]
+        invoke Apply }
     substitute [k%1, x%0]
     force }
 === LLVM ===
-@"Hazy.Helper.instance Hazy.Num HelperInt" = external global { i64, ptr }
+@"Hazy.Helper.instance Hazy.Num HelperInt #0" = external global { i64, ptr }
 @"Repl.double" = internal global { i64, ptr } { i64 -9223372036854775807, ptr @"Repl.double.code" }, align 8
 
-define internal tailcc void @"closure.35"(i64 %t36, i64 %t37) {
-  %t38 = inttoptr i64 %t36 to ptr
-  %t39 = getelementptr i64, ptr %t38, i64 2
-  %t40 = load i64, ptr %t39
-  %t41 = getelementptr i64, ptr %t38, i64 3
-  %t42 = load i64, ptr %t41
-  call void @hazy_open(i64 %t36)
-  %t43 = load i64, ptr @hazy_gc_pending
-  %t44 = icmp ne i64 %t43, 0
-  br i1 %t44, label %L45, label %L46
-L45:
-  store i64 %t37, ptr getelementptr ([1024 x i64], ptr @hazy_roots, i64 0, i64 0)
-  store i64 %t40, ptr getelementptr ([1024 x i64], ptr @hazy_roots, i64 0, i64 1)
-  store i64 %t42, ptr getelementptr ([1024 x i64], ptr @hazy_roots, i64 0, i64 2)
+define internal tailcc void @"closure.16"(i64 %t17, i64 %t18) {
+  %t19 = inttoptr i64 %t17 to ptr
+  %t20 = getelementptr i64, ptr %t19, i64 2
+  %t21 = load i64, ptr %t20
+  %t22 = getelementptr i64, ptr %t19, i64 3
+  %t23 = load i64, ptr %t22
+  call void @hazy_open(i64 %t17)
+  %t24 = load i64, ptr @hazy_gc_pending
+  %t25 = icmp ne i64 %t24, 0
+  br i1 %t25, label %L26, label %L27
+L26:
+  store i64 %t18, ptr getelementptr ([1024 x i64], ptr @hazy_roots, i64 0, i64 0)
+  store i64 %t21, ptr getelementptr ([1024 x i64], ptr @hazy_roots, i64 0, i64 1)
+  store i64 %t23, ptr getelementptr ([1024 x i64], ptr @hazy_roots, i64 0, i64 2)
   call void @hazy_collect(ptr @hazy_roots, i64 3)
-  br label %L46
-L46:
-  %t47 = inttoptr i64 %t37 to ptr
-  %t48 = getelementptr i64, ptr %t47, i64 1
-  %t49 = load ptr, ptr %t48
-  musttail call tailcc void %t49(i64 %t37, i64 %t40, i64 %t42)
+  br label %L27
+L27:
+  %t28 = inttoptr i64 %t18 to ptr
+  %t29 = getelementptr i64, ptr %t28, i64 1
+  %t30 = load ptr, ptr %t29
+  musttail call tailcc void %t30(i64 %t18, i64 %t21, i64 %t23)
   ret void
 }
 
-define internal tailcc void @"closure.23"(i64 %t24, i64 %t25) {
-  %t26 = inttoptr i64 %t24 to ptr
-  %t27 = getelementptr i64, ptr %t26, i64 2
-  %t28 = load i64, ptr %t27
-  %t29 = getelementptr i64, ptr %t26, i64 3
-  %t30 = load i64, ptr %t29
-  call void @hazy_open(i64 %t24)
-  %t31 = load i64, ptr @hazy_gc_pending
-  %t32 = icmp ne i64 %t31, 0
-  br i1 %t32, label %L33, label %L34
-L33:
-  store i64 %t25, ptr getelementptr ([1024 x i64], ptr @hazy_roots, i64 0, i64 0)
-  store i64 %t28, ptr getelementptr ([1024 x i64], ptr @hazy_roots, i64 0, i64 1)
-  store i64 %t30, ptr getelementptr ([1024 x i64], ptr @hazy_roots, i64 0, i64 2)
+define internal tailcc void @"closure.8.direct"(i64 %t9, i64 %t10, i64 %t11) {
+  %t12 = load i64, ptr @hazy_gc_pending
+  %t13 = icmp ne i64 %t12, 0
+  br i1 %t13, label %L14, label %L15
+L14:
+  store i64 %t9, ptr getelementptr ([1024 x i64], ptr @hazy_roots, i64 0, i64 0)
+  store i64 %t10, ptr getelementptr ([1024 x i64], ptr @hazy_roots, i64 0, i64 1)
+  store i64 %t11, ptr getelementptr ([1024 x i64], ptr @hazy_roots, i64 0, i64 2)
   call void @hazy_collect(ptr @hazy_roots, i64 3)
-  br label %L34
-L34:
-  call void @hazy_share(i64 %t28)
-  %t50 = call ptr @hazy_alloc(i64 4, i64 1048577)
-  %t51 = getelementptr i64, ptr %t50, i64 1
-  store ptr @"closure.35", ptr %t51
-  %t52 = getelementptr i64, ptr %t50, i64 2
-  store i64 %t28, ptr %t52
-  %t53 = getelementptr i64, ptr %t50, i64 3
-  store i64 %t30, ptr %t53
-  %t54 = ptrtoint ptr %t50 to i64
-  %t55 = inttoptr i64 %t25 to ptr
-  %t56 = getelementptr i64, ptr %t55, i64 1
-  %t57 = load ptr, ptr %t56
-  musttail call tailcc void %t57(i64 %t25, i64 %t28, i64 %t54)
+  br label %L15
+L15:
+  call void @hazy_share(i64 %t10)
+  %t31 = call ptr @hazy_alloc(i64 4, i64 1048577)
+  %t32 = getelementptr i64, ptr %t31, i64 1
+  store ptr @"closure.16", ptr %t32
+  %t33 = getelementptr i64, ptr %t31, i64 2
+  store i64 %t10, ptr %t33
+  %t34 = getelementptr i64, ptr %t31, i64 3
+  store i64 %t11, ptr %t34
+  %t35 = ptrtoint ptr %t31 to i64
+  %t36 = inttoptr i64 %t9 to ptr
+  %t37 = getelementptr i64, ptr %t36, i64 1
+  %t38 = load ptr, ptr %t37
+  musttail call tailcc void %t38(i64 %t9, i64 %t10, i64 %t35)
   ret void
 }
 
-define internal tailcc void @"closure.8"(i64 %t9, i64 %t10) {
-  %t11 = inttoptr i64 %t9 to ptr
-  %t12 = getelementptr i64, ptr %t11, i64 2
-  %t13 = load i64, ptr %t12
-  %t14 = getelementptr i64, ptr %t11, i64 3
-  %t15 = load i64, ptr %t14
-  call void @hazy_open(i64 %t9)
-  %t16 = load i64, ptr @hazy_gc_pending
-  %t17 = icmp ne i64 %t16, 0
-  br i1 %t17, label %L18, label %L19
-L18:
-  store i64 %t10, ptr getelementptr ([1024 x i64], ptr @hazy_roots, i64 0, i64 0)
-  store i64 %t13, ptr getelementptr ([1024 x i64], ptr @hazy_roots, i64 0, i64 1)
-  store i64 %t15, ptr getelementptr ([1024 x i64], ptr @hazy_roots, i64 0, i64 2)
-  call void @hazy_collect(ptr @hazy_roots, i64 3)
-  br label %L19
-L19:
-  %t20 = inttoptr i64 %t10 to ptr
-  %t21 = getelementptr i64, ptr %t20, i64 1
-  %t22 = load i64, ptr %t21
-  call void @hazy_share(i64 %t22)
-  call void @hazy_erase(i64 %t10)
-  %t58 = call ptr @hazy_alloc(i64 4, i64 1048577)
-  %t59 = getelementptr i64, ptr %t58, i64 1
-  store ptr @"closure.23", ptr %t59
-  %t60 = getelementptr i64, ptr %t58, i64 2
-  store i64 %t13, ptr %t60
-  %t61 = getelementptr i64, ptr %t58, i64 3
-  store i64 %t15, ptr %t61
-  %t62 = ptrtoint ptr %t58 to i64
-  musttail call tailcc void @hazy_force(i64 %t62, i64 %t22)
+define internal tailcc void @"closure.8"(i64 %t39, i64 %t40) {
+  %t41 = inttoptr i64 %t39 to ptr
+  %t42 = getelementptr i64, ptr %t41, i64 2
+  %t43 = load i64, ptr %t42
+  %t44 = getelementptr i64, ptr %t41, i64 3
+  %t45 = load i64, ptr %t44
+  call void @hazy_open(i64 %t39)
+  musttail call tailcc void @"closure.8.direct"(i64 %t40, i64 %t43, i64 %t45)
   ret void
 }
 
@@ -182,15 +145,30 @@ L6:
   call void @hazy_collect(ptr @hazy_roots, i64 2)
   br label %L7
 L7:
-  %t63 = call ptr @hazy_alloc(i64 4, i64 1048577)
-  %t64 = getelementptr i64, ptr %t63, i64 1
-  store ptr @"closure.8", ptr %t64
-  %t65 = getelementptr i64, ptr %t63, i64 2
-  store i64 %t1, ptr %t65
-  %t66 = getelementptr i64, ptr %t63, i64 3
-  store i64 %t2, ptr %t66
-  %t67 = ptrtoint ptr %t63 to i64
-  musttail call tailcc void @hazy_force(i64 %t67, i64 ptrtoint (ptr @"Hazy.Helper.instance Hazy.Num HelperInt" to i64))
+  %t51 = and i64 ptrtoint (ptr @"Hazy.Helper.instance Hazy.Num HelperInt #0" to i64), 1
+  %t52 = icmp ne i64 %t51, 0
+  br i1 %t52, label %L60, label %L59
+L59:
+  %t53 = inttoptr i64 ptrtoint (ptr @"Hazy.Helper.instance Hazy.Num HelperInt #0" to i64) to ptr
+  %t54 = getelementptr i64, ptr %t53, i64 0
+  %t55 = load i64, ptr %t54
+  %t56 = and i64 %t55, 15
+  %t57 = sub i64 %t56, 2
+  %t58 = icmp ult i64 %t57, 3
+  br i1 %t58, label %L61, label %L60
+L60:
+  musttail call tailcc void @"closure.8.direct"(i64 ptrtoint (ptr @"Hazy.Helper.instance Hazy.Num HelperInt #0" to i64), i64 %t1, i64 %t2)
+  ret void
+L61:
+  %t46 = call ptr @hazy_alloc(i64 4, i64 1048577)
+  %t47 = getelementptr i64, ptr %t46, i64 1
+  store ptr @"closure.8", ptr %t47
+  %t48 = getelementptr i64, ptr %t46, i64 2
+  store i64 %t1, ptr %t48
+  %t49 = getelementptr i64, ptr %t46, i64 3
+  store i64 %t2, ptr %t49
+  %t50 = ptrtoint ptr %t46 to i64
+  musttail call tailcc void @hazy_force(i64 %t50, i64 ptrtoint (ptr @"Hazy.Helper.instance Hazy.Num HelperInt #0" to i64))
   ret void
 }
 === Javascript ===
@@ -207,15 +185,9 @@ export {
   f as "double"
 } ;
 @Repl.double = fun(a; b).
-    <@Hazy.Helper.instance Hazy.Num HelperInt | force(mu~ !c.
-      Field 0(c; mu~ d.
-        <d | force(apply(a; apply(a; b)))>))>
+    <@Hazy.Helper.instance Hazy.Num HelperInt #0 | force(apply(a; apply(a; b)))>
 @Repl.it'repl = thunk(a).
-    <thunk(b).
-      <1n | mu~ c.
-        <@Hazy.Helper.instance Hazy.Num HelperInt | force(mu~ !d.
-          Field 6(d; mu~ e.
-            <e | force(apply(c; b))>))>> | mu~ f.
-      <@Repl.double | force(apply(f; a))>>
+    <1 | mu~ b.
+      <@Repl.double | force(apply(b; a))>>
 entry = <@Repl.it'repl | force(apply(; mu~ _.
     halt))>
