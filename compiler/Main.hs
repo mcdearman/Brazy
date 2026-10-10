@@ -606,19 +606,28 @@ main'' args = case getOpt order options args of
                 parsed <- stage1 Normal (Vector.singleton (entered text))
                 succeeded <$> attempt (pure $! length (Prelude.show parsed)),
               check = \files text -> do
-                all <- together files text
-                -- The same hack as forceModules: showing a module finds its errors.
-                () <- pure $! seq (length (Prelude.show (Vector.drop split all))) ()
+                _ <- checked files text
                 pure (),
-              core = together
+              core = checked,
+              stable = split
             }
+        -- The Core of everything, with the errors of what is not a package's
+        -- found: the same hack as forceModules, showing a module finds them.
+        checked files text = do
+          all <- together files text
+          () <- pure $! seq (length (Prelude.show (Vector.drop split all))) ()
+          pure all
         entered text = Root {extensions, name = Repl.source, contents = text}
         together files text = do
           loaded <- Vector.fromList . concat <$> traverse (loadModules extensions) files
-          all <- stage1 debug (headers <> loaded <> Vector.singleton (entered text))
+          rest <- stage1 debug (loaded <> Vector.singleton (entered text))
+          all <- pure (parsedHeaders <> rest)
           all <- stage2 debug all
           all <- stage3 debug all
           stage4 debug all
+        -- The packages are parsed once for a whole session. Nothing of a
+        -- module is parsed until it is looked at, and then it stays parsed.
+        parsedHeaders = unsafePerformIO (stage1 Normal headers)
         attempt :: IO a -> IO (Either HazyError a)
         attempt action = (Right <$> action) `catch` (pure . Left)
         succeeded = either (const False) (const True)
