@@ -49,6 +49,7 @@ import qualified Generate.Mangle as Mangle (mangle)
 import qualified Javascript.Printer.Lexer as Javascript (print, run)
 import qualified LLVM.FromAxCut as LLVM (arm64, generateBody, generateDefinitions)
 import qualified Javascript.Tree.Module as Module (print)
+import qualified Javascript.Tree.Statement as Javascript (Statement (..))
 import Lambline
   ( Candidate,
     Cmd (Insert),
@@ -429,9 +430,18 @@ forms =
         let home = case selection of
               Definition Global.Global {path} -> path
               Asked -> Global.path entry
+            -- Javascript is generated a module at a time. A definition is
+            -- the constant the module exports under its name.
+            chosen' statements = case selection of
+              Asked -> statements
+              Definition Global.Global {name = wanted} ->
+                let sources = [source | Javascript.Export source target <- statements, target == wanted]
+                    keep = \case
+                      Javascript.Const source _ -> source `elem` sources
+                      Javascript.Export _ target -> target == wanted
+                      _ -> False
+                 in filter keep statements
          in Lazy.Text.pack $ concat $ do
-              -- Javascript is generated a module at a time, so this is the
-              -- whole module the definition is in.
               Javascript.Module {name, statements} <- toList (Javascript.generate modules)
               if name == home
                 then
@@ -440,7 +450,7 @@ forms =
                         Builder.toLazyText $
                           Javascript.run $
                             Javascript.print $
-                              Module.print statements
+                              Module.print (chosen' statements)
                   ]
                 else []
   ]
