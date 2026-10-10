@@ -13,9 +13,21 @@
 -- A thunk that is forced once, and not from inside a function, is evaluated
 -- where it is forced. The translation delays the condition of an @if@ and
 -- then looks at it straight away.
+--
+-- The rest is for what is left when a function's body is put where it is
+-- called ('Sequent.Inline'). A value that is constructed and at once taken
+-- apart is not constructed: the alternative for it is gone to. A consumer
+-- that is named and only ever given constructed values, each choosing an
+-- alternative of its own, is put where they are, so that a comparison goes
+-- straight on to what its answer chooses. A value that is forced is itself.
+-- And a name for a number, a constructor with no fields or a definition is
+-- written as what it names.
 module Sequent.Simplify (simplify) where
 
+import Data.List (nub)
+
 import Data.Text (Text)
+import qualified Sequent.Tree as Literal (Literal (..))
 import Sequent.Tree
   ( Alternative (..),
     Binder (..),
@@ -40,17 +52,22 @@ class Simplify a where
   -- thunk would have been evaluated once.
   unfold :: Text -> Text -> Statement -> a -> a
 
+  -- | Write a variable as what it names.
+  replace :: Text -> Producer -> a -> a
+
 instance (Simplify a) => Simplify [a] where
   simplify = map simplify
   count name = sum . map (count name)
   put name consumer = map (put name consumer)
   unfold name result body = map (unfold name result body)
+  replace name value = map (replace name value)
 
 instance (Simplify a) => Simplify (Maybe a) where
   simplify = fmap simplify
   count name = maybe 0 (count name)
   put name consumer = fmap (put name consumer)
   unfold name result body = fmap (unfold name result body)
+  replace name value = fmap (replace name value)
 
 instance Simplify Producer where
   simplify = \case
@@ -77,6 +94,15 @@ instance Simplify Producer where
     Constructor tag fields -> Constructor tag (unfold name result body fields)
     Mu covariable inner -> Mu covariable (unfold name result body inner)
     Thunk covariable inner -> Thunk covariable (unfold name result body inner)
+    other -> other
+  replace name value = \case
+    Variable other
+      | other == name -> value
+      | otherwise -> Variable other
+    Constructor tag fields -> Constructor tag (replace name value fields)
+    Mu covariable body -> Mu covariable (replace name value body)
+    Function parameters covariable body -> Function parameters covariable (replace name value body)
+    Thunk covariable body -> Thunk covariable (replace name value body)
     other -> other
 
 instance Simplify Consumer where
@@ -106,28 +132,23 @@ instance Simplify Consumer where
     Case alternatives otherwise -> Case (unfold name result body alternatives) (unfold name result body otherwise)
     Apply arguments consumer -> Apply (unfold name result body arguments) (unfold name result body consumer)
     Force consumer -> Force (unfold name result body consumer)
+  replace name value = \case
+    Covariable other -> Covariable other
+    MuTilde binder body -> MuTilde binder (replace name value body)
+    Case alternatives otherwise -> Case (replace name value alternatives) (replace name value otherwise)
+    Apply arguments result -> Apply (replace name value arguments) (replace name value result)
+    Force result -> Force (replace name value result)
 
 instance Simplify Alternative where
   simplify (Alternative tag binders body) = Alternative tag binders (simplify body)
   count name (Alternative _ _ body) = count name body
   put name consumer (Alternative tag binders body) = Alternative tag binders (put name consumer body)
   unfold name result body (Alternative tag binders inner) = Alternative tag binders (unfold name result body inner)
+  replace name value (Alternative tag binders body) = Alternative tag binders (replace name value body)
 
 instance Simplify Statement where
   simplify = \case
-    Cut producer consumer -> case (simplify producer, simplify consumer) of
-      -- A consumer that is named and used once, or not at all.
-      (Mu name body, consumer) -> case (count name body, consumer) of
-        (0, _) -> body
-        (1, _) -> put name consumer body
-        (_, Covariable _) -> put name consumer body
-        _ -> Cut (Mu name body) consumer
-      -- A thunk whose one use is to be forced, outside any function.
-      (Thunk result body, MuTilde Binder {name} rest)
-        | count name rest == 1,
-          forces name rest == 1 ->
-            unfold name result body rest
-      (producer, consumer) -> Cut producer consumer
+    Cut producer consumer -> cut (simplify producer) (simplify consumer)
     Primitive primitive arguments result -> Primitive primitive (simplify arguments) (simplify result)
     LetRec bindings body -> LetRec [(name, simplify value) | (name, value) <- bindings] (simplify body)
     Abort -> Abort
@@ -156,6 +177,107 @@ instance Simplify Statement where
       LetRec [(local, unfold name result body value) | (local, value) <- bindings] (unfold name result body inner)
     Abort -> Abort
     Halt -> Halt
+  replace name value = \case
+    Cut producer consumer -> Cut (replace name value producer) (replace name value consumer)
+    Primitive primitive arguments result ->
+      Primitive primitive (replace name value arguments) (replace name value result)
+    LetRec bindings body ->
+      LetRec [(local, replace name value other) | (local, other) <- bindings] (replace name value body)
+    Abort -> Abort
+    Halt -> Halt
+
+-- |
+-- A cut of two sides that are as simple as they can be alone.
+cut :: Producer -> Consumer -> Statement
+cut producer consumer = case (producer, consumer) of
+  -- A consumer that is named and used once, or not at all.
+  (Mu name body, _) -> case (count name body, consumer) of
+    (0, _) -> body
+    (1, _) -> simplify (put name consumer body)
+    (_, Covariable _) -> put name consumer body
+    -- One that is only given constructed values, no two of which choose
+    -- the same alternative: nothing is written twice.
+    (uses, Case alternatives otherwise)
+      | given <- constructed name body,
+        length given == uses,
+        chosen <- [choice tag alternatives | tag <- given],
+        nub chosen == chosen,
+        length (filter (== Nothing) chosen) <= maybe 0 (const 1) otherwise ->
+          simplify (put name consumer body)
+    _ -> Cut producer consumer
+  -- A thunk whose one use is to be forced, outside any function.
+  (Thunk result body, MuTilde Binder {name} rest)
+    | count name rest == 1,
+      forces name rest == 1 ->
+        unfold name result body rest
+  -- A value that is constructed and taken apart.
+  (Constructor tag fields, Case alternatives otherwise) -> case choice tag alternatives of
+    Just index
+      | Alternative _ binders body <- alternatives !! index,
+        length binders == length fields ->
+          foldr (\(binder, field) rest -> cut field (MuTilde binder rest)) body (zip binders fields)
+    _ -> case otherwise of
+      Just body -> body
+      Nothing -> Abort
+  -- A value that is forced.
+  (_, Force inner) | value producer -> cut producer inner
+  -- A name for something that is as short to write.
+  (_, MuTilde Binder {name} rest)
+    | short producer -> case count name rest of
+        0 -> rest
+        _ -> simplify (replace name producer rest)
+  _ -> Cut producer consumer
+
+-- |
+-- Which of some alternatives is for a tag.
+choice :: Int -> [Alternative] -> Maybe Int
+choice tag alternatives = lookup tag (zip [other | Alternative other _ _ <- alternatives] [0 ..])
+
+-- |
+-- Whether a producer is a value as it stands, with nothing to evaluate.
+value :: Producer -> Bool
+value = \case
+  Literal _ -> True
+  Constructor _ _ -> True
+  Function {} -> True
+  _ -> False
+
+-- |
+-- Whether a producer is no more to write than a name for it would be.
+short :: Producer -> Bool
+short = \case
+  Literal (Literal.Int _) -> True
+  Constructor _ [] -> True
+  Global _ -> True
+  _ -> False
+
+-- |
+-- The tags of the constructed values a covariable is given, where it is
+-- given one and nothing else is done with it.
+constructed :: Text -> Statement -> [Int]
+constructed name = statement
+  where
+    statement = \case
+      Cut (Constructor tag fields) (Covariable other)
+        | other == name -> tag : concatMap inProducer fields
+      Cut producer consumer -> inProducer producer ++ inConsumer consumer
+      Primitive _ arguments consumer -> concatMap inProducer arguments ++ inConsumer consumer
+      LetRec bindings body -> concatMap (inProducer . snd) bindings ++ statement body
+      Abort -> []
+      Halt -> []
+    inProducer = \case
+      Constructor _ fields -> concatMap inProducer fields
+      Mu _ body -> statement body
+      Function _ _ body -> statement body
+      Thunk _ body -> statement body
+      _ -> []
+    inConsumer = \case
+      Covariable _ -> []
+      MuTilde _ body -> statement body
+      Case alternatives otherwise ->
+        concat [statement body | Alternative _ _ body <- alternatives] ++ maybe [] statement otherwise
+      Apply arguments consumer -> concatMap inProducer arguments ++ inConsumer consumer
+      Force consumer -> inConsumer consumer
 
 -- |
 -- How many times a variable is forced where 'unfold' would reach it: as the
