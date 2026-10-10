@@ -8,7 +8,7 @@
 --
 -- The whole program is translated at once, and only the definitions that
 -- the one it starts at can reach are kept.
-module Sequent.FromCore (generate, Unit (..), unit, start) where
+module Sequent.FromCore (generate, definitionOf, Unit (..), unit, start) where
 
 import Control.Monad (replicateM)
 import Control.Monad.ST (ST, runST)
@@ -48,7 +48,7 @@ import qualified Generate.Binding.Term as Term (Binding (..))
 import qualified Generate.Binding.Type as Type
 import Generate.Context (Context, fresh, singleBinding, (!-), (!=.), (!~))
 import qualified Generate.Context as Context
-import qualified Generate.Global as Global (Global)
+import qualified Generate.Global as Global (Global (..))
 import qualified Generate.GlobalType as GlobalType
 import Generate.Go.Module (precontext)
 import qualified Generate.Info as Info
@@ -90,17 +90,33 @@ generate entry modules =
       entry = start entry
     }
   where
-    everything = Map.unions $ toList $ Vector.imap (moduleDefinitions (precontext modules)) modules
-    find global
-      | Just definition <- Runtime.definition global = definition
-      | Just definition <- Map.lookup global everything = definition
-      | otherwise = error $ "undefined global: " ++ Runtime.showGlobal global
+    find = definitionOf modules
     reach :: Map Global.Global Producer -> Set Global.Global -> Map Global.Global Producer
     reach known wanted = case Set.minView (Set.filter (`Map.notMember` known) wanted) of
       Nothing -> known
       Just (global, wanted) ->
-        let definition = find global
-         in reach (Map.insert global definition known) (wanted <> globals definition)
+        let found = find global
+         in reach (Map.insert global found known) (wanted <> globals found)
+
+-- |
+-- What a name is defined as, anywhere in a program. Given the modules alone
+-- this is a table, which is worked out once and is lazy in what it holds.
+definitionOf :: Vector Core.Module -> Global.Global -> Producer
+definitionOf modules = find
+  where
+    pre = precontext modules
+    -- A table for each module, by the module's name. A module's table is
+    -- only made when something of the module is asked for: making it has
+    -- the module checked, and most of a program's packages are never used.
+    tables = Map.fromList $ do
+      (index, modulex@Core.Module {name}) <- zip [0 ..] (toList modules)
+      pure (name, moduleDefinitions pre index modulex)
+    find global@Global.Global {path}
+      | Just found <- Runtime.definition global = found
+      | Just table <- Map.lookup path tables,
+        Just found <- Map.lookup global table =
+          found
+      | otherwise = error $ "undefined global: " ++ Runtime.showGlobal global
 
 -- |
 -- The statement that runs an action and ends the program.

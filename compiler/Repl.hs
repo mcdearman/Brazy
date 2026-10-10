@@ -13,10 +13,10 @@ module Repl
   )
 where
 
-import qualified AxCut.Lower as AxCut (lower)
+import qualified AxCut.Lower as AxCut (lower, lowerDefinitions)
 import qualified AxCut.Machine as AxCut (run)
 import qualified AxCut.Printer as AxCut (print, printDefinitions)
-import qualified AxCut.Tree as AxCut (Program (..))
+import qualified AxCut.Tree as AxCut (Object, Program (..))
 import Control.Exception
   ( AsyncException (UserInterrupt),
     Exception,
@@ -30,6 +30,8 @@ import Core.Tree.Declarations (Declarations (..))
 import qualified Core.Tree.Module as Core (Module (..))
 import Data.Char (isSpace)
 import Data.Foldable (toList)
+import Data.IORef (IORef, newIORef, readIORef, writeIORef)
+import Data.Map (Map)
 import Data.List (dropWhileEnd, intercalate, isPrefixOf, nub, sort)
 import qualified Data.Map as Map
 import qualified Data.Set as Set
@@ -84,7 +86,7 @@ import Lambline
     setHelper,
   )
 import Repl.Entry (lineBreak, names, needsContinuation, tokens, wordStart)
-import qualified Sequent.FromCore as Sequent (generate)
+import qualified Sequent.FromCore as Sequent (definitionOf, generate, start)
 import qualified Sequent.Printer as Sequent (print, printDefinitions)
 import qualified Sequent.Runtime as Runtime
 import qualified Sequent.Tree as Sequent (Program (..))
@@ -114,8 +116,12 @@ data Compiler = Compiler
     parses :: Text -> Bool,
     -- | Check the module. An error in it is thrown as a 'HazyError'.
     check :: [FilePath] -> Text -> IO (),
-    -- | The Core of every module, the session's last.
-    core :: [FilePath] -> Text -> IO (Vector Core.Module)
+    -- | The Core of every module, the session's last. An error in a module
+    -- that is not a package's is thrown as a 'HazyError'.
+    core :: [FilePath] -> Text -> IO (Vector Core.Module),
+    -- | How many of the modules, from the first, are packages'. They are the
+    -- same every time.
+    stable :: !Int
   }
 
 -- |
@@ -151,7 +157,11 @@ data Session = Session
     -- | What has been defined at the prompt, oldest first.
     units :: [Unit],
     -- | How many entries have been taken, to number the next.
-    count :: !Int
+    count :: !Int,
+    -- | The definitions of packages that have been made ready to run. A
+    -- package is the same for every entry, so what an entry needs of one is
+    -- made ready once and kept.
+    ready :: !(IORef (Map Global AxCut.Object))
   }
 
 -- |
@@ -332,30 +342,50 @@ define Compiler {check} session@Session {files, units, count} text = do
 -- action. Which it is is found by trying: first as something to show, and
 -- if that does not check, as an action.
 evaluate :: Compiler -> Session -> String -> IO ()
-evaluate compiler@Compiler {check} Session {files, units, count} text = do
+evaluate compiler@Compiler {core} session@Session {files, units, count} text = do
   let asked = Unit {number = count + 1, text}
       shown = layout units (Just (showing, asked))
       acted = layout units (Just (acting, asked))
-  first <- attempt (check files (modulex shown))
+  first <- attempt (core files (modulex shown))
   case first of
-    Right () -> run compiler files shown
+    Right modules -> run compiler session modules shown
     Left failure -> do
-      second <- attempt (check files (modulex acted))
+      second <- attempt (core files (modulex acted))
       case second of
-        Right () -> run compiler files acted
+        Right modules -> run compiler session modules acted
         Left HazyError {} -> complain shown failure
 
 -- |
 -- Run the session's module on the AxCut machine. The session goes on
 -- whatever the program does.
-run :: Compiler -> [FilePath] -> Layout -> IO ()
-run Compiler {core} files arranged = do
+--
+-- Only what is new is made ready to run: the session's own definitions, and
+-- the definitions of packages that no earlier entry needed.
+run :: Compiler -> Session -> Vector Core.Module -> Layout -> IO ()
+run Compiler {stable} Session {ready} modules arranged = do
   evaluation `catch` complain arranged `catch` stopped `catch` interrupted
   hFlush stdout
   where
     evaluation = do
-      modules <- core files (modulex arranged)
-      AxCut.run (AxCut.lower (Sequent.generate entry modules))
+      kept <- readIORef ready
+      let find = Sequent.definitionOf modules
+          lasting = Set.fromList [name | Core.Module {name} <- take stable (toList modules)]
+          reach new wanted = case Set.minView wanted of
+            Nothing -> new
+            Just (global, wanted)
+              | Map.member global new || Map.member global kept -> reach new wanted
+              | otherwise ->
+                  let found = find global
+                   in reach (Map.insert global found new) (wanted <> globals found)
+          starting = Sequent.start entry
+          objects = AxCut.lowerDefinitions (reach Map.empty (globals starting))
+          settled Global.Global {path} _ = Set.member path lasting
+      writeIORef ready $! Map.union kept (Map.filterWithKey settled objects)
+      AxCut.run
+        AxCut.Program
+          { definitions = Map.union objects kept,
+            entry = AxCut.entry (AxCut.lower Sequent.Program {definitions = Map.empty, entry = starting})
+          }
     -- The program stopped itself, having said why.
     stopped :: ExitCode -> IO ()
     stopped _ = pure ()
@@ -693,7 +723,8 @@ repl compiler files = do
   -- for the layout rule.
   editor <- newEditor defaultConfig {continuationPrompt = "  ", completionType = List}
   when interactive (loadHistory editor historyFile)
-  loop compiler editor Session {files, units = [], count = 0}
+  ready <- newIORef Map.empty
+  loop compiler editor Session {files, units = [], count = 0, ready}
   when interactive (saveHistory editor historyFile)
 
 loop :: Compiler -> Editor -> Session -> IO ()
