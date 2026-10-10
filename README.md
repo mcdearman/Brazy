@@ -1,3 +1,22 @@
+# Brazy
+
+> **This is a fork.** Brazy is Chris McDearman's testing fork of
+> [Hazy](https://github.com/Superstar64/Hazy), the Haskell compiler by
+> Superstar64. It is a place to try ideas and experiments before any of them
+> are offered to Hazy. It keeps Hazy's git history and Hazy's licenses. The
+> plan for the fork is in [ROADMAP.md](ROADMAP.md). The rest of this file is
+> Hazy's README, with additions for what the fork has added; where it says
+> "I", that is Hazy's author.
+>
+> **AI use.** Most of the work that is in this fork and not in Hazy was written
+> by an AI coding assistant (Anthropic's Claude, through Claude Code) under
+> Chris's direction. This includes the sequent calculus and AxCut
+> intermediate languages, the LLVM backend, the Rust runtime, the REPL and the
+> roadmap. Those commits carry a `Co-Authored-By: Claude` line. This code has
+> not been reviewed by Hazy's author and should not be taken as his work or as
+> having his approval. It is tested against Hazy's Javascript backend, but it
+> is experimental, so read it with care before relying on it.
+
 # The Hazy Haskell Compiler
 
 Hazy is a Haskell compiler where I plan to experiment on making Haskell more
