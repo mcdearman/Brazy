@@ -232,8 +232,17 @@ newtype HelperInt = Int Int
 instance Eq HelperInt where
   Int x == Int y = primEqualInt x y
 
+-- Every comparison is written out, so that none goes the long way round
+-- through the defaults of the class.
 instance Ord HelperInt where
   Int x <= Int y = primLessThenEqualInt x y
+  Int x < Int y = not (primLessThenEqualInt y x)
+  Int x >= Int y = primLessThenEqualInt y x
+  Int x > Int y = not (primLessThenEqualInt x y)
+  compare (Int x) (Int y)
+    | primEqualInt x y = EQ
+    | primLessThenEqualInt x y = LT
+    | otherwise = GT
 
 instance Enum HelperInt where
   succ (Int x) = Int (x + 1)
@@ -284,6 +293,13 @@ instance Eq HelperInteger where
 
 instance Ord HelperInteger where
   Integer x <= Integer y = primLessThenEqualInteger x y
+  Integer x < Integer y = not (primLessThenEqualInteger y x)
+  Integer x >= Integer y = primLessThenEqualInteger y x
+  Integer x > Integer y = not (primLessThenEqualInteger x y)
+  compare (Integer x) (Integer y)
+    | primEqualInteger x y = EQ
+    | primLessThenEqualInteger x y = LT
+    | otherwise = GT
 
 instance Enum HelperInteger where
   succ (Integer x) = Integer (x + 1)

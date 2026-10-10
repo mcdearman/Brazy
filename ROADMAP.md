@@ -327,6 +327,15 @@ How it works:
   out from nothing and compared. A lost reference or one given up twice is
   reported at the first collection after it happens.
 
+The collector is not meant to stay. Freddy never planned one: his plan is
+to have no cycles to collect, by lambda lifting the bindings that refer to
+themselves, with a low-level linear system that rules cycles out before the
+program runs. Chris decided on 2026-10-10 to keep the collector for now and
+to take it out when that is in place. Taking closed local functions out to
+the top (see M5) already removes the cycles those made. What remains is
+functions that use variables of where they are, which need those passed to
+them, and values defined by themselves, such as `xs = 1 : xs`.
+
 What it left, all three dealt with in M5:
 
 - Counting was done by calls into the runtime, and for every value.
@@ -396,8 +405,14 @@ Blocks allocated, as M5 has gone on:
 | `map`: three maps over 100,000 numbers | 19,302,200 | 11,901,656 | 6,301,129 |
 | `tree`: 20,000 insertions into a search tree | 35,909,660 | 22,708,303 | 10,747,020 |
 
-`reverse` rebuilds every cell in place. They now run in about 0.05, 0.12 and
-0.17 seconds, where the middle column ran in 0.12, 0.17 and about 0.4.
+- [x] Every comparison of `Int` and of `Integer` is written out in
+      `Hazy.Helper`. Only `<=` was, and the rest went through the defaults of
+      `Ord`, with its evidence, for every comparison
+
+With that the three allocate 1,200,270, 4,601,056 and 3,170,117 blocks and
+run in about 0.03, 0.07 and 0.06 seconds. Where M5 began they took about
+0.12, 0.17 and 0.4. `reverse` rebuilds every cell in place, and is down to
+twelve blocks for each number it reverses.
 
 Left:
 
@@ -416,12 +431,14 @@ Left:
       is the definition it is in and then every object around it, as
       `Main.count.go.k%5`. Nothing is called `closure.52` any more, and no
       two things can be called the same
-- [ ] What is left of the cost of arithmetic. It is about 60 blocks for each
+- [ ] What is left of the cost of arithmetic. It is about 45 blocks for each
       number in `map`. Much of it is laziness: `x + 1` passed on is a thunk,
       and so is every tail of a list. Knowing where a value is certainly
-      wanted, or being told with a strict function, would remove those. The
-      comparison operators of `Int` other than `<=` also go the long way
-      round, through the defaults of `Ord`
+      wanted, or being told with a strict function, would remove those
+- [ ] Lambda lifting of the local functions that do use variables of where
+      they are, passing those to them. With the closed ones already out,
+      this is what Freddy's plan to have no cycles needs next, and it lets
+      more calls be direct
 - [ ] The rest of decision trees: tests on different variables, and on what
       is inside a constructor
 
