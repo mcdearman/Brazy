@@ -78,6 +78,7 @@ TypeLambdaOver {
     substitute [k%1, x%0]
     force }
 === LLVM ===
+@"Hazy.Helper.instance Hazy.Num HelperInt" = external global { i64, ptr }
 @"Repl.double" = internal global { i64, ptr } { i64 1, ptr @"Repl.double.code" }, align 8
 
 define internal tailcc void @"closure.23"(i64 %t24, i64 %t25) {

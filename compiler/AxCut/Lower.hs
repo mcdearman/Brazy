@@ -13,14 +13,16 @@
 -- A consumer that has to be passed is made into an object with the one
 -- method that takes a value. That is the only place a continuation is
 -- allocated.
-module AxCut.Lower (lower) where
+module AxCut.Lower (lower, lowerDefinitions) where
 
 import qualified AxCut.Tree as AxCut
 import Control.Monad.ST (ST, runST)
+import Data.Map (Map)
 import Data.STRef (STRef, newSTRef, readSTRef, writeSTRef)
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Text (Text, pack, unpack)
+import Generate.Global (Global)
 import Sequent.Tree
   ( Alternative (..),
     Binder (..),
@@ -44,6 +46,16 @@ lower' Program {definitions, entry} = do
       { definitions,
         entry = build (linearly entry) []
       }
+
+-- |
+-- Definitions by themselves, as for a unit that is linked with others.
+lowerDefinitions :: Map Global Producer -> Map Global AxCut.Object
+lowerDefinitions definitions = runST (lowerDefinitions' definitions)
+
+lowerDefinitions' :: Map Global Producer -> ST s (Map Global AxCut.Object)
+lowerDefinitions' definitions = do
+  supply <- newSTRef 0
+  traverse (definition supply) definitions
 
 definition :: Supply s -> Producer -> ST s AxCut.Object
 definition supply producer = do

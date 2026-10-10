@@ -14,7 +14,16 @@
 -- with what is here.
 --
 -- Nothing is freed yet. Counting references is a later milestone.
-module LLVM.FromAxCut (Target (..), arm64, generate, generateBody, generateDefinitions) where
+module LLVM.FromAxCut
+  ( Target (..),
+    arm64,
+    generate,
+    generateBody,
+    generateDefinitions,
+    Unit (..),
+    generateUnit,
+  )
+where
 
 import AxCut.Tree
   ( Clause (..),
@@ -28,7 +37,10 @@ import AxCut.Tree
 import Control.Monad.ST (ST, runST)
 import Data.Char (isAlphaNum, isAscii, ord)
 import Data.List (intersperse)
+import Data.Map (Map)
 import qualified Data.Map as Map
+import Data.Set (Set)
+import qualified Data.Set as Set
 import Data.STRef (STRef, modifySTRef', newSTRef, readSTRef, writeSTRef)
 import Data.Text (Text, unpack)
 import qualified Data.Text as Text
@@ -54,52 +66,108 @@ arm64 :: Target
 arm64 = Target {registers = 8}
 
 -- |
--- A whole program, ready to be compiled.
+-- A whole program, ready to be compiled. Nothing in it is seen from outside.
 generate :: Target -> Program -> Builder
-generate target program = fromString prelude <> fromString "\n" <> generateBody target program
+generate target program = fromString (prelude Whole) <> fromString "\n" <> generateBody target program
 
 -- |
 -- A program without what every program starts with, for reading.
 generateBody :: Target -> Program -> Builder
-generateBody target program = runST (generate' True target program)
+generateBody target Program {definitions, entry} =
+  runST (generate' Whole target definitions Map.empty (Just entry))
 
 -- |
 -- The definitions of a program alone, for reading.
 generateDefinitions :: Target -> Program -> Builder
-generateDefinitions target program = runST (generate' False target program)
+generateDefinitions target Program {definitions} =
+  runST (generate' Whole target definitions Map.empty Nothing)
+
+-- |
+-- Some definitions compiled by themselves, to be linked with others.
+data Unit = Unit
+  { -- | The definitions that are this unit's and no other's.
+    defined :: Map Global Object,
+    -- | The definitions that other units may have made as well. The linker
+    -- keeps one of each.
+    shared :: Map Global Object,
+    -- | Where the program starts, if this unit is the program and not a
+    -- package.
+    start :: Maybe Statement
+  }
+
+-- |
+-- A unit, ready to be compiled. What it uses of other units is declared and
+-- left to the linker.
+generateUnit :: Target -> Unit -> Builder
+generateUnit target Unit {defined, shared, start} =
+  fromString (prelude shape) <> fromString "\n" <> runST (generate' shape target defined shared start)
+  where
+    shape = case start of
+      Just _ -> Main
+      Nothing -> Package
+
+-- |
+-- How what is generated meets the rest of a program.
+data Shape
+  = -- | It is the whole program.
+    Whole
+  | -- | It is the program's own modules, linked with packages.
+    Main
+  | -- | It is a package.
+    Package
+  deriving (Eq)
 
 data State s = State
   { target :: !Target,
     -- | The next number for a name.
     counter :: !(STRef s Int),
     -- | The functions and constants made along the way.
-    extra :: !(STRef s Builder)
+    extra :: !(STRef s Builder),
+    -- | The definitions that have been mentioned.
+    mentioned :: !(STRef s (Set Global))
   }
 
-generate' :: Bool -> Target -> Program -> ST s Builder
-generate' start target Program {definitions, entry} = do
+generate' ::
+  Shape ->
+  Target ->
+  Map Global Object ->
+  Map Global Object ->
+  Maybe Statement ->
+  ST s Builder
+generate' shape target defined shared start = do
   counter <- newSTRef 0
   extra <- newSTRef mempty
-  let state = State {target, counter, extra}
-  globals <- for (Map.toList definitions) $ \(global, object@Object {kind}) -> do
-    function state (symbol global <> fromString ".code") (comment global) object
-    pure $
-      mconcat
-        [ quoted (symbol global),
-          fromString " = internal global { i64, ptr } { i64 ",
-          number (kindOf kind),
-          fromString ", ptr ",
-          quoted (symbol global <> fromString ".code"),
-          fromString " }, align 8\n"
-        ]
-  body <-
-    if start
-      then do
-        body <- statement state [] entry
-        pure $ fromString "\ndefine internal tailcc void @hazy_entry() {\n" <> body <> fromString "}\n"
-      else pure mempty
+  mentioned <- newSTRef Set.empty
+  let state = State {target, counter, extra, mentioned}
+      global linkage (name, object@Object {kind}) = do
+        function state (symbol name <> fromString ".code") (comment name) object
+        pure $
+          mconcat
+            [ quoted (symbol name),
+              fromString " = ",
+              fromString linkage,
+              fromString "global { i64, ptr } { i64 ",
+              number (kindOf kind),
+              fromString ", ptr ",
+              quoted (symbol name <> fromString ".code"),
+              fromString " }, align 8\n"
+            ]
+  globals <- traverse (global (if shape == Whole then "internal " else "")) (Map.toList defined)
+  common <- traverse (global "linkonce_odr ") (Map.toList shared)
+  body <- case start of
+    Just entry -> do
+      body <- statement state [] entry
+      pure $ fromString "\ndefine internal tailcc void @hazy_entry() {\n" <> body <> fromString "}\n"
+    Nothing -> pure mempty
   extra <- readSTRef extra
-  pure $ mconcat [mconcat globals, body, extra]
+  mentioned <- readSTRef mentioned
+  -- What is used and is not here is some other unit's.
+  let elsewhere = do
+        name <- Set.toList mentioned
+        if Map.member name defined || Map.member name shared
+          then []
+          else [quoted (symbol name) <> fromString " = external global { i64, ptr }\n"]
+  pure $ mconcat [mconcat elsewhere, mconcat globals, mconcat common, body, extra]
   where
     comment global = fromString "; " <> Sequent.global global <> fromString "\n"
 
@@ -465,6 +533,7 @@ statement state environment = \case
     rest <- statement state (environment ++ [(name, value)]) rest
     pure $ code <> rest
   Global name global rest -> do
+    modifySTRef' (mentioned state) (Set.insert global)
     let value = fromString "ptrtoint (ptr " <> quoted (symbol global) <> fromString " to i64)"
     statement state (environment ++ [(name, value)]) rest
   Primitive name primitive rest -> do
@@ -573,13 +642,21 @@ primitiveName = \case
   IntegerRem -> "hazy_prim_integer_rem"
 
 -- |
--- What every program starts with: what the runtime provides, forcing, and
--- @main@.
+-- What a unit starts with: what the runtime provides, and forcing.
 --
 -- Forcing is written here and not in the runtime because it ends in a tail
--- call into the program, which only LLVM can make.
-prelude :: String
-prelude =
+-- call into the program, which only LLVM can make. It is defined once, in
+-- the unit that is the program, and a package only declares it.
+prelude :: Shape -> String
+prelude = \case
+  Whole -> runtime ++ "\n" ++ machinery ++ "\n" ++ mainFunction
+  Main -> runtime ++ "\n" ++ exported ++ "\n" ++ mainFunction
+  Package -> runtime ++ "\n" ++ declared
+
+-- |
+-- What the runtime provides.
+runtime :: String
+runtime =
   """
   declare ptr @hazy_alloc(i64)
   declare void @hazy_abort() noreturn
@@ -618,7 +695,13 @@ prelude =
   declare i64 @hazy_prim_integer_signum(i64)
   declare i64 @hazy_prim_integer_quot(i64, i64)
   declare i64 @hazy_prim_integer_rem(i64, i64)
+  """
 
+-- |
+-- Forcing, for a program that is one unit.
+machinery :: String
+machinery =
+  """
   ; Where the arguments that do not fit in registers are passed.
   @hazy_spill = internal global [64 x i64] zeroinitializer
 
@@ -685,7 +768,95 @@ prelude =
     musttail call tailcc void @hazy_return(i64 %consumer, i64 %value)
     ret void
   }
+  """
 
+-- |
+-- Forcing, for the other units of a program to use.
+exported :: String
+exported =
+  """
+  ; Where the arguments that do not fit in registers are passed.
+  @hazy_spill = global [64 x i64] zeroinitializer
+
+  ; Give a value to a consumer.
+  define internal tailcc void @hazy_return(i64 %consumer, i64 %value) {
+    %pointer = inttoptr i64 %consumer to ptr
+    %place = getelementptr i64, ptr %pointer, i64 1
+    %code = load ptr, ptr %place
+    musttail call tailcc void %code(i64 %consumer, i64 %value)
+    ret void
+  }
+
+  ; Evaluate something that may be a thunk and give the value to a consumer.
+  define tailcc void @hazy_force(i64 %consumer, i64 %value) {
+    %odd = and i64 %value, 1
+    %small = icmp ne i64 %odd, 0
+    br i1 %small, label %evaluated, label %block
+  block:
+    %pointer = inttoptr i64 %value to ptr
+    %header = load i64, ptr %pointer
+    %kind = and i64 %header, 255
+    switch i64 %kind, label %evaluated [ i64 2, label %delayed i64 3, label %working i64 4, label %done ]
+  evaluated:
+    musttail call tailcc void @hazy_return(i64 %consumer, i64 %value)
+    ret void
+  delayed:
+    ; The thunk is being forced. Its body is given a consumer that keeps the
+    ; value in the thunk and then hands it on.
+    store i64 3, ptr %pointer
+    %update = call ptr @hazy_alloc(i64 4)
+    store i64 1, ptr %update
+    %update.code = getelementptr i64, ptr %update, i64 1
+    store ptr @hazy_update, ptr %update.code
+    %update.thunk = getelementptr i64, ptr %update, i64 2
+    store i64 %value, ptr %update.thunk
+    %update.consumer = getelementptr i64, ptr %update, i64 3
+    store i64 %consumer, ptr %update.consumer
+    %updater = ptrtoint ptr %update to i64
+    %place = getelementptr i64, ptr %pointer, i64 1
+    %code = load ptr, ptr %place
+    musttail call tailcc void %code(i64 %value, i64 %updater)
+    ret void
+  working:
+    call void @hazy_loop()
+    unreachable
+  done:
+    %kept = getelementptr i64, ptr %pointer, i64 1
+    %result = load i64, ptr %kept
+    musttail call tailcc void @hazy_return(i64 %consumer, i64 %result)
+    ret void
+  }
+
+  ; The consumer a thunk's body is given.
+  define internal tailcc void @hazy_update(i64 %self, i64 %value) {
+    %pointer = inttoptr i64 %self to ptr
+    %thunk.place = getelementptr i64, ptr %pointer, i64 2
+    %thunk = load i64, ptr %thunk.place
+    %consumer.place = getelementptr i64, ptr %pointer, i64 3
+    %consumer = load i64, ptr %consumer.place
+    %block = inttoptr i64 %thunk to ptr
+    store i64 4, ptr %block
+    %kept = getelementptr i64, ptr %block, i64 1
+    store i64 %value, ptr %kept
+    musttail call tailcc void @hazy_return(i64 %consumer, i64 %value)
+    ret void
+  }
+  """
+
+-- |
+-- Forcing, as a unit that does not have it sees it.
+declared :: String
+declared =
+  """
+  @hazy_spill = external global [64 x i64]
+  declare tailcc void @hazy_force(i64, i64)
+  """
+
+-- |
+-- Where a program starts.
+mainFunction :: String
+mainFunction =
+  """
   define i32 @main() {
     call tailcc void @hazy_entry()
     call void @hazy_finish()
