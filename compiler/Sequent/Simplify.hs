@@ -20,11 +20,15 @@
 -- that is named and only ever given constructed values, each choosing an
 -- alternative of its own, is put where they are, so that a comparison goes
 -- straight on to what its answer chooses. A value that is forced is itself.
--- And a name for a number, a constructor with no fields or a definition is
--- written as what it names.
+-- A name for a name, a number, a constructor with no fields or a definition
+-- is written as what it names. A thunk that is forced as soon as it is
+-- named is evaluated first. A function that is written where it is called
+-- is its body. And one thing in a @let@ that does not refer to itself is
+-- only named, which lets the rest of this see it.
 module Sequent.Simplify (simplify) where
 
 import Data.List (nub)
+import qualified Data.Set as Set
 
 import Data.Text (Text)
 import qualified Sequent.Tree as Literal (Literal (..))
@@ -34,6 +38,8 @@ import Sequent.Tree
     Consumer (..),
     Producer (..),
     Statement (..),
+    Strategy (..),
+    free,
   )
 
 class Simplify a where
@@ -150,6 +156,10 @@ instance Simplify Statement where
   simplify = \case
     Cut producer consumer -> cut (simplify producer) (simplify consumer)
     Primitive primitive arguments result -> Primitive primitive (simplify arguments) (simplify result)
+    -- One thing that does not refer to itself is only named.
+    LetRec [(name, value)] body
+      | Set.notMember name (free value) ->
+          cut (simplify value) (MuTilde Binder {name, strategy = ByNeed} (simplify body))
     LetRec bindings body -> LetRec [(name, simplify value) | (name, value) <- bindings] (simplify body)
     Abort -> Abort
     Halt -> Halt
@@ -210,6 +220,11 @@ cut producer consumer = case (producer, consumer) of
     | count name rest == 1,
       forces name rest == 1 ->
         unfold name result body rest
+  -- A thunk that is forced as soon as it is named is evaluated first, and
+  -- what is named is its value.
+  (Thunk result body, MuTilde binder@Binder {name} (Cut (Variable other) (Force inner)))
+    | other == name ->
+        cut (Mu result body) (MuTilde binder (Cut (Variable name) inner))
   -- A value that is constructed and taken apart.
   (Constructor tag fields, Case alternatives otherwise) -> case choice tag alternatives of
     Just index
@@ -221,6 +236,12 @@ cut producer consumer = case (producer, consumer) of
       Nothing -> Abort
   -- A value that is forced.
   (_, Force inner) | value producer -> cut producer inner
+  -- A function that is written where it is called: its body, with the
+  -- parameters naming what they were given.
+  (Function parameters result body, Apply arguments inner)
+    | length parameters == length arguments ->
+        let bind (binder, argument) rest = Cut argument (MuTilde binder rest)
+         in simplify (Cut (Mu result (foldr bind body (zip parameters arguments))) inner)
   -- A name for something that is as short to write.
   (_, MuTilde Binder {name} rest)
     | short producer -> case count name rest of
@@ -246,6 +267,7 @@ value = \case
 -- Whether a producer is no more to write than a name for it would be.
 short :: Producer -> Bool
 short = \case
+  Variable _ -> True
   Literal (Literal.Int _) -> True
   Constructor _ [] -> True
   Global _ -> True

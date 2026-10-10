@@ -471,8 +471,15 @@ twelve blocks for each number it reverses.
 - [x] The block that is kept back also goes with a consumer of something
       that is forced
 
-With those the three allocate 800,246, 4,201,043 and 974,698 blocks and run
-in about 0.02, 0.06 and 0.03 seconds. `tree` builds 289,045 nodes in place.
+- [x] More of the same in the simplifier. A function that is written where
+      it is called is its body. One thing in a `let` that does not refer to
+      itself is only named. A name for a name is written as that name. A
+      thunk that is forced as soon as it is named is evaluated first. With
+      these ``acc' `seq` total acc' xs`` is an addition and a call, and
+      makes nothing
+
+With those the three allocate 800,243, 3,101,041 and 974,695 blocks and run
+in about 0.02, 0.05 and 0.03 seconds. `tree` builds 289,045 nodes in place.
 
 Left:
 
