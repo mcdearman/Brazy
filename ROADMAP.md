@@ -334,7 +334,35 @@ program runs. Chris decided on 2026-10-10 to keep the collector for now and
 to take it out when that is in place. Taking closed local functions out to
 the top (see M5) already removes the cycles those made. What remains is
 functions that use variables of where they are, which need those passed to
-them, and values defined by themselves, such as `xs = 1 : xs`.
+them, and values defined by themselves, such as `ones = 1 : ones`.
+
+Freddy on values defined by themselves, 2026-10-10:
+
+- At the top of a module a cycle is fine, because what is at the top is
+  never freed.
+- Anywhere else, recursion is to be rewritten so that it does not share:
+  as `fix f = f (fix f)`, and not as `fix f = let go = f go in go`. Each
+  time the value refers to itself it is made again, so nothing points back
+  at itself and there is no cycle. The cost is in his words "worse big O in
+  some cases": a local `ones` takes memory for as much of it as is used,
+  where the shared one takes a single cell.
+
+What that means here, to be weighed when it is built:
+
+- It costs time as well as memory. A local value that is defined by itself
+  so as to remember what it has worked out, such as
+  `fibs = 0 : 1 : zipWith (+) fibs (tail fibs)` in a `where`, works every
+  earlier part out again each time it looks back, and goes from a number of
+  steps in line with its length to one that doubles with it. The same
+  definition at the top of a module keeps its sharing.
+- A local value that is defined by itself and uses nothing of where it is
+  can be taken out to the top, as closed functions already are, and keep
+  its sharing. It is then never freed, which is the same bargain as any
+  other definition at the top. `Sequent.Hoist` leaves thunks where they are
+  today for that reason, and this would change that for the ones that refer
+  to themselves.
+- Only values that are defined by themselves and do use variables of where
+  they are need the rewrite, and those are the ones that pay.
 
 What it left, all three dealt with in M5:
 
