@@ -14,7 +14,6 @@ Haskell features are missing, only a test Javascript backend is implemented.
 
 # Missing
 
-- Constrained Type Defaulting
 - Deriving (Partial)
 - GADTs
 - Polymorphic Components
@@ -110,8 +109,7 @@ scroll, and `q` closes it. The viewer is the small library in `viewer`, which
 wraps the `brick` package.
 
 Entries are compiled as a whole module each time and run on the AxCut machine,
-so the session is subject to everything the compiler is: there is no numeric
-defaulting yet, so write `(1 + 2 :: Int)`.
+so the session is subject to everything the compiler is.
 
 The line editor is [lambline](https://github.com/mcdearman/lambline), which
 `cabal.project` fetches at a pinned commit.

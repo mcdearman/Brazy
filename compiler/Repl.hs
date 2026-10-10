@@ -623,7 +623,7 @@ help =
       "which is kept in .repl_history. Ctrl-R searches it. Tab completes.",
       "",
       "Declaring a name again replaces the entry that declared it.",
-      "The compiler does not default numeric types yet: write (1 + 2 :: Int)."
+      "A number whose type nothing settles is an Integer."
     ]
 
 logo :: String

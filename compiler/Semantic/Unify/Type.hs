@@ -35,7 +35,15 @@ import qualified Semantic.Shift0 as Shift0
 import qualified Semantic.Unify.Builtin as Builtin (constrain)
 import {-# SOURCE #-} Semantic.Unify.Error (Error (..), abort)
 import Semantic.Unify.Evidence (Evidence)
-import qualified Semantic.Unify.Evidence as Evidence (Box (..), Logical (..), unify, unshift)
+import qualified Semantic.Unify.Evidence as Evidence
+  ( Box (..),
+    Fallback (..),
+    Logical (..),
+    defaultable,
+    numeric,
+    unify,
+    unshift,
+  )
 import Syntax.Position (Position)
 import Prelude hiding (Functor, head, map)
 
@@ -347,7 +355,10 @@ constrainWith context_ position classx_ term_ arguments_ = constrainWith context
               unify context position (Function target Constraint) real
 
               typeCheck context position target (foldl (#) term arguments)
-              logical <- newSTRef Evidence.Unsolved {}
+              let fallback = do
+                    classx <- Evidence.defaultable classx
+                    pure Evidence.Fallback {classx, permitted = defaults reference}
+              logical <- newSTRef Evidence.Unsolved {fallback}
               let delay = Delay {arguments, evidence = Evidence.Logical (Evidence.Box logical)}
               writeSTRef reference $! Unsolved {kind, constraints = Map.insert classx delay constraints, erasure}
               pure $ Evidence.Logical (Evidence.Box logical)
@@ -472,6 +483,32 @@ unshift context position typex = unshift typex
     misshift = do
       abort position $ Unshift context typex
 
+-- |
+-- Whether a type variable that was never worked out may be taken to be
+-- @Integer@. This is the Haskell report's defaulting, with a default list of
+-- @Integer@ alone: every class the variable is constrained by must be one
+-- that does not stop it, and at least one must be a class of numbers.
+defaults :: STRef s (Box s scope) -> ST s Bool
+defaults reference =
+  readSTRef reference >>= \case
+    Solved typex -> follow typex
+    Unsolved {constraints} -> pure (defaulting constraints)
+  where
+    -- The variable may have been made the same as another since.
+    follow :: Type s scope -> ST s Bool
+    follow = \case
+      Logical (Box reference) -> defaults reference
+      Logical (Shift logical) -> follow (Logical logical)
+      _ -> pure False
+
+defaulting :: Map (Type2.Index scope) (Delay s scope) -> Bool
+defaulting constraints = not (null classes) && all plain (Map.elems constraints) && any known classes
+  where
+    classes = Map.keys constraints
+    plain Delay {arguments} = null arguments
+    known classx = maybe False Evidence.numeric (Evidence.defaultable classx)
+      && all (\other -> maybe False (const True) (Evidence.defaultable other)) classes
+
 defaultFrom,
   defaultUniverse ::
     Position ->
@@ -492,9 +529,13 @@ defaultUniverse position constraints universe = case universe of
   Logical (Box reference) ->
     readSTRef reference >>= \case
       Solved kind -> defaultUniverse position constraints kind
-      Unsolved {} -> pure $ Type Small
+      Unsolved {}
+        | null constraints -> pure $ Type Small
+        | defaulting constraints -> pure $ Constructor Type2.Integer
+        | otherwise -> unsupportedFeatureConstraintedTypeDefaulting position
   Small
     | null constraints -> pure $ Constructor (Type2.Tuple 0)
+    | defaulting constraints -> pure $ Constructor Type2.Integer
     | otherwise -> unsupportedFeatureConstraintedTypeDefaulting position
   Large
     | null constraints -> pure $ Type Small

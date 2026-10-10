@@ -454,7 +454,12 @@ Found while comparing the two backends:
 
 Missing:
 
-- [ ] Constrained type defaulting
+- [x] Constrained type defaulting, to `Integer`. A type that is never
+      worked out is taken to be `Integer` when every class it is constrained
+      by is one of `Num`, `Real`, `Integral`, `Enum`, `Eq`, `Ord`, `Show` and
+      `Read`, and at least one is a class of numbers. There is no `default`
+      declaration, and nothing defaults to a fraction, since there is no
+      `Double`
 - [ ] GADTs
 - [ ] Polymorphic components
 - [ ] Strict functions
