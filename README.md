@@ -60,8 +60,8 @@ make run ARGS="test/run/hello/source --native .hello"
 ./.hello
 ```
 
-The whole program is compiled at once, packages included. Nothing is freed
-yet, `Integer` is limited to 64 bits and `generalCategory` is missing.
+The whole program is compiled at once, packages included, and nothing is
+freed yet.
 
 # Interactive Session
 

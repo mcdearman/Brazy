@@ -70,10 +70,10 @@ for run_dir in test/run/*/; do
     diff "test/run/$run/result" ".test/$run/axcut"
 done
 
-# Run the execution tests natively. Only the ones the native runtime can run
-# so far are listed.
+# Run the execution tests natively
 echo "=== Execution (native) ==="
-for run in hello; do
+for run_dir in test/run/*/; do
+    run=$(basename "$run_dir")
     mkdir -p ".test/native"
     echo "Running $run"
     $HAZY -q "test/run/$run/source" --native ".test/native/$run"

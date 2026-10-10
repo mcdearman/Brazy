@@ -228,21 +228,24 @@ How it works, and what it leaves:
   area of memory, after Silo, to stay clear of stack arguments in tail calls.
   That number is the one thing in a `Target` so far.
 - Nothing is freed. That is M4.
-- `Integer` is held in 64 bits and the program stops if one does not fit.
-  `generalCategory` is not there. Both are M3.
 - The whole program is still compiled at once. Compiling a package on its
   own, with native objects among a package's `artifacts`, has moved to its
   own step after M3.
 
 ### M3. The whole test suite, natively
 
-- [ ] The remaining primitives: `Integer` of any size and
-      `generalCategory`. The builtin classes need nothing more, since the
-      instances for tuples are generated in `Sequent.Runtime`
-- [ ] Check: every `test/run` program agrees across Javascript, the AxCut
+Done on the `m3-native-suite` branch. Every `test/run` program prints the
+same natively as on the AxCut machine and under Node, and `tools/test.sh`
+checks all three.
+
+- [x] The remaining primitives: `Integer` of any size (the `num-bigint`
+      crate) and `generalCategory` (the `unicode-properties` crate). The
+      builtin classes needed nothing more, since the instances for tuples are
+      generated in `Sequent.Runtime`
+- [x] Check: every `test/run` program agrees across Javascript, the AxCut
       machine and native
-- [ ] Where the three disagree and Javascript is the one that is wrong, fix
-      or record it under Track A
+- [x] Where the three disagree and Javascript is the one that is wrong, fix
+      or record it under Track A. They did not disagree on anything new
 
 ### Separate compilation
 
