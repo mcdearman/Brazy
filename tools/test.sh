@@ -81,6 +81,30 @@ for run_dir in test/run/*/; do
     diff "test/run/$run/result" ".test/native/$run.result"
 done
 
+# Run one test natively as a whole program, with the packages compiled again
+echo "=== Execution (native, whole program) ==="
+echo "Running hello"
+$HAZY -q "test/run/hello/source" --native ".test/native/hello-whole" --whole
+".test/native/hello-whole" > ".test/native/hello-whole.result"
+diff "test/run/hello/result" ".test/native/hello-whole.result"
+
+# Build each test package, and run the program that uses it both ways
+echo "=== Packages ==="
+for package_dir in test/package/*/; do
+    package=$(basename "$package_dir")
+    out=".test/package/$package"
+    mkdir -p "$out"
+    echo "Running $package"
+    $HAZY -q "test/package/$package/library" -o "$out/library" --pack
+    $HAZY -q "test/package/$package/library" --native-object "$out/library/native.o"
+    $HAZY -q "test/package/$package/source" --package "./$out/library" -o "$out/javascript"
+    node "$out/javascript/index.mjs" > "$out/javascript.result"
+    diff "test/package/$package/result" "$out/javascript.result"
+    $HAZY -q "test/package/$package/source" --package "./$out/library" --native "$out/native"
+    "$out/native" > "$out/native.result"
+    diff "test/package/$package/result" "$out/native.result"
+done
+
 # Run the interactive session tests
 echo "=== Interactive ==="
 for repl_dir in test/repl/*/; do

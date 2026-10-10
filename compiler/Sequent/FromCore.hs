@@ -8,7 +8,7 @@
 --
 -- The whole program is translated at once, and only the definitions that
 -- the one it starts at can reach are kept.
-module Sequent.FromCore (generate) where
+module Sequent.FromCore (generate, Unit (..), unit, start) where
 
 import Control.Monad (replicateM)
 import Control.Monad.ST (ST, runST)
@@ -83,14 +83,12 @@ import Sequent.Tree
 -- |
 -- The program that runs a definition, which must be an action.
 generate :: Global.Global -> Vector Core.Module -> Program
-generate start modules =
+generate entry modules =
   Program
-    { definitions = reach Map.empty (globals entry),
-      entry
+    { definitions = reach Map.empty (globals (start entry)),
+      entry = start entry
     }
   where
-    entry = Cut (Global start) (Force (Apply [] (MuTilde ignored Halt)))
-    ignored = Binder {name = pack "_", strategy = ByNeed}
     everything = Map.unions $ toList $ Vector.imap (moduleDefinitions (precontext modules)) modules
     find global
       | Just definition <- Runtime.definition global = definition
@@ -102,6 +100,42 @@ generate start modules =
       Just (global, wanted) ->
         let definition = find global
          in reach (Map.insert global definition known) (wanted <> globals definition)
+
+-- |
+-- The statement that runs an action and ends the program.
+start :: Global.Global -> Statement
+start entry = Cut (Global entry) (Force (Apply [] (MuTilde ignored Halt)))
+  where
+    ignored = Binder {name = pack "_", strategy = ByNeed}
+
+-- |
+-- Some modules compiled by themselves, to be linked with others later.
+data Unit = Unit
+  { -- | Every definition of the modules.
+    own :: Map Global.Global Producer,
+    -- | The definitions that are made where they are used, which another
+    -- unit may have made as well.
+    shared :: Map Global.Global Producer
+  }
+
+-- |
+-- The modules at some places among all of the modules, as a unit. What they
+-- use of other modules is left as names.
+unit :: [Int] -> Vector Core.Module -> Unit
+unit indexes modules = Unit {own, shared = reach Map.empty (globals (Map.elems own))}
+  where
+    pre = precontext modules
+    own = Map.unions $ do
+      index <- indexes
+      let modulex@Core.Module {name} = modules Vector.! index
+      -- The module of primitives is written out in the sequent calculus.
+      pure $ if name == Runtime.hazy then Runtime.fixed else moduleDefinitions pre index modulex
+    reach :: Map Global.Global Producer -> Set Global.Global -> Map Global.Global Producer
+    reach known wanted = case Set.minView (Set.filter (`Map.notMember` known) wanted) of
+      Nothing -> known
+      Just (global, wanted) -> case Runtime.generated global of
+        Just definition -> reach (Map.insert global definition known) (wanted <> globals definition)
+        Nothing -> reach known wanted
 
 -- |
 -- Every definition of a module. The map is lazy in its values, so only the

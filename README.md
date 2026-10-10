@@ -60,8 +60,9 @@ make run ARGS="test/run/hello/source --native .hello"
 ./.hello
 ```
 
-The whole program is compiled at once, packages included, and nothing is
-freed yet.
+Only the program's own modules are compiled. The packages it loads were
+compiled when they were made, and are linked in. `--whole` compiles everything
+together instead. Nothing is freed yet.
 
 # Interactive Session
 
@@ -134,6 +135,12 @@ For example:
 hazy Module.hs modules/ -o mypackage --pack
 ```
 This will generate a package into a directory with the specified name.
+
+For a package to be used by a native program it also needs a native object,
+which is made separately and kept in the package as `native.o`:
+```sh
+hazy Module.hs modules/ --native-object mypackage/native.o
+```
 
 To load a package, pass `--package $NAME` or `--package $PATH`. `--package` will
 try to load a package from the system package directory if the argument doesn't

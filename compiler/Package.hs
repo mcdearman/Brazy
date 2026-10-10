@@ -34,7 +34,9 @@ data Module = Module
   deriving (Show)
 
 data Package = Package
-  { extensions :: [Toggle],
+  { -- | The directory the package is in.
+    root :: FilePath,
+    extensions :: [Toggle],
     modules :: [Module]
   }
   deriving (Show)
@@ -118,6 +120,7 @@ load root = do
         }
   pure
     Package
-      { extensions = toggles,
+      { root,
+        extensions = toggles,
         modules
       }

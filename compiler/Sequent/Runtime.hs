@@ -11,6 +11,8 @@ module Sequent.Runtime
     builtin,
     tuple,
     definition,
+    fixed,
+    generated,
     showGlobal,
   )
 where
@@ -111,16 +113,32 @@ tuple classx number = case classx of
             name = pack name <> pack " " <> pack (show number)
           }
 
+-- |
+-- What a name of the @Hazy@ module is defined as, if it is one.
 definition :: Global -> Maybe Producer
-definition Global.Global {path, name}
-  | path == hazy = case Map.lookup name definitions of
-      Just producer -> Just producer
-      Nothing
-        | [classx, number] <- words name,
-          Just number <- readMaybe (unpack number),
-          Just make <- Map.lookup classx tuples ->
-            Just (make number)
-        | otherwise -> error $ "missing primitive: " ++ unpack name
+definition global@Global.Global {path, name}
+  | path /= hazy = Nothing
+  | Just producer <- Map.lookup name definitions = Just producer
+  | Just producer <- generated global = Just producer
+  | otherwise = error $ "missing primitive: " ++ unpack name
+
+-- |
+-- The definitions of the @Hazy@ module that are written out here. They are
+-- compiled once, with the package that has the module.
+fixed :: Map Global Producer
+fixed = Map.mapKeys (\name -> Global.Global {path = hazy, name}) definitions
+
+-- |
+-- A definition that is made when it is asked for: the instance of a builtin
+-- class for the tuples of some size. There is no end of these, so each is
+-- compiled wherever it is used.
+generated :: Global -> Maybe Producer
+generated Global.Global {path, name}
+  | path == hazy,
+    [classx, number] <- words name,
+    Just number <- readMaybe (unpack number),
+    Just make <- Map.lookup classx tuples =
+      Just (make number)
   | otherwise = Nothing
 
 byValue, byNeed :: String -> Binder

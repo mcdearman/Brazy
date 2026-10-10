@@ -228,9 +228,8 @@ How it works, and what it leaves:
   area of memory, after Silo, to stay clear of stack arguments in tail calls.
   That number is the one thing in a `Target` so far.
 - Nothing is freed. That is M4.
-- The whole program is still compiled at once. Compiling a package on its
-  own, with native objects among a package's `artifacts`, has moved to its
-  own step after M3.
+- The whole program was compiled at once. Compiling a package on its own
+  came after M3.
 
 ### M3. The whole test suite, natively
 
@@ -249,8 +248,36 @@ checks all three.
 
 ### Separate compilation
 
-- [ ] A package compiled on its own: its `artifacts` can hold native objects
-      as well as Javascript, and a program links against them
+Done on the `separate-compilation` branch. A program is no longer compiled
+together with its packages: `hello` goes from 3,142 lines of LLVM IR to 330.
+
+- [x] A package compiled on its own. `--native-object PATH` compiles the
+      modules that are not a package's to an object, and a package keeps its
+      object as `native.o` beside its `package` file
+- [x] A program links against the objects of the packages it loads.
+      `--native` compiles only the program's own modules; `--whole` asks for
+      the old way, with everything compiled together
+- [x] `tools/build.sh` builds the objects of `hazy-internal` and `base`
+- [x] Check: a test package (`test/package/shapes`) built and used from a
+      program, under Node and natively, in `tools/test.sh`
+
+How it works, and what it leaves:
+
+- A unit is the modules that are not a package's. Its definitions are seen
+  from outside under their own names, and what it uses of other units is
+  declared and left to the linker.
+- The `Hazy` module's primitives, which are written in the sequent calculus,
+  are compiled with the package that has the module.
+- The instances for tuples are made where they are used, since there is one
+  for every size. Each unit that uses one compiles it, and the linker keeps
+  one (`linkonce_odr`).
+- Forcing is defined once, in the unit that is the program, and packages
+  declare it.
+- The linker drops what is not reached (`-dead_strip`).
+- Making a package is still two commands, `--pack` for the headers and the
+  Javascript and `--native-object` for the object. They could be one.
+- Nothing is optimised across units. The whole-program way is kept for when
+  that matters, and for the analyses of M5 that want to see everything.
 
 ### M4. The linear discipline
 

@@ -25,7 +25,8 @@ import qualified Generate.Go.Module as Module (generate)
 import qualified Generate.Go.Module as Stage5
 import qualified Generate.Mangle as Mangle
 import qualified Javascript.Printer.Lexer as Javascript (print, run)
-import qualified LLVM.FromAxCut as LLVM (arm64, generate)
+import qualified AxCut.Lower as AxCut (lowerDefinitions)
+import qualified LLVM.FromAxCut as LLVM (Unit (..), arm64, generate, generateUnit)
 import qualified Javascript.Tree.Module as Module (print)
 import Package as X (Module (Module), Package (Package))
 import qualified Package
@@ -38,8 +39,10 @@ import qualified Semantic.Scope as Scope
 import qualified Semantic.Stage as Stage
 import qualified Semantic.Tree.Module as Module (connect, seperate)
 import qualified Semantic.Tree.Module as Semantic (Module, name)
-import qualified Sequent.FromCore as Sequent (generate)
+import qualified Sequent.FromCore as Sequent (Unit (..), generate, start, unit)
 import qualified Sequent.Printer as Sequent (print)
+import qualified Sequent.Tree as Sequent (Program (..))
+import qualified AxCut.Tree as AxCut (Program (..))
 import qualified Sequent.Runtime as Runtime (main)
 import Syntax.Extensions (Extensions, hazy)
 import Syntax.Lexer
@@ -206,6 +209,7 @@ data Mode
   | Run
   | LLVM
   | Native FilePath
+  | Object FilePath
   | Repl
   | Generate FilePath
 
@@ -235,8 +239,17 @@ data Bare
   | Runtime
   | Bare
 
+-- |
+-- How a native program meets its packages.
+data Linking
+  = -- | Each package was compiled by itself and is linked in.
+    Separate
+  | -- | The packages are compiled again, as part of the program.
+    Whole
+
 data Execute = Execute
-  { include :: List String,
+  { linking :: !Linking,
+    include :: List String,
     modules :: List String,
     packages :: List String,
     language :: List String,
@@ -252,7 +265,8 @@ data Execute = Execute
 defaultx :: Execute
 defaultx =
   Execute
-    { include = Nil,
+    { linking = Separate,
+      include = Nil,
       modules = Nil,
       packages = Nil,
       language = Nil,
@@ -292,6 +306,8 @@ options =
     Option [] ["run-axcut"] (NoArg runAxCut) "Run the program on the AxCut machine",
     Option [] ["debug-llvm"] (NoArg llvm) "Show the program in LLVM IR",
     Option [] ["native"] (ReqArg native "PATH") "Compile the program to a native executable",
+    Option [] ["native-object"] (ReqArg object "PATH") "Compile the modules to a native object, for a package",
+    Option [] ["whole"] (NoArg whole') "Compile packages again with the program, instead of linking them",
     Option [] ["repl"] (NoArg interactive) "Start an interactive session",
     Option [] ["debug-message"] (NoArg debug) "Show debug messages",
     Option [] ["debug-show"] (NoArg show) "Show internal AST",
@@ -310,6 +326,8 @@ options =
     interactive execute = execute {mode = Repl}
     llvm execute = execute {mode = LLVM}
     native path execute = execute {mode = Native path}
+    object path execute = execute {mode = Object path}
+    whole' execute = execute {linking = Whole}
     generate path execute = execute {mode = Generate path}
     debug execute = execute {debug = Debug}
     fail error execute = execute {failure = Expect error}
@@ -337,7 +355,8 @@ main'' args = case getOpt order options args of
   (_, _ : _, _) -> error "flags not processed"
   (flags, [], []) -> do
     let Execute
-          { include,
+          { linking,
+            include,
             modules,
             packages,
             mode,
@@ -419,16 +438,41 @@ main'' args = case getOpt order options args of
             hSetEncoding stdout utf8
             Text.Lazy.IO.putStr $ Builder.toLazyText $ LLVM.generate LLVM.arm64 $ AxCut.lower program
           Native target -> do
-            program <- whole all
-            -- The IR is kept beside the executable, to be looked at.
-            let source = target ++ ".ll"
             createDirectoryIfMissing True (dropFileName target)
-            handle <- openFile source WriteMode
-            hSetEncoding handle utf8
-            Text.Lazy.IO.hPutStr handle $ Builder.toLazyText $ LLVM.generate LLVM.arm64 $ AxCut.lower program
-            hClose handle
             let runtime = root </> "lib" </> "hazy" </> "native" </> "libhazy_runtime.a"
-            callProcess "clang" ["-O1", "-Wno-override-module", source, runtime, "-o", target]
+            case linking of
+              Whole -> do
+                program <- whole all
+                emit (target ++ ".ll") $ LLVM.generate LLVM.arm64 $ AxCut.lower program
+                callProcess "clang" ["-O1", "-Wno-override-module", target ++ ".ll", runtime, "-o", target]
+              Separate -> do
+                Sequent.Unit {own, shared} <- unit all
+                emit (target ++ ".ll") $
+                  LLVM.generateUnit
+                    LLVM.arm64
+                    LLVM.Unit
+                      { defined = AxCut.lowerDefinitions own,
+                        shared = AxCut.lowerDefinitions shared,
+                        start = Just (AxCut.entry (AxCut.lower (startProgram)))
+                      }
+                let objects = [directory </> "native.o" | Package {root = directory} <- packages]
+                callProcess "clang" $
+                  ["-O1", "-Wno-override-module", target ++ ".ll"]
+                    ++ objects
+                    ++ [runtime, "-Wl,-dead_strip", "-o", target]
+          Object target -> do
+            createDirectoryIfMissing True (dropFileName target)
+            Sequent.Unit {own, shared} <- unit all
+            let source = dropExtension target ++ ".ll"
+            emit source $
+              LLVM.generateUnit
+                LLVM.arm64
+                LLVM.Unit
+                  { defined = AxCut.lowerDefinitions own,
+                    shared = AxCut.lowerDefinitions shared,
+                    start = Nothing
+                  }
+            callProcess "clang" ["-O1", "-Wno-override-module", "-c", source, "-o", target]
           Generate target -> do
             all <- stage1 debug all
             all <- stage2 debug all
@@ -507,6 +551,23 @@ main'' args = case getOpt order options args of
           all <- stage3 debug all
           all <- stage4 debug all
           pure $ Sequent.generate Runtime.main all
+        -- The modules that are not a package's, as a unit to be linked with
+        -- the packages.
+        unit all = do
+          all <- stage1 debug all
+          all <- stage2 debug all
+          all <- stage3 debug all
+          all <- stage4 debug all
+          pure $ Sequent.unit [length system .. length all - 1] all
+        -- Where a program starts, lowered by itself.
+        startProgram =
+          Sequent.Program {definitions = Map.empty, entry = Sequent.start Runtime.main}
+        -- Write some generated text to a file, to be compiled and to be read.
+        emit file text = do
+          handle <- openFile file WriteMode
+          hSetEncoding handle utf8
+          Text.Lazy.IO.hPutStr handle (Builder.toLazyText text)
+          hClose handle
         -- What an interactive session asks of the compiler. The session's
         -- module comes after the packages and the files that were loaded.
         session =
