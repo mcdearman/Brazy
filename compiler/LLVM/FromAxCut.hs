@@ -45,7 +45,7 @@ import qualified Data.Set as Set
 import Data.STRef (STRef, modifySTRef', newSTRef, readSTRef, writeSTRef)
 import Data.Text (Text, unpack)
 import qualified Data.Text as Text
-import qualified Data.Text.Lazy as Lazy.Text (unpack)
+import qualified Data.Text.Lazy as Lazy.Text (Text, unpack)
 import Data.Text.Lazy.Builder (Builder, fromString, toLazyText)
 import Data.Traversable (for)
 import Generate.Global (Global)
@@ -134,7 +134,13 @@ data State s = State
     -- | The functions and constants made along the way.
     extra :: !(STRef s Builder),
     -- | The definitions that have been mentioned.
-    mentioned :: !(STRef s (Set Global))
+    mentioned :: !(STRef s (Set Global)),
+    -- | The whole path to the code being generated: the definition it is
+    -- in, and then every object inside that which has been gone into. What
+    -- is generated is called by it.
+    scope :: !Builder,
+    -- | The names that have been given to functions.
+    taken :: !(STRef s (Set Lazy.Text.Text))
   }
 
 generate' ::
@@ -148,9 +154,10 @@ generate' shape target defined shared start = do
   counter <- newSTRef 0
   extra <- newSTRef mempty
   mentioned <- newSTRef Set.empty
-  let state = State {target, counter, extra, mentioned}
+  taken <- newSTRef Set.empty
+  let state = State {target, counter, extra, mentioned, scope = fromString "entry", taken}
       global linkage (name, object@Object {kind}) = do
-        function state (symbol name <> fromString ".code") (comment name) object
+        function state {scope = symbol name} (symbol name <> fromString ".code") (comment name) object
         pure $
           mconcat
             [ quoted (symbol name),
@@ -245,12 +252,34 @@ number = fromString . show
 -- |
 -- The name of a definition, without the quotes a name needs.
 symbol :: Global -> Builder
-symbol global = fromString $ concatMap escape $ drop 1 $ Lazy.Text.unpack $ toLazyText $ Sequent.global global
+symbol global = fromString $ escaped $ drop 1 $ Lazy.Text.unpack $ toLazyText $ Sequent.global global
+
+-- |
+-- Some text as it can stand inside the quotes of a name.
+escaped :: String -> String
+escaped = concatMap escape
   where
     escape character
       | isAscii character && (isAlphaNum character || character `elem` " .'_$-+*/<>=!&|^%#@~?:,()[]") =
           [character]
       | otherwise = concat ["\\" ++ hex byte | byte <- utf8 character]
+
+-- |
+-- A name for the code of an object, given what AxCut calls the object: the
+-- path to where it is, and then its own name. If the same object is
+-- compiled twice, the second is told apart by a number.
+named :: State s -> Text -> ST s Builder
+named state@State {scope, taken} hint = do
+  let wanted = scope <> fromString "." <> fromString (escaped (unpack hint))
+  known <- readSTRef taken
+  name <-
+    if Set.member (toLazyText wanted) known
+      then do
+        next <- fresh state
+        pure $ wanted <> fromString "." <> fromString (show next)
+      else pure wanted
+  modifySTRef' taken (Set.insert (toLazyText name))
+  pure name
 
 hex :: Int -> String
 hex byte = [digits !! (byte `div` 16), digits !! (byte `mod` 16)]
@@ -530,22 +559,19 @@ function state@State {target = Target {registers}, extra} name comment Object {k
       ]
 
 -- |
--- A function for an object that is made as the program runs, and its name.
-anonymous :: State s -> Object -> ST s Builder
-anonymous state object@Object {kind} = do
-  next <- fresh state
-  let name = fromString (hint ++ "." ++ show next)
-      hint = case kind of
-        Closure -> "closure"
-        Thunk -> "thunk"
-  function state name mempty object
+-- A function for an object that is made as the program runs, and its name,
+-- given what AxCut calls the object.
+anonymous :: State s -> Text -> Object -> ST s Builder
+anonymous state hint object = do
+  name <- named state hint
+  function state {scope = name} name mempty object
   pure name
 
 -- |
 -- Make an object, apart from what it captures.
-object' :: State s -> Object -> ST s (Builder, Builder)
-object' state object@Object {kind, captured} = do
-  name <- anonymous state object
+object' :: State s -> Text -> Object -> ST s (Builder, Builder)
+object' state hint object@Object {kind, captured} = do
+  name <- anonymous state hint object
   (code, block) <- allocate state (capturesAt + length captured) (header (kindOf kind) 0 (length captured))
   (code', place) <- slot state block codeAt
   pure
@@ -593,12 +619,12 @@ isWord value = case Lazy.Text.unpack (toLazyText value) of
 -- reads what it captured and enters the first. When what is forced turns
 -- out to be a value already, the first is entered at once and the consumer
 -- is never made.
-continuation :: State s -> Object -> ST s (Builder, Builder)
-continuation state@State {target = Target {registers}, extra} Object {captured, parameters, body} = do
-  next <- fresh state
-  let entry = fromString ("closure." ++ show next)
-      direct = fromString ("closure." ++ show next ++ ".direct")
+continuation :: State s -> Text -> Object -> ST s (Builder, Builder)
+continuation outer@State {target = Target {registers}, extra} hint Object {captured, parameters, body} = do
+  entry <- named outer hint
+  let direct = entry <> fromString ".direct"
       names = parameters ++ captured
+      state = outer {scope = entry}
   arguments <- for names $ \_ -> local state
   let (passed, spilled) = splitAt registers arguments
       unspill = mconcat $ do
@@ -816,7 +842,7 @@ statement state token environment = \case
     | (kept, taken) <- splitEnd (length captured) environment,
       (adjust, [(_, consumer), (_, value)]) <- substitute (kept ++ [(name, unmade)]) pairs,
       toLazyText consumer == toLazyText unmade -> do
-        (entry, direct) <- continuation state object
+        (entry, direct) <- continuation state name object
         let captures = map snd taken
             fast = enter state (quoted direct) (value : captures)
         if isWord value
@@ -866,7 +892,7 @@ statement state token environment = \case
       unmade = fromString "%unmade"
   New name object@Object {captured} rest -> do
     let (kept, taken) = splitEnd (length captured) environment
-    (code, block) <- object' state object
+    (code, block) <- object' state name object
     captures <- for (zip [capturesAt ..] taken) $ \(index, (_, value)) -> store state block index value
     (code', value) <- word state block
     rest <- statement state token (kept ++ [(name, value)]) rest
@@ -950,7 +976,7 @@ statement state token environment = \case
         -- the objects that capture it.
         references name = 1 + length [() | Recursive {others} <- objects, other <- others, other == name]
     made <- for objects $ \Recursive {name, object} -> do
-      (code, block) <- object' state object
+      (code, block) <- object' state name object
       let Object {kind, captured} = object
           counted' = header (kindOf kind) 0 (length captured) + toInteger (references name) * one
       count <- store state block 0 (number counted')

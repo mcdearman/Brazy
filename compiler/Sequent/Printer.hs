@@ -7,6 +7,7 @@ import Data.List (intersperse)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Text (pack)
+import qualified Data.Text as Text (map)
 import Data.Text.Lazy.Builder (Builder, fromString, fromText)
 import qualified Generate.Global as Global (Global (..))
 import qualified Generate.Mangle as Mangle
@@ -19,6 +20,7 @@ import Sequent.Tree
     Program (..),
     Statement (..),
     Strategy (..),
+    separator,
   )
 import Prelude hiding (print)
 
@@ -42,7 +44,8 @@ global Global.Global {path, name} =
     [ fromString "@",
       mconcat $ intersperse (fromString ".") $ fromText <$> toList (Mangle.path' path),
       fromString ".",
-      fromText name
+      -- A definition that was inside another is shown under its name.
+      fromText (Text.map (\character -> if character == separator then '.' else character) name)
     ]
 
 literal :: Literal -> Builder
