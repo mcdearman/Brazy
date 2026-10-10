@@ -377,17 +377,27 @@ Done:
       that takes the value is entered with it, and the consumer that would
       have waited for it is never made
 
-Blocks allocated, on 2026-10-09 with reuse alone and on 2026-10-10 with the
-three changes above:
+- [x] A known function is called with all of its arguments at once
+      (`compiler/Sequent/Uncurry.hs`). A definition that is functions inside
+      functions has a second entry, called by its name and then `direct`,
+      that takes every argument together, and a call that has them all goes
+      there and makes nothing. The evidence a definition takes counts as its
+      first arguments. A definition known to be a function is not forced
+- [x] A consumer that is named and used once is put where it is used, and a
+      thunk that is forced once, outside any function, is evaluated where it
+      is forced (`compiler/Sequent/Simplify.hs`). The condition of an `if`
+      was delayed and then looked at straight away
 
-| Program | 9 October | 10 October | Reused |
+Blocks allocated, as M5 has gone on:
+
+| Program | Reuse alone | Instances, numbers, forcing | Direct calls, simplifying |
 | - | - | - | - |
-| `reverse`: reverse 100,000 numbers ten times | 14,001,149 | 8,100,632 | 1,000,000 |
-| `map`: three maps over 100,000 numbers | 19,302,200 | 11,901,656 | 300,010 |
-| `tree`: 20,000 insertions into a search tree | 35,909,660 | 22,708,303 | 4 |
+| `reverse`: reverse 100,000 numbers ten times | 14,001,149 | 8,100,632 | 2,900,343 |
+| `map`: three maps over 100,000 numbers | 19,302,200 | 11,901,656 | 6,301,129 |
+| `tree`: 20,000 insertions into a search tree | 35,909,660 | 22,708,303 | 10,747,020 |
 
-`reverse` rebuilds every cell in place. They run in 0.12, 0.17 and about 0.4
-seconds.
+`reverse` rebuilds every cell in place. They now run in about 0.05, 0.12 and
+0.17 seconds, where the middle column ran in 0.12, 0.17 and about 0.4.
 
 Left:
 
@@ -406,12 +416,12 @@ Left:
       is the definition it is in and then every object around it, as
       `Main.count.go.k%5`. Nothing is called `closure.52` any more, and no
       two things can be called the same
-- [ ] The rest of the cost of arithmetic. It is still about 120 blocks for
-      each number in `map`. What is left is mostly functions being applied
-      one argument at a time: each application of a function of two
-      arguments makes a function of one, and a consumer to wait for it.
-      Calling a known function with all of its arguments at once would
-      remove that, and is where strict, multi-argument functions come in
+- [ ] What is left of the cost of arithmetic. It is about 60 blocks for each
+      number in `map`. Much of it is laziness: `x + 1` passed on is a thunk,
+      and so is every tail of a list. Knowing where a value is certainly
+      wanted, or being told with a strict function, would remove those. The
+      comparison operators of `Int` other than `<=` also go the long way
+      round, through the defaults of `Ord`
 - [ ] The rest of decision trees: tests on different variables, and on what
       is inside a constructor
 
