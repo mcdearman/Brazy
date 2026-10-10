@@ -31,6 +31,11 @@ HAZY=$(cabal list-bin hazy)
 cp $HAZY $DIST/bin/$(basename $HAZY).new
 mv -f $DIST/bin/$(basename $HAZY).new $DIST/bin/$(basename $HAZY)
 
+# Compile the native runtime
+(cd runtime/native && cargo build --release --quiet)
+mkdir -p $DIST/lib/hazy/native
+cp runtime/native/target/release/libhazy_runtime.a $DIST/lib/hazy/native/libhazy_runtime.a
+
 # Copy and Compile the runtime
 mkdir $PACKAGE/hazy-internal
 mkdir $PACKAGE/hazy-internal/header
