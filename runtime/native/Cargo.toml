@@ -6,6 +6,12 @@ license = "BSL-1.0"
 description = "The runtime of natively compiled Hazy programs"
 publish = false
 
+# Both are under the MIT or the Apache 2.0 licence, at the user's choice.
+[dependencies]
+num-bigint = "0.4"
+num-traits = "0.2"
+unicode-properties = { version = "0.1", default-features = false, features = ["general-category"] }
+
 [lib]
 name = "hazy_runtime"
 crate-type = ["staticlib"]

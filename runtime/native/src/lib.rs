@@ -20,7 +20,10 @@
 //!
 //! Nothing is freed yet. Counting references is a later milestone.
 
+use num_bigint::BigInt;
+use num_traits::{Signed, ToPrimitive, Zero};
 use std::io::Write;
+use unicode_properties::{GeneralCategory, UnicodeGeneralCategory};
 
 /// A constructed value: the header and then its fields.
 pub const DATA: u64 = 0;
@@ -32,7 +35,8 @@ pub const THUNK: u64 = 2;
 pub const WORKING: u64 = 3;
 /// A thunk that has been forced: the header and its value.
 pub const DONE: u64 = 4;
-/// An `Integer`: the header and the number.
+/// An `Integer`: the header and the address of the number, which the runtime
+/// keeps.
 pub const INTEGER: u64 = 5;
 /// A `Text`: the header, its length in bytes and then the bytes, as UTF-8.
 pub const TEXT: u64 = 6;
@@ -199,9 +203,49 @@ pub extern "C" fn hazy_prim_text_tail(value: Value) -> Value {
     }
 }
 
+/// The general category of a character, as a constructor of
+/// `GeneralCategory`, whose constructors are in the order of the Haskell
+/// report.
 #[no_mangle]
-pub extern "C" fn hazy_prim_general_category(_character: Value) -> Value {
-    fail("generalCategory is not in the native runtime yet")
+pub extern "C" fn hazy_prim_general_category(character: Value) -> Value {
+    use GeneralCategory::*;
+    let tag = match char::from_u32(int(character) as u32) {
+        // Half of a surrogate pair is not a character to Rust.
+        None => 27,
+        Some(character) => match character.general_category() {
+            UppercaseLetter => 0,
+            LowercaseLetter => 1,
+            TitlecaseLetter => 2,
+            ModifierLetter => 3,
+            OtherLetter => 4,
+            NonspacingMark => 5,
+            SpacingMark => 6,
+            EnclosingMark => 7,
+            DecimalNumber => 8,
+            LetterNumber => 9,
+            OtherNumber => 10,
+            ConnectorPunctuation => 11,
+            DashPunctuation => 12,
+            OpenPunctuation => 13,
+            ClosePunctuation => 14,
+            InitialPunctuation => 15,
+            FinalPunctuation => 16,
+            OtherPunctuation => 17,
+            MathSymbol => 18,
+            CurrencySymbol => 19,
+            ModifierSymbol => 20,
+            OtherSymbol => 21,
+            SpaceSeparator => 22,
+            LineSeparator => 23,
+            ParagraphSeparator => 24,
+            Control => 25,
+            Format => 26,
+            Surrogate => 27,
+            PrivateUse => 28,
+            Unassigned => 29,
+        },
+    };
+    nullary(tag)
 }
 
 // Int -------------------------------------------------------------------------
@@ -264,58 +308,60 @@ pub extern "C" fn hazy_prim_int_rem(left: Value, right: Value) -> Value {
 
 // Integer ---------------------------------------------------------------------
 //
-// An Integer is held in 64 bits for now, and the program stops if one does
-// not fit. Numbers of any size are a later step.
+// An Integer is a number of any size. The number itself is kept by Rust and
+// the block holds its address. Like everything else, it is never freed yet.
 
-fn integer(value: Value) -> i64 {
+fn integer(value: Value) -> &'static BigInt {
     debug_assert!(kind(value) == INTEGER, "not an Integer");
-    unsafe { *(value as *const i64).add(1) }
+    unsafe { &*(*(value as *const u64).add(1) as *const BigInt) }
 }
 
-fn from_integer(number: i64) -> Value {
+fn from_integer(number: BigInt) -> Value {
     let block = hazy_alloc(2);
     unsafe {
         *block = header(INTEGER, 0, 0);
-        *(block as *mut i64).add(1) = number;
+        *block.add(1) = Box::leak(Box::new(number)) as *mut BigInt as u64;
     }
     block as Value
-}
-
-fn fits(number: Option<i64>) -> Value {
-    match number {
-        Some(number) => from_integer(number),
-        None => fail("an Integer does not fit in 64 bits, which is all the native runtime has yet"),
-    }
 }
 
 /// An `Integer` written in the program.
 #[no_mangle]
 pub extern "C" fn hazy_integer(number: i64) -> Value {
-    from_integer(number)
+    from_integer(BigInt::from(number))
 }
 
-/// An `Integer` written in the program that does not fit in 64 bits.
+/// An `Integer` written in the program that does not fit in 64 bits, as its
+/// decimal digits.
 #[no_mangle]
-pub extern "C" fn hazy_integer_big(_digits: *const u8, _length: u64) -> Value {
-    fits(None)
-}
-
-#[no_mangle]
-pub extern "C" fn hazy_prim_int_to_integer(value: Value) -> Value {
-    from_integer(int(value) as i64)
-}
-
-#[no_mangle]
-pub extern "C" fn hazy_prim_integer_cast_to_int(value: Value) -> Value {
-    match i32::try_from(integer(value)) {
-        Ok(number) => from_int(number),
-        Err(_) => fail("Enum Integer Overflow"),
+pub extern "C" fn hazy_integer_big(digits: *const u8, length: u64) -> Value {
+    let digits = unsafe { std::slice::from_raw_parts(digits, length as usize) };
+    match BigInt::parse_bytes(digits, 10) {
+        Some(number) => from_integer(number),
+        None => fail("an Integer in the program is not a number"),
     }
 }
 
 #[no_mangle]
+pub extern "C" fn hazy_prim_int_to_integer(value: Value) -> Value {
+    from_integer(BigInt::from(int(value)))
+}
+
+#[no_mangle]
+pub extern "C" fn hazy_prim_integer_cast_to_int(value: Value) -> Value {
+    match integer(value).to_i32() {
+        Some(number) => from_int(number),
+        None => fail("Enum Integer Overflow"),
+    }
+}
+
+/// The low 32 bits of an `Integer`, as two's complement.
+#[no_mangle]
 pub extern "C" fn hazy_prim_integer_truncate_to_int(value: Value) -> Value {
-    from_int(integer(value) as i32)
+    let number = integer(value);
+    let low = number.iter_u32_digits().next().unwrap_or(0);
+    let low = if number.is_negative() { low.wrapping_neg() } else { low };
+    from_int(low as i32)
 }
 
 #[no_mangle]
@@ -330,27 +376,27 @@ pub extern "C" fn hazy_prim_integer_less_then_equal(left: Value, right: Value) -
 
 #[no_mangle]
 pub extern "C" fn hazy_prim_integer_add(left: Value, right: Value) -> Value {
-    fits(integer(left).checked_add(integer(right)))
+    from_integer(integer(left) + integer(right))
 }
 
 #[no_mangle]
 pub extern "C" fn hazy_prim_integer_minus(left: Value, right: Value) -> Value {
-    fits(integer(left).checked_sub(integer(right)))
+    from_integer(integer(left) - integer(right))
 }
 
 #[no_mangle]
 pub extern "C" fn hazy_prim_integer_multiply(left: Value, right: Value) -> Value {
-    fits(integer(left).checked_mul(integer(right)))
+    from_integer(integer(left) * integer(right))
 }
 
 #[no_mangle]
 pub extern "C" fn hazy_prim_integer_negate(value: Value) -> Value {
-    fits(integer(value).checked_neg())
+    from_integer(-integer(value))
 }
 
 #[no_mangle]
 pub extern "C" fn hazy_prim_integer_abs(value: Value) -> Value {
-    fits(integer(value).checked_abs())
+    from_integer(integer(value).abs())
 }
 
 #[no_mangle]
@@ -358,18 +404,20 @@ pub extern "C" fn hazy_prim_integer_signum(value: Value) -> Value {
     from_integer(integer(value).signum())
 }
 
+/// Division that rounds toward zero.
 #[no_mangle]
 pub extern "C" fn hazy_prim_integer_quot(left: Value, right: Value) -> Value {
-    if integer(right) == 0 {
+    if integer(right).is_zero() {
         fail("divide by zero")
     }
-    fits(integer(left).checked_div(integer(right)))
+    from_integer(integer(left) / integer(right))
 }
 
+/// The remainder of division that rounds toward zero.
 #[no_mangle]
 pub extern "C" fn hazy_prim_integer_rem(left: Value, right: Value) -> Value {
-    if integer(right) == 0 {
+    if integer(right).is_zero() {
         fail("divide by zero")
     }
-    fits(integer(left).checked_rem(integer(right)))
+    from_integer(integer(left) % integer(right))
 }
