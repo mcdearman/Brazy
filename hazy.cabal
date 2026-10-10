@@ -457,6 +457,7 @@ executable hazy
     Sequent.Printer
     Sequent.Runtime
     Sequent.Tree
+    Status
     Syntax.Extensions
     Syntax.FreeVariables
     Syntax.Lexer

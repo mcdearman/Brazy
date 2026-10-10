@@ -69,7 +69,7 @@ $DIST/bin/hazy --bare -c -I runtime/header runtime/source -o $PACKAGE/hazy-inter
 $DIST/bin/hazy --pack --bare-runtime library/base/source -o $PACKAGE/base $(cat library/base/flags)
 
 # Compile both packages to native objects, for programs to link against
-$DIST/bin/hazy --bare -q -I runtime/header runtime/source\
+$DIST/bin/hazy --bare -I runtime/header runtime/source\
  --native-object $PACKAGE/hazy-internal/native.o $(cat runtime/flags)
-$DIST/bin/hazy --bare-runtime -q library/base/source\
+$DIST/bin/hazy --bare-runtime library/base/source\
  --native-object $PACKAGE/base/native.o $(cat library/base/flags)
