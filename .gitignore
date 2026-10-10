@@ -2,3 +2,6 @@ dist-newstyle/
 cabal.project.local
 .*
 runtime/native/target/
+
+# Dot-files are ignored above; the CI workflows are not.
+!.github/

@@ -1,0 +1,51 @@
+name: CI
+
+# Master only changes through pull requests, and a pull request can only be
+# merged when this has passed on it. It also runs on master itself, so that
+# what is there is known to be good.
+on:
+  pull_request:
+    branches: [master]
+  push:
+    branches: [master]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Test
+    # An arm64 machine, which is what native code is generated for.
+    runs-on: macos-15
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: haskell-actions/setup@v2
+        id: haskell
+        with:
+          ghc-version: "9.12.2"
+          cabal-version: "3.14"
+
+      - name: Restore what cabal built before
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ steps.haskell.outputs.cabal-store }}
+            dist-newstyle
+          key: cabal-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('hazy.cabal', 'cabal.project') }}-${{ github.sha }}
+          restore-keys: |
+            cabal-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('hazy.cabal', 'cabal.project') }}-
+            cabal-${{ runner.os }}-${{ runner.arch }}-
+
+      - name: Build
+        run: |
+          cabal update
+          make
+
+      - name: Check that Hazy resolves its own source
+        run: .dist/bin/hazy -XStableImports --resolve compiler
+
+      - name: Test
+        run: make test
