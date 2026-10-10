@@ -227,7 +227,7 @@ How it works, and what it leaves:
 - A call passes eight arguments in registers and the rest through a fixed
   area of memory, after Silo, to stay clear of stack arguments in tail calls.
   That number is the one thing in a `Target` so far.
-- Nothing is freed. That is M4.
+- Nothing was freed. That came with M4.
 - The whole program was compiled at once. Compiling a package on its own
   came after M3.
 
@@ -281,12 +281,53 @@ How it works, and what it leaves:
 
 ### M4. The linear discipline
 
-Until here memory may simply leak or be counted naively.
+Done on the `m4-reference-counting` branch. Native programs free what they
+no longer use, cycles included, and every `test/run` program passes with all
+of its counts checked at every collection.
 
-- [ ] Linearisation pass: share and erase, every name used once
-- [ ] Exact reference counting in the runtime, with lazy bounded freeing
-- [ ] Cycle collection (see the open question below)
-- [ ] Check: the test suite passes with a leak check at exit
+- [x] Share and erase, every reference owned. AxCut's `substitute` is where a
+      value is shared or erased: one that is wanted more times than it is held
+      is shared, and one that is held and no longer wanted is erased. Every
+      other statement consumes what it takes
+- [x] Exact reference counting in the runtime (`runtime/native/src/heap.rs`),
+      with lazy bounded freeing: a block whose count reaches zero waits on a
+      list, and a few are taken apart at each allocation
+- [x] Cycle collection, by tracing (see below)
+- [x] Check: the test suite passes with every count verified.
+      `HAZY_GC_VERIFY` works every count out again at each collection and at
+      exit, and `tools/test.sh` runs the native tests with it and with
+      collections forced often. A new test, `cycles`, makes values that refer
+      to themselves and checks that tracing frees them
+
+How it works:
+
+- **Who owns what.** A function owns its arguments and what it captured. A
+  closure can be entered many times, so entering it shares what it captured,
+  unless that was the last reference to it, when the closure is freed and
+  its contents are simply taken. The same is done when a constructed value
+  is taken apart by `switch`. A thunk is entered once and its contents are
+  taken. A primitive borrows its arguments.
+- **What is not counted.** Numbers that fit in a word, and definitions at the
+  top of a program.
+- **Cycles.** Chris chose a tracing collector as the backup, on 2026-10-09,
+  over trial deletion and over leaking them. Counting does the everyday work
+  and tracing frees what counting cannot.
+- **Roots without a stack.** Because every call is a tail call, nothing is
+  alive across a call. At the start of a function the only live values are
+  the ones it was given, and the values of top-level definitions that have
+  been forced. So each function starts by checking whether a collection is
+  due, and if it is, hands over what it holds. No stack maps are needed.
+- **Verifying.** With everything reachable known, every count can be worked
+  out from nothing and compared. A lost reference or one given up twice is
+  reported at the first collection after it happens.
+
+What it leaves:
+
+- Counting is done by calls into the runtime. Doing it inline, and not at
+  all where a value is known to be a number, is for M5.
+- A collection traces the whole heap. It is due when as much has been
+  allocated as was alive after the last one, or 8 MB if that is more.
+- A block is two words bigger than its contents: a header and a count.
 
 ### M5. Reuse and borrowing
 
@@ -492,12 +533,6 @@ Points to raise with Freddy when the work starts:
 
 ## Open questions
 
-- **Cycles under reference counting.** Lazy Haskell makes cycles freely
-  (recursive bindings, knot-tying, top-level constants that refer to each
-  other), and every thunk is a mutable cell. Silo's cycle collector treats
-  only mutable references and arrays as candidates, which is far too narrow
-  here if every thunk counts. This needs a design before M4: which objects are
-  candidates, and whether top-level values are simply immortal.
 - **Reuse under laziness.** Reuse depends on a value's count being one at the
   moment it is taken apart. A thunk that captures a value holds a reference to
   it, so laziness will defeat reuse in places where a strict language would

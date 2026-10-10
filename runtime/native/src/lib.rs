@@ -2,8 +2,8 @@
 //!
 //! The compiler emits LLVM IR that does all of the control flow itself: every
 //! call between pieces of a program is a tail call, which Rust cannot make.
-//! What is here is what that code calls out to and comes back from: the
-//! allocator and the primitives of `Sequent.Primitive`.
+//! What is here is what that code calls out to and comes back from: the heap,
+//! in `heap`, and the primitives of `Sequent.Primitive`.
 //!
 //! # Values
 //!
@@ -11,73 +11,18 @@
 //!
 //! * An odd word is an `Int` or a `Char`: the number shifted left by one,
 //!   with the low bit set.
-//! * An even word is the address of a block. The first word of a block is
-//!   its header: the kind in the low 8 bits, a constructor's tag in the next
-//!   24, and the number of fields in the upper 32.
+//! * An even word is the address of a block. See `heap` for what a block is.
 //!
-//! These layouts are also written in `compiler/LLVM/FromAxCut.hs`. The two
-//! must agree.
-//!
-//! Nothing is freed yet. Counting references is a later milestone.
+//! A primitive borrows its arguments: the program still owns them afterwards
+//! and gives them up itself. What a primitive gives back is the program's.
 
+mod heap;
+
+use heap::{hazy_alloc, header, Value, DATA, INTEGER, TEXT};
 use num_bigint::BigInt;
 use num_traits::{Signed, ToPrimitive, Zero};
 use std::io::Write;
 use unicode_properties::{GeneralCategory, UnicodeGeneralCategory};
-
-/// A constructed value: the header and then its fields.
-pub const DATA: u64 = 0;
-/// A function or a consumer: the header, its code and what it captured.
-pub const CLOSURE: u64 = 1;
-/// A thunk that has not been forced: the header, its code and what it captured.
-pub const THUNK: u64 = 2;
-/// A thunk that is being forced.
-pub const WORKING: u64 = 3;
-/// A thunk that has been forced: the header and its value.
-pub const DONE: u64 = 4;
-/// An `Integer`: the header and the address of the number, which the runtime
-/// keeps.
-pub const INTEGER: u64 = 5;
-/// A `Text`: the header, its length in bytes and then the bytes, as UTF-8.
-pub const TEXT: u64 = 6;
-
-type Value = u64;
-
-const CHUNK: usize = 1 << 20;
-
-struct Heap {
-    next: *mut u64,
-    left: usize,
-}
-
-static mut HEAP: Heap = Heap {
-    next: std::ptr::null_mut(),
-    left: 0,
-};
-
-/// A block of some words. Nothing is ever given back.
-#[no_mangle]
-pub extern "C" fn hazy_alloc(words: u64) -> *mut u64 {
-    let words = words as usize;
-    // The program has one thread, and this is the only place the heap is used.
-    unsafe {
-        let heap = &mut *std::ptr::addr_of_mut!(HEAP);
-        if heap.left < words {
-            let size = words.max(CHUNK);
-            let chunk: Vec<u64> = Vec::with_capacity(size);
-            heap.next = chunk.leak().as_mut_ptr();
-            heap.left = size;
-        }
-        let block = heap.next;
-        heap.next = heap.next.add(words);
-        heap.left -= words;
-        block
-    }
-}
-
-fn header(kind: u64, tag: u64, count: u64) -> u64 {
-    kind | tag << 8 | count << 32
-}
 
 fn kind(block: Value) -> u64 {
     unsafe { *(block as *const u64) & 0xff }
@@ -94,9 +39,7 @@ fn from_int(number: i32) -> Value {
 
 /// A constructor with no fields: `False`, `True`, `()` and the like.
 fn nullary(tag: u64) -> Value {
-    let block = hazy_alloc(1);
-    unsafe { *block = header(DATA, tag, 0) };
-    block as Value
+    hazy_alloc(2, header(DATA, tag, 0)) as Value
 }
 
 fn boolean(value: bool) -> Value {
@@ -125,6 +68,7 @@ pub extern "C" fn hazy_loop() -> ! {
 #[no_mangle]
 pub extern "C" fn hazy_finish() {
     let _ = std::io::stdout().flush();
+    heap::finish();
 }
 
 // Text ------------------------------------------------------------------------
@@ -133,19 +77,18 @@ fn text(value: Value) -> &'static str {
     debug_assert!(kind(value) == TEXT, "not a Text");
     unsafe {
         let block = value as *const u64;
-        let length = *block.add(1) as usize;
-        let bytes = std::slice::from_raw_parts(block.add(2) as *const u8, length);
+        let length = *block.add(2) as usize;
+        let bytes = std::slice::from_raw_parts(block.add(3) as *const u8, length);
         std::str::from_utf8_unchecked(bytes)
     }
 }
 
 fn from_text(string: &str) -> Value {
     let length = string.len();
-    let block = hazy_alloc(2 + (length as u64 + 7) / 8);
+    let block = hazy_alloc(3 + (length as u64 + 7) / 8, header(TEXT, 0, 0));
     unsafe {
-        *block = header(TEXT, 0, 0);
-        *block.add(1) = length as u64;
-        std::ptr::copy_nonoverlapping(string.as_ptr(), block.add(2) as *mut u8, length);
+        *block.add(2) = length as u64;
+        std::ptr::copy_nonoverlapping(string.as_ptr(), block.add(3) as *mut u8, length);
     }
     block as Value
 }
@@ -309,19 +252,16 @@ pub extern "C" fn hazy_prim_int_rem(left: Value, right: Value) -> Value {
 // Integer ---------------------------------------------------------------------
 //
 // An Integer is a number of any size. The number itself is kept by Rust and
-// the block holds its address. Like everything else, it is never freed yet.
+// the block holds its address. The number is freed with the block.
 
 fn integer(value: Value) -> &'static BigInt {
     debug_assert!(kind(value) == INTEGER, "not an Integer");
-    unsafe { &*(*(value as *const u64).add(1) as *const BigInt) }
+    unsafe { &*(*(value as *const u64).add(2) as *const BigInt) }
 }
 
 fn from_integer(number: BigInt) -> Value {
-    let block = hazy_alloc(2);
-    unsafe {
-        *block = header(INTEGER, 0, 0);
-        *block.add(1) = Box::leak(Box::new(number)) as *mut BigInt as u64;
-    }
+    let block = hazy_alloc(3, header(INTEGER, 0, 0));
+    unsafe { *block.add(2) = Box::into_raw(Box::new(number)) as u64 };
     block as Value
 }
 
