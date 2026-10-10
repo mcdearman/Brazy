@@ -24,6 +24,7 @@ import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.STRef (STRef, newSTRef, readSTRef, writeSTRef)
 import Data.Text (Text, pack, unpack, words)
+import qualified Data.Text as Text (any)
 import qualified Data.Text.Lazy as Lazy.Text
 import qualified Data.Text.Lazy.Builder as Builder
 import Generate.Global (Global)
@@ -40,6 +41,7 @@ import Sequent.Tree
     Producer (..),
     Statement (..),
     Strategy (..),
+    separator,
   )
 import Syntax.Lexer (FullQualifiers (..), Qualifiers (..), constructorIdentifier)
 import Text.Read (readMaybe)
@@ -131,6 +133,8 @@ member Global.Global {path, name} index =
 definition :: Global -> Maybe Producer
 definition global@Global.Global {path, name}
   | path /= hazy = Nothing
+  -- A function that was inside one of these is found through it.
+  | Text.any (== separator) name = Nothing
   | Just producer <- Map.lookup name definitions = Just producer
   | Just producer <- generated global = Just producer
   | otherwise = error $ "missing primitive: " ++ unpack name

@@ -98,6 +98,58 @@ data Program = Program
   }
 
 -- |
+-- What stands between the parts of the name of a definition that was inside
+-- another: the name of the outer one, this, and its own name. It cannot be
+-- written in a program, so such a name is never a program's own. It is shown
+-- as a dot.
+separator :: Char
+separator = '\x1f'
+
+-- |
+-- The variables and covariables something uses and does not bind.
+class Free a where
+  free :: a -> Set Text
+
+instance (Free a) => Free [a] where
+  free = foldMap free
+
+instance (Free a) => Free (Maybe a) where
+  free = foldMap free
+
+bound :: [Binder] -> Set Text
+bound binders = Set.fromList [name | Binder {name} <- binders]
+
+instance Free Producer where
+  free = \case
+    Variable name -> Set.singleton name
+    Global _ -> Set.empty
+    Literal _ -> Set.empty
+    Constructor _ fields -> free fields
+    Mu covariable statement -> Set.delete covariable (free statement)
+    Function parameters covariable body -> Set.delete covariable (free body) Set.\\ bound parameters
+    Thunk covariable body -> Set.delete covariable (free body)
+
+instance Free Consumer where
+  free = \case
+    Covariable name -> Set.singleton name
+    MuTilde Binder {name} statement -> Set.delete name (free statement)
+    Case alternatives otherwise -> free alternatives <> free otherwise
+    Apply arguments consumer -> free arguments <> free consumer
+    Force consumer -> free consumer
+
+instance Free Alternative where
+  free (Alternative _ binders statement) = free statement Set.\\ bound binders
+
+instance Free Statement where
+  free = \case
+    Cut producer consumer -> free producer <> free consumer
+    Primitive _ arguments consumer -> free arguments <> free consumer
+    LetRec bindings statement ->
+      (free (map snd bindings) <> free statement) Set.\\ Set.fromList (map fst bindings)
+    Abort -> Set.empty
+    Halt -> Set.empty
+
+-- |
 -- The definitions something mentions.
 class Globals a where
   globals :: a -> Set Global

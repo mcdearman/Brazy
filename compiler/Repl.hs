@@ -36,6 +36,7 @@ import Data.List (dropWhileEnd, intercalate, isPrefixOf, nub, sort)
 import qualified Data.Map as Map
 import qualified Data.Set as Set
 import Data.Text (Text, pack, unpack)
+import qualified Data.Text as Text (isPrefixOf, snoc)
 import qualified Data.Text.Lazy as Lazy (Text)
 import qualified Data.Text.Lazy as Lazy.Text (length, pack, toStrict, unpack)
 import qualified Data.Text.Lazy.Builder as Builder
@@ -90,7 +91,7 @@ import qualified Sequent.FromCore as Sequent (definitionOf, generate, start)
 import qualified Sequent.Printer as Sequent (print, printDefinitions)
 import qualified Sequent.Runtime as Runtime
 import qualified Sequent.Tree as Sequent (Program (..))
-import Sequent.Tree (globals)
+import Sequent.Tree (globals, separator)
 import qualified Syntax.Position as Position (file, line)
 import System.Environment (lookupEnv)
 import System.Exit (ExitCode)
@@ -531,8 +532,11 @@ forms =
     -- The program for the entry, with only the definitions that are wanted.
     chosen selection modules =
       let Sequent.Program {definitions, entry = starting} = Sequent.generate entry modules
-          mine global@Global.Global {path} _ = case selection of
-            Definition wanted -> global == wanted
+          -- A definition is shown with the functions that were taken out of
+          -- it, which are called by its name and then their own.
+          mine global@Global.Global {path, name} _ = case selection of
+            Definition wanted@Global.Global {path = home, name = outer} ->
+              global == wanted || (path == home && Text.snoc outer separator `Text.isPrefixOf` name)
             Asked -> path == Global.path entry
        in Sequent.Program
             { definitions = Map.filterWithKey mine definitions,

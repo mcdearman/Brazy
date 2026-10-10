@@ -396,6 +396,16 @@ Left:
       cannot be kept back for it. It has to travel with the continuation, as
       a value in its own right
 - [ ] Borrow inference
+- [x] Functions that are defined inside a definition and use nothing of
+      where they are become definitions of their own, at the top of the
+      program (`compiler/Sequent/Hoist.hs`). A `go` in a `where` is then made
+      once and not each time control passes it, and what calls it knows which
+      function it is
+- [x] Everything in the output is called by its whole path. A function taken
+      out of `total` in `Main` is `Main.total.go`, and the code of an object
+      is the definition it is in and then every object around it, as
+      `Main.count.go.k%5`. Nothing is called `closure.52` any more, and no
+      two things can be called the same
 - [ ] The rest of the cost of arithmetic. It is still about 120 blocks for
       each number in `map`. What is left is mostly functions being applied
       one argument at a time: each application of a function of two
@@ -473,6 +483,16 @@ Missing:
       `Read`, and at least one is a class of numbers. There is no `default`
       declaration, and nothing defaults to a fraction, since there is no
       `Double`
+- [ ] Defaulting done Freddy's way. What is there now is a stopgap: it knows
+      only `Integer` and eight builtin classes, because nothing is at hand to
+      look an instance up with when types are finally worked out. Freddy's
+      plan, which will be followed here, is to do away with most of
+      `Semantic.Check.Temporary` and make it `Semantic.Check.Go`, where
+      checking gives back `ST s (Unify.Solve s ..)`. The inner step then
+      closes over the `Context`, and defaulting can try each candidate type
+      through the ordinary instance lookup. That gives `default`
+      declarations and classes of a program's own. When it is done, the
+      `Fallback` in `Semantic.Unify.Evidence` goes. Not now
 - [ ] GADTs
 - [ ] Polymorphic components
 - [ ] Strict functions

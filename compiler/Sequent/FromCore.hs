@@ -39,6 +39,7 @@ import qualified Data.Map as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Text (Text, pack)
+import qualified Data.Text as Text (takeWhile)
 import Data.Traversable (for)
 import Data.Vector (Vector)
 import qualified Data.Vector as Vector
@@ -52,6 +53,7 @@ import qualified Generate.Global as Global (Global (..))
 import qualified Generate.GlobalType as GlobalType
 import Generate.Go.Module (precontext)
 import qualified Generate.Info as Info
+import qualified Generate.Mangle as Mangle (mangle)
 import Generate.LocalType (LocalType (LocalType))
 import qualified Generate.LocalType as LocalType
 import Generate.Precontext (Precontext (Precontext))
@@ -68,6 +70,7 @@ import qualified Semantic.Index.Type2 as Type2 (Index (..))
 import Semantic.Scope (Environment ((:+)))
 import qualified Semantic.Scope as Scope
 import Sequent.Primitive (Primitive (Field))
+import Sequent.Hoist (hoist)
 import qualified Sequent.Runtime as Runtime
 import Sequent.Tree
   ( Alternative (..),
@@ -79,6 +82,7 @@ import Sequent.Tree
     Statement (..),
     Strategy (..),
     globals,
+    separator,
   )
 
 -- |
@@ -108,15 +112,30 @@ definitionOf modules = find
     -- A table for each module, by the module's name. A module's table is
     -- only made when something of the module is asked for: making it has
     -- the module checked, and most of a program's packages are never used.
+    -- Each definition is with the functions that were taken out of it.
     tables = Map.fromList $ do
       (index, modulex@Core.Module {name}) <- zip [0 ..] (toList modules)
-      pure (name, moduleDefinitions pre index modulex)
-    find global@Global.Global {path}
-      | Just found <- Runtime.definition global = found
-      | Just table <- Map.lookup path tables,
-        Just found <- Map.lookup global table =
+      pure (name, Map.mapWithKey hoist (moduleDefinitions pre index modulex))
+    written global@Global.Global {path}
+      | Just found <- Runtime.definition global = Just (hoist global found)
+      | Just table <- Map.lookup path tables = Map.lookup global table
+      | otherwise = Nothing
+    find global@Global.Global {path, name}
+      | Just (found, _) <- written global = found
+      -- A function that was inside a definition is found through it.
+      | Just (_, inner) <- written Global.Global {path, name = Text.takeWhile (/= separator) name},
+        Just found <- Map.lookup global inner =
           found
       | otherwise = error $ "undefined global: " ++ Runtime.showGlobal global
+
+-- |
+-- Definitions, each without the functions that could be taken out of it,
+-- and those functions with them.
+flatten :: Map Global.Global Producer -> Map Global.Global Producer
+flatten definitions = Map.unions $ do
+  (global, written) <- Map.toList definitions
+  let (found, inner) = hoist global written
+  pure $ Map.insert global found inner
 
 -- |
 -- The statement that runs an action and ends the program.
@@ -139,10 +158,10 @@ data Unit = Unit
 -- The modules at some places among all of the modules, as a unit. What they
 -- use of other modules is left as names.
 unit :: [Int] -> Vector Core.Module -> Unit
-unit indexes modules = Unit {own, shared = reach Map.empty (globals (Map.elems own))}
+unit indexes modules = Unit {own, shared = flatten (reach Map.empty (globals (Map.elems own)))}
   where
     pre = precontext modules
-    own = Map.unions $ do
+    own = flatten $ Map.unions $ do
       index <- indexes
       let modulex@Core.Module {name} = modules Vector.! index
       -- The module of primitives is written out in the sequent calculus.
@@ -621,7 +640,11 @@ generateDeclarations ::
   Declarations (Scope.Declaration ':+ scope) ->
   ST s (Context s (Scope.Declaration ':+ scope), [(Text, Producer)])
 generateDeclarations context Declarations {terms, classInstances, dataInstances} = do
-  variables <- Vector.replicateM (length terms) (fresh context)
+  -- A local definition is called what the program calls it, with a name of
+  -- the compiler's after it to keep it apart from any other of that name.
+  variables <- for terms $ \Declaration {name} -> do
+    unique <- fresh context
+    pure $ Mangle.mangle name <> pack "%" <> unique
   classVariables <- traverse (traverse $ const $ fresh context) classInstances
   dataVariables <- traverse (traverse $ const $ fresh context) dataInstances
   let instances = Vector.zipWith localType classVariables dataVariables
