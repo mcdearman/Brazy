@@ -26,7 +26,7 @@ import qualified Generate.Go.Module as Stage5
 import qualified Generate.Mangle as Mangle
 import qualified Javascript.Printer.Lexer as Javascript (print, run)
 import qualified AxCut.Lower as AxCut (lowerDefinitions)
-import qualified LLVM.FromAxCut as LLVM (Unit (..), arm64, generate, generateUnit)
+import qualified LLVM.FromAxCut as LLVM (Unit (..), arm64, generate, generateUnit, withoutReuse)
 import qualified Javascript.Tree.Module as Module (print)
 import Package as X (Module (Module), Package (Package))
 import qualified Package
@@ -249,6 +249,7 @@ data Linking
 
 data Execute = Execute
   { linking :: !Linking,
+    reusing :: !Bool,
     include :: List String,
     modules :: List String,
     packages :: List String,
@@ -266,6 +267,7 @@ defaultx :: Execute
 defaultx =
   Execute
     { linking = Separate,
+      reusing = True,
       include = Nil,
       modules = Nil,
       packages = Nil,
@@ -308,6 +310,7 @@ options =
     Option [] ["native"] (ReqArg native "PATH") "Compile the program to a native executable",
     Option [] ["native-object"] (ReqArg object "PATH") "Compile the modules to a native object, for a package",
     Option [] ["whole"] (NoArg whole') "Compile packages again with the program, instead of linking them",
+    Option [] ["no-reuse"] (NoArg noReuse) "Never build a value in the place of one just taken apart",
     Option [] ["repl"] (NoArg interactive) "Start an interactive session",
     Option [] ["debug-message"] (NoArg debug) "Show debug messages",
     Option [] ["debug-show"] (NoArg show) "Show internal AST",
@@ -328,6 +331,7 @@ options =
     native path execute = execute {mode = Native path}
     object path execute = execute {mode = Object path}
     whole' execute = execute {linking = Whole}
+    noReuse execute = execute {reusing = False}
     generate path execute = execute {mode = Generate path}
     debug execute = execute {debug = Debug}
     fail error execute = execute {failure = Expect error}
@@ -356,6 +360,7 @@ main'' args = case getOpt order options args of
   (flags, [], []) -> do
     let Execute
           { linking,
+            reusing,
             include,
             modules,
             packages,
@@ -436,20 +441,20 @@ main'' args = case getOpt order options args of
           LLVM -> do
             program <- whole all
             hSetEncoding stdout utf8
-            Text.Lazy.IO.putStr $ Builder.toLazyText $ LLVM.generate LLVM.arm64 $ AxCut.lower program
+            Text.Lazy.IO.putStr $ Builder.toLazyText $ LLVM.generate machine $ AxCut.lower program
           Native target -> do
             createDirectoryIfMissing True (dropFileName target)
             let runtime = root </> "lib" </> "hazy" </> "native" </> "libhazy_runtime.a"
             case linking of
               Whole -> do
                 program <- whole all
-                emit (target ++ ".ll") $ LLVM.generate LLVM.arm64 $ AxCut.lower program
+                emit (target ++ ".ll") $ LLVM.generate machine $ AxCut.lower program
                 callProcess "clang" ["-O1", "-Wno-override-module", target ++ ".ll", runtime, "-o", target]
               Separate -> do
                 Sequent.Unit {own, shared} <- unit all
                 emit (target ++ ".ll") $
                   LLVM.generateUnit
-                    LLVM.arm64
+                    machine
                     LLVM.Unit
                       { defined = AxCut.lowerDefinitions own,
                         shared = AxCut.lowerDefinitions shared,
@@ -466,7 +471,7 @@ main'' args = case getOpt order options args of
             let source = dropExtension target ++ ".ll"
             emit source $
               LLVM.generateUnit
-                LLVM.arm64
+                machine
                 LLVM.Unit
                   { defined = AxCut.lowerDefinitions own,
                     shared = AxCut.lowerDefinitions shared,
@@ -559,6 +564,10 @@ main'' args = case getOpt order options args of
           all <- stage3 debug all
           all <- stage4 debug all
           pure $ Sequent.unit [length system .. length all - 1] all
+        -- What native code is generated for.
+        machine
+          | reusing = LLVM.arm64
+          | otherwise = LLVM.withoutReuse LLVM.arm64
         -- Where a program starts, lowered by itself.
         startProgram =
           Sequent.Program {definitions = Map.empty, entry = Sequent.start Runtime.main}

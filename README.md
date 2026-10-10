@@ -69,12 +69,19 @@ Memory is freed by counting references, and values that refer to themselves
 are found by a tracing collector. Three environment variables are read by a
 compiled program:
 
-* `HAZY_GC_THRESHOLD`: how many bytes may be allocated before a collection is
-  due. The default is 8 MB.
+* `HAZY_GC_THRESHOLD`: how many bytes the heap may hold before the first
+  collection is due. The default is 8 MB. After that one is due when the heap
+  is twice what was alive after the last.
 * `HAZY_GC_VERIFY`: at each collection and at exit, work every count out again
   and stop if one is wrong.
-* `HAZY_GC_STATS`: at exit, print how many blocks were freed by counting and
-  how many by tracing.
+* `HAZY_GC_STRESS`: make a collection due at every chance.
+* `HAZY_GC_STATS`: at exit, print how many blocks were allocated, how many
+  were built in the place of another, and how many were freed by counting and
+  by tracing.
+
+A value is built in the place of one that was just taken apart, when that was
+the last reference to it. `--no-reuse` turns this off, and `tools/bench.sh`
+compiles the programs in `bench` both ways and prints what each allocated.
 
 # Interactive Session
 

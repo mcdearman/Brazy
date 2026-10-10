@@ -18,14 +18,14 @@
 
 mod heap;
 
-use heap::{hazy_alloc, header, Value, DATA, INTEGER, TEXT};
+use heap::{hazy_alloc, header, nullary, Value, INTEGER, TEXT};
 use num_bigint::BigInt;
 use num_traits::{Signed, ToPrimitive, Zero};
 use std::io::Write;
 use unicode_properties::{GeneralCategory, UnicodeGeneralCategory};
 
 fn kind(block: Value) -> u64 {
-    unsafe { *(block as *const u64) & 0xff }
+    unsafe { *(block as *const u64) & 0xf }
 }
 
 fn int(value: Value) -> i32 {
@@ -35,11 +35,6 @@ fn int(value: Value) -> i32 {
 
 fn from_int(number: i32) -> Value {
     (((number as i64) << 1) | 1) as u64
-}
-
-/// A constructor with no fields: `False`, `True`, `()` and the like.
-fn nullary(tag: u64) -> Value {
-    hazy_alloc(2, header(DATA, tag, 0)) as Value
 }
 
 fn boolean(value: bool) -> Value {
@@ -77,18 +72,18 @@ fn text(value: Value) -> &'static str {
     debug_assert!(kind(value) == TEXT, "not a Text");
     unsafe {
         let block = value as *const u64;
-        let length = *block.add(2) as usize;
-        let bytes = std::slice::from_raw_parts(block.add(3) as *const u8, length);
+        let length = *block.add(1) as usize;
+        let bytes = std::slice::from_raw_parts(block.add(2) as *const u8, length);
         std::str::from_utf8_unchecked(bytes)
     }
 }
 
 fn from_text(string: &str) -> Value {
     let length = string.len();
-    let block = hazy_alloc(3 + (length as u64 + 7) / 8, header(TEXT, 0, 0));
+    let block = hazy_alloc(2 + (length as u64 + 7) / 8, header(TEXT, 0, 0));
     unsafe {
-        *block.add(2) = length as u64;
-        std::ptr::copy_nonoverlapping(string.as_ptr(), block.add(3) as *mut u8, length);
+        *block.add(1) = length as u64;
+        std::ptr::copy_nonoverlapping(string.as_ptr(), block.add(2) as *mut u8, length);
     }
     block as Value
 }
@@ -256,12 +251,12 @@ pub extern "C" fn hazy_prim_int_rem(left: Value, right: Value) -> Value {
 
 fn integer(value: Value) -> &'static BigInt {
     debug_assert!(kind(value) == INTEGER, "not an Integer");
-    unsafe { &*(*(value as *const u64).add(2) as *const BigInt) }
+    unsafe { &*(*(value as *const u64).add(1) as *const BigInt) }
 }
 
 fn from_integer(number: BigInt) -> Value {
-    let block = hazy_alloc(3, header(INTEGER, 0, 0));
-    unsafe { *block.add(2) = Box::into_raw(Box::new(number)) as u64 };
+    let block = hazy_alloc(2, header(INTEGER, 0, 0));
+    unsafe { *block.add(1) = Box::into_raw(Box::new(number)) as u64 };
     block as Value
 }
 

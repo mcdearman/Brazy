@@ -75,7 +75,7 @@ done
 # reference that is lost or given up twice is found where it happens.
 echo "=== Execution (native) ==="
 export HAZY_GC_VERIFY=1
-export HAZY_GC_THRESHOLD=4096
+export HAZY_GC_STRESS=1
 for run_dir in test/run/*/; do
     run=$(basename "$run_dir")
     mkdir -p ".test/native"

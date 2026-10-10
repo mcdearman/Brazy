@@ -363,7 +363,16 @@ evaluate context expression consumer = case expression of
     pure $ Cut function consumer
   Core.Call {function, argument} -> do
     argument <- delayed context argument
-    evaluate context function (Apply [argument] consumer)
+    case argument of
+      Variable _ -> evaluate context function (Apply [argument] consumer)
+      -- The argument is made before the function is evaluated. Making it
+      -- evaluates nothing, so the order does not matter to the program, but
+      -- it lets a value that was just taken apart be built on in place
+      -- before control goes anywhere else.
+      _ -> do
+        name <- fresh context
+        body <- evaluate context function (Apply [Variable name] consumer)
+        pure $ Cut argument (MuTilde (byNeed name) body)
   Core.Join {statements} ->
     named context consumer $ \consumer -> attempt context statements consumer Abort
   Core.Newtype {argument} -> evaluate context argument consumer
@@ -378,7 +387,95 @@ letRec bindings body = LetRec bindings body
 -- The consumer must be a name and the failure statement must be small,
 -- because both are copied into every branch.
 attempt :: Context s scope -> Statements scope -> Consumer -> Statement -> ST s Statement
-attempt context statements success failure = case statements of
+attempt context statements success failure
+  -- Clauses that each start by testing the same value are one test with an
+  -- alternative for each. The value is then looked at once, and no clause
+  -- holds it while another is tried, which is what lets it be taken apart
+  -- in place.
+  | (heads@(Head name strict _ _ _ _ : _ : _), rest) <- chain context statements = do
+      rest <- maybe (pure failure) (\rest -> attempt context rest success failure) rest
+      joined context rest $ \failure -> do
+        alternatives <- for heads $ \(Head _ _ tag info inner thenx) -> do
+          let ConstructorInfo {entries} = info
+          names <- replicateM (length entries) (fresh inner)
+          thenx <-
+            attempt
+              (Context.patternBindings (Strict.Vector.fromList names) info inner)
+              thenx
+              success
+              failure
+          pure $ Alternative tag (zipWith binder names (toList entries)) thenx
+        let test = Case alternatives (Just failure)
+        pure $ Cut (Variable name) (if strict then test else Force test)
+  | otherwise = attemptOne context statements success failure
+  where
+    binder name EntryInfo {strict}
+      | Info.strict strict = byValue name
+      | otherwise = byNeed name
+
+-- |
+-- The first thing a clause does, when that is to test a variable against a
+-- constructor: the variable and whether it holds a value, the constructor,
+-- and what follows if it matches, with the names that are in scope there.
+data Head s where
+  Head ::
+    !Text ->
+    !Bool ->
+    !Int ->
+    ConstructorInfo scope ->
+    Context s scope ->
+    Statements (Scope.SimplePattern ':+ scope) ->
+    Head s
+
+-- |
+-- A clause's first test. On the way to it a clause may give other names to
+-- variables, which are followed.
+peel :: Context s scope -> Statements scope -> Maybe (Head s)
+peel context = \case
+  Statements.LetOne
+    { declaration = Core.Variable {variable = index, instanciation = Instanciation.Mono},
+      body
+    }
+      | (Variable name, _) <- variable context index -> peel (singleBinding name context) body
+  Statements.Bind
+    { constructor = Constructor.Index {constructorIndex},
+      constructorInfo,
+      check = Core.Variable {variable = index, instanciation = Instanciation.Mono},
+      thenx
+    }
+      | (Variable name, strict) <- variable context index ->
+          Just (Head name strict constructorIndex constructorInfo context thenx)
+  _ -> Nothing
+
+-- |
+-- The clauses at the front that test the same variable, each against a
+-- constructor of its own, and what is tried after them.
+chain :: Context s scope -> Statements scope -> ([Head s], Maybe (Statements scope))
+chain context = \case
+  Statements.Branch {left, right}
+    | Just head@(Head name _ tag _ _ _) <- peel context left -> case chain context right of
+        (more@(Head name' _ _ _ _ _ : _), rest)
+          | name' == name && tag `notElem` [other | Head _ _ other _ _ _ <- more] -> (head : more, rest)
+        _ -> ([head], Just right)
+  statements
+    | Just head <- peel context statements -> ([head], Nothing)
+    | otherwise -> ([], Just statements)
+
+-- |
+-- Use a statement in more than one place. If it is not small it is named,
+-- as a consumer, and what is used is a jump to it.
+joined :: Context s scope -> Statement -> (Statement -> ST s Statement) -> ST s Statement
+joined context statement continue = case statement of
+  Abort -> continue statement
+  Cut (Literal _) (Covariable _) -> continue statement
+  _ -> do
+    label <- fresh context
+    ignored <- fresh context
+    body <- continue (Cut (Literal $ Int 0) (Covariable label))
+    pure $ Cut (Mu label body) (MuTilde (byValue ignored) statement)
+
+attemptOne :: Context s scope -> Statements scope -> Consumer -> Statement -> ST s Statement
+attemptOne context statements success failure = case statements of
   Statements.Done {done} -> evaluate context done success
   Statements.Bind
     { constructor = Constructor.Index {constructorIndex},
@@ -405,21 +502,17 @@ attempt context statements success failure = case statements of
     pure $ letRec bindings body
   Statements.LetOne {declaration = value, body} -> do
     value <- delayed context value
-    name <- fresh context
-    body <- attempt (singleBinding name context) body success failure
-    pure $ Cut value (MuTilde (byNeed name) body)
-  Statements.Branch {left, right} -> do
-    right <- attempt context right success failure
-    case right of
-      Abort -> attempt context left success right
-      Cut (Literal _) (Covariable _) -> attempt context left success right
+    case value of
+      -- Another name for a variable is the variable.
+      Variable name -> attempt (singleBinding name context) body success failure
       _ -> do
-        -- The right branch is where the left one goes when it fails. Name it
-        -- so that it is not copied.
-        label <- fresh context
-        ignored <- fresh context
-        left <- attempt context left success (Cut (Literal $ Int 0) (Covariable label))
-        pure $ Cut (Mu label left) (MuTilde (byValue ignored) right)
+        name <- fresh context
+        body <- attempt (singleBinding name context) body success failure
+        pure $ Cut value (MuTilde (byNeed name) body)
+  Statements.Branch {left, right} -> do
+    -- The right branch is where the left one goes when it fails.
+    right <- attempt context right success failure
+    joined context right $ \right -> attempt context left success right
   Statements.Bottom -> pure failure
 
 -- |

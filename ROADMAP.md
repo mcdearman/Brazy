@@ -323,23 +323,70 @@ How it works:
   out from nothing and compared. A lost reference or one given up twice is
   reported at the first collection after it happens.
 
-What it leaves:
+What it left, all three dealt with in M5:
 
-- Counting is done by calls into the runtime. Doing it inline, and not at
-  all where a value is known to be a number, is for M5.
-- A collection traces the whole heap. It is due when as much has been
-  allocated as was alive after the last one, or 8 MB if that is more.
-- A block is two words bigger than its contents: a header and a count.
+- Counting was done by calls into the runtime, and for every value.
+- A collection was due after a fixed amount of allocation, whatever had been
+  freed since.
+- A block was two words bigger than its contents: a header and a count.
 
 ### M5. Reuse and borrowing
 
-- [ ] Reuse tokens (FBIP)
+In progress on the `m5-reuse` branch. The first part is done: counting is in
+place and cheaper, values are reused where the code between taking one apart
+and building the next is straight, and there are measurements.
+
+Done:
+
+- [x] Counting in the program's own code. Sharing and erasing are a few
+      instructions where they happen, and the runtime is called only when a
+      count reaches zero. Values known to be numbers are not counted at all
+- [x] A header of one word. The count of references is the upper half of the
+      header, so a block is one word bigger than its contents and not two
+- [x] No allocation for a constructor with no fields. There is one block for
+      each tag, which is not counted
+- [x] Collections only when the heap grows. A collection is due when the heap
+      is twice what was alive after the last one. Memory that counting frees
+      does not bring one nearer, so a program with no cycles is hardly ever
+      traced
+- [x] A thunk with one owner gives its value over unshared and is freed, so
+      a value that came out of a thunk can still be the only reference
+- [x] Reuse (FBIP). When `switch` takes apart the last reference to a value,
+      and a value with as many fields is built before control goes anywhere
+      else, it is built in the same block
+- [x] `--no-reuse` switches reuse off, so its effect can be measured
+- [x] Clauses that test the same variable are one test. The value is looked
+      at once, and no clause holds it while another is tried. This is the
+      part of "decision trees" that reuse needed
+- [x] Arguments are built before the function is looked up, so that a call
+      such as `go (x : acc) xs` builds its cell while it still can in place
+- [x] A benchmark set (`bench/`, `tools/bench.sh`) that reports what each
+      program allocated with and without reuse
+
+Measured on 2026-10-09 (allocations, with and without reuse):
+
+| Program | With | Without | Reused |
+| - | - | - | - |
+| `reverse`: reverse 100,000 numbers ten times | 14,001,149 | 15,001,149 | 1,000,000 |
+| `map`: three maps over 100,000 numbers | 19,302,200 | 19,602,210 | 300,010 |
+| `tree`: 20,000 insertions into a search tree | 35,909,660 | 35,909,664 | 4 |
+
+`reverse` rebuilds every cell in place. The other two show what is left.
+
+Left:
+
+- [ ] Reuse across calls. In `tree` a node is rebuilt only after a comparison
+      and a recursive call, which are elsewhere in the code, so the block
+      cannot be kept back for it. It has to travel with the continuation, as
+      a value in its own right
 - [ ] Borrow inference
-- [ ] Flags to switch each off, so its effect can be measured
-- [ ] Pattern matches as decision trees that never backtrack, in place of
-      M1's failure consumers
-- [ ] A small benchmark set, with allocation counts recorded with and without
-      each
+- [ ] The cost of arithmetic. Over a hundred blocks are allocated for each
+      number in `map`. Every `+` goes through the evidence for `Num`, and
+      every literal is an `Integer` turned into an `Int` as the program runs.
+      Calling known functions directly, and specialising the builtin
+      instances, would remove most of it. This is now the largest cost by far
+- [ ] The rest of decision trees: tests on different variables, and on what
+      is inside a constructor
 
 ### M6. Bootstrapping
 

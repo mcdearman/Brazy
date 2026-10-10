@@ -17,6 +17,7 @@
 module LLVM.FromAxCut
   ( Target (..),
     arm64,
+    withoutReuse,
     generate,
     generateBody,
     generateDefinitions,
@@ -59,11 +60,20 @@ data Target = Target
   { -- | How many arguments a call passes in registers. The rest go through
     -- a fixed area of memory: a call that guarantees a tail call cannot pass
     -- arguments on the stack on every machine.
-    registers :: !Int
+    registers :: !Int,
+    -- | Whether a constructed value is built in the place of one that was
+    -- just taken apart. This is here so that it can be turned off, to see
+    -- what it is worth.
+    reuse :: !Bool
   }
 
 arm64 :: Target
-arm64 = Target {registers = 8}
+arm64 = Target {registers = 8, reuse = True}
+
+-- |
+-- A target that never builds a value in the place of another.
+withoutReuse :: Target -> Target
+withoutReuse target = target {reuse = False}
 
 -- |
 -- A whole program, ready to be compiled. Nothing in it is seen from outside.
@@ -146,10 +156,8 @@ generate' shape target defined shared start = do
             [ quoted (symbol name),
               fromString " = ",
               fromString linkage,
-              fromString "global { i64, i64, ptr } { i64 ",
-              number (kindOf kind),
-              fromString ", i64 ",
-              number immortal,
+              fromString "global { i64, ptr } { i64 ",
+              number (kindOf kind + immortal),
               fromString ", ptr ",
               quoted (symbol name <> fromString ".code"),
               fromString " }, align 8\n"
@@ -158,7 +166,7 @@ generate' shape target defined shared start = do
   common <- traverse (global "linkonce_odr ") (Map.toList shared)
   body <- case start of
     Just entry -> do
-      body <- statement state [] entry
+      body <- statement state Nothing [] entry
       pure $ fromString "\ndefine internal tailcc void @hazy_entry() {\n" <> body <> fromString "}\n"
     Nothing -> pure mempty
   extra <- readSTRef extra
@@ -168,7 +176,7 @@ generate' shape target defined shared start = do
         name <- Set.toList mentioned
         if Map.member name defined || Map.member name shared
           then []
-          else [quoted (symbol name) <> fromString " = external global { i64, i64, ptr }\n"]
+          else [quoted (symbol name) <> fromString " = external global { i64, ptr }\n"]
   pure $ mconcat [mconcat elsewhere, mconcat globals, mconcat common, body, extra]
   where
     comment global = fromString "; " <> Sequent.global global <> fromString "\n"
@@ -187,23 +195,37 @@ kindOf = \case
 
 -- |
 -- A header: the kind, a constructor's tag, and how many fields or captured
--- values there are.
+-- values there are. The upper half of the word is how many references there
+-- are to the block, which is none yet.
 header :: Integer -> Int -> Int -> Integer
-header kind tag count = kind + toInteger tag * 2 ^ (16 :: Int) + toInteger count * 2 ^ (32 :: Int)
+header kind tag count
+  | tag >= limit = error "a constructor's tag is too big for a header"
+  | count >= limit = error "a block has too many fields for a header"
+  | otherwise = kind + toInteger tag * 2 ^ (6 :: Int) + toInteger count * 2 ^ (19 :: Int)
 
 -- |
--- The count of a block that is not counted: a definition at the top.
+-- The most tags and the most fields there can be.
+limit :: Int
+limit = 8192
+
+-- |
+-- One reference, as it is added to a header.
+one :: Integer
+one = 2 ^ (32 :: Int)
+
+-- |
+-- The bit of a header that says a block is not counted: a definition at the
+-- top. The header is a signed number to LLVM, so the bit makes it negative.
 immortal :: Integer
-immortal = 2 ^ (62 :: Int)
+immortal = -(2 ^ (63 :: Int))
 
 -- |
--- Where things are in a block, after its header and its count: the fields
--- of a constructed value, the code of an object, and what an object
--- captured.
+-- Where things are in a block, after its header: the fields of a constructed
+-- value, the code of an object, and what an object captured.
 fieldsAt, codeAt, capturesAt :: Int
-fieldsAt = 2
-codeAt = 2
-capturesAt = 3
+fieldsAt = 1
+codeAt = 1
+capturesAt = 2
 
 -- |
 -- How many values a function can hand over when a collection is due.
@@ -269,6 +291,14 @@ local state = do
   next <- fresh state
   pure $ fromString "%t" <> fromString (show next)
 
+-- |
+-- A new name for a value that is known to be a number that fits in a word,
+-- and so is never counted.
+localWord :: State s -> ST s Builder
+localWord state = do
+  next <- fresh state
+  pure $ fromString "%w" <> fromString (show next)
+
 label :: State s -> ST s Builder
 label state = do
   next <- fresh state
@@ -293,10 +323,10 @@ splitEnd count environment
   | otherwise = splitAt (length environment - count) environment
 
 -- |
--- Whether a value may be a block that is counted. A number written in the
--- program and a definition at the top are not.
+-- Whether a value may be a block that is counted. A number, a constructor
+-- with no fields and a definition at the top are not.
 counted :: Builder -> Bool
-counted value = take 1 (Lazy.Text.unpack (toLazyText value)) == "%"
+counted value = take 2 (Lazy.Text.unpack (toLazyText value)) == "%t"
 
 -- |
 -- Say that there are more references to a value, or fewer.
@@ -480,7 +510,7 @@ function state@State {target = Target {registers}, extra} name comment Object {k
         Closure -> open self
         Thunk -> mempty
   check <- safepoint state (arguments ++ map snd captures)
-  body <- statement state (zip parameters arguments ++ zip captured (map snd captures)) body
+  body <- statement state Nothing (zip parameters arguments ++ zip captured (map snd captures)) body
   modifySTRef' extra $ \known ->
     mconcat
       [ known,
@@ -527,8 +557,34 @@ object' state object@Object {kind, captured} = do
       block
     )
 
-statement :: State s -> Environment -> Statement -> ST s Builder
-statement state environment = \case
+-- |
+-- The block of a value that was just taken apart, and how many fields it
+-- had, when the value was the only reference to it: a constructed value
+-- with as many fields is built in its place. The block is zero when there
+-- were other references. See 'reusable'.
+type Token = Maybe (Builder, Int)
+
+-- |
+-- Whether a constructed value with some number of fields is built before
+-- anything else can happen: before control goes elsewhere or divides. Then
+-- the block of a value that was taken apart can be kept back for it.
+reusable :: Int -> Statement -> Bool
+reusable size = \case
+  Substitute _ rest -> reusable size rest
+  Let _ _ count rest -> count == size || reusable size rest
+  New _ _ rest -> reusable size rest
+  Literal _ _ rest -> reusable size rest
+  Global _ _ rest -> reusable size rest
+  Primitive _ _ rest -> reusable size rest
+  Rec _ rest -> reusable size rest
+  Switch {} -> False
+  Invoke {} -> False
+  Force -> False
+  Abort -> False
+  Halt -> False
+
+statement :: State s -> Token -> Environment -> Statement -> ST s Builder
+statement state token environment = \case
   -- Where values are shared and erased. A value that is wanted more times
   -- than it is held is shared, and one that is held more times than it is
   -- wanted is erased.
@@ -545,14 +601,70 @@ statement state environment = \case
           if want >= have
             then replicate (want - have) (share value)
             else replicate (have - want) (erase value)
-    rest <- statement state [(new, find old) | (new, old) <- pairs] rest
+    rest <- statement state token [(new, find old) | (new, old) <- pairs] rest
     pure $ adjust <> rest
+  -- A constructor with no fields is not made: there is one of each already.
+  Let name tag 0 rest
+    | tag < limit -> do
+        let value =
+              mconcat
+                [ fromString "ptrtoint (ptr getelementptr ([8192 x i64], ptr @hazy_nullary, i64 0, i64 ",
+                  fromString (show tag),
+                  fromString ") to i64)"
+                ]
+        statement state token (environment ++ [(name, value)]) rest
   Let name tag count rest -> do
     let (kept, taken) = splitEnd count environment
-    (code, block) <- allocate state (fieldsAt + count) (header dataKind tag count)
+        head = header dataKind tag count
+    (code, block, token) <- case token of
+      -- Build in the block that was kept back, if there is one.
+      Just (old, size) | size == count -> do
+        (fresh', block') <- allocate state (fieldsAt + count) head
+        none <- local state
+        made <- label state
+        kept' <- label state
+        joined <- label state
+        place <- local state
+        reused <- local state
+        more <- local state
+        block <- local state
+        pure
+          ( mconcat
+              [ line [none, fromString " = icmp eq i64 ", old, fromString ", 0"],
+                line [fromString "br i1 ", none, fromString ", label %", made, fromString ", label %", kept'],
+                made <> fromString ":\n",
+                fresh',
+                line [fromString "br label %", joined],
+                kept' <> fromString ":\n",
+                line [place, fromString " = inttoptr i64 ", old, fromString " to ptr"],
+                line [fromString "store i64 ", number (head + one), fromString ", ptr ", place],
+                line [reused, fromString " = load i64, ptr @hazy_reused"],
+                line [more, fromString " = add i64 ", reused, fromString ", 1"],
+                line [fromString "store i64 ", more, fromString ", ptr @hazy_reused"],
+                line [fromString "br label %", joined],
+                joined <> fromString ":\n",
+                line
+                  [ block,
+                    fromString " = phi ptr [ ",
+                    block',
+                    fromString ", %",
+                    made,
+                    fromString " ], [ ",
+                    place,
+                    fromString ", %",
+                    kept',
+                    fromString " ]"
+                  ]
+              ],
+            block,
+            Nothing
+          )
+      _ -> do
+        (code, block) <- allocate state (fieldsAt + count) head
+        pure (code, block, token)
     fields <- for (zip [fieldsAt ..] taken) $ \(index, (_, value)) -> store state block index value
     (code', value) <- word state block
-    rest <- statement state (kept ++ [(name, value)]) rest
+    rest <- statement state token (kept ++ [(name, value)]) rest
     pure $ mconcat [code, mconcat fields, code', rest]
   Switch clauses fallback -> do
     let (kept, taken) = splitEnd 1 environment
@@ -562,23 +674,61 @@ statement state environment = \case
     shifted <- local state
     tag <- local state
     otherwise' <- label state
+    let reusing = reuse (target state)
     clauses <- for clauses $ \(Clause tag names body) -> do
       target <- label state
       fields <- for (zip [fieldsAt ..] names) $ \(index, _) -> load state pointer index
-      body <- statement state (kept ++ zip names (map snd fields)) body
+      let size = length names
       -- The fields are read, and then the value they were in is given up.
-      pure (tag, target, foldMap fst fields <> open scrutinee <> body)
+      -- If a value of the same size is built next, its block is kept back
+      -- for that, when this was the only reference to it.
+      (given, token) <-
+        if reusing && size > 0 && counted scrutinee && reusable size body
+          then do
+            held <- local state
+            only <- local state
+            last' <- label state
+            shared <- label state
+            joined <- label state
+            token <- local state
+            pure
+              ( mconcat
+                  [ line [held, fromString " = lshr i64 ", head', fromString ", 32"],
+                    line [only, fromString " = icmp eq i64 ", held, fromString ", 1"],
+                    line [fromString "br i1 ", only, fromString ", label %", last', fromString ", label %", shared],
+                    shared <> fromString ":\n",
+                    line [fromString "call void @hazy_split(i64 ", scrutinee, fromString ")"],
+                    line [fromString "br label %", joined],
+                    last' <> fromString ":\n",
+                    line [fromString "br label %", joined],
+                    joined <> fromString ":\n",
+                    line
+                      [ token,
+                        fromString " = phi i64 [ ",
+                        scrutinee,
+                        fromString ", %",
+                        last',
+                        fromString " ], [ 0, %",
+                        shared,
+                        fromString " ]"
+                      ]
+                  ],
+                Just (token, size)
+              )
+          else pure (open scrutinee, Nothing)
+      body <- statement state token (kept ++ zip names (map snd fields)) body
+      pure (tag, target, foldMap fst fields <> given <> body)
     fallback <- case fallback of
       Just body -> do
-        body <- statement state kept body
+        body <- statement state Nothing kept body
         pure $ erase scrutinee <> body
       Nothing -> pure $ line [fromString "call void @hazy_abort()"] <> line [fromString "unreachable"]
     pure $
       mconcat
         [ code,
           code',
-          line [shifted, fromString " = lshr i64 ", head', fromString ", 16"],
-          line [tag, fromString " = and i64 ", shifted, fromString ", 65535"],
+          line [shifted, fromString " = lshr i64 ", head', fromString ", 6"],
+          line [tag, fromString " = and i64 ", shifted, fromString ", 8191"],
           line
             [ fromString "switch i64 ",
               tag,
@@ -601,7 +751,7 @@ statement state environment = \case
     (code, block) <- object' state object
     captures <- for (zip [capturesAt ..] taken) $ \(index, (_, value)) -> store state block index value
     (code', value) <- word state block
-    rest <- statement state (kept ++ [(name, value)]) rest
+    rest <- statement state token (kept ++ [(name, value)]) rest
     pure $ mconcat [code, mconcat captures, code', rest]
   Invoke method -> case (method, map snd environment) of
     (Return, [value, consumer]) -> invoke state consumer [value]
@@ -645,12 +795,12 @@ statement state environment = \case
               ],
             value
           )
-    rest <- statement state (environment ++ [(name, value)]) rest
+    rest <- statement state token (environment ++ [(name, value)]) rest
     pure $ code <> rest
   Global name global rest -> do
     modifySTRef' (mentioned state) (Set.insert global)
     let value = fromString "ptrtoint (ptr " <> quoted (symbol global) <> fromString " to i64)"
-    statement state (environment ++ [(name, value)]) rest
+    statement state token (environment ++ [(name, value)]) rest
   -- A primitive borrows its arguments, which are given up afterwards.
   Primitive name primitive rest -> do
     let (kept, taken) = splitEnd (Primitive.arity primitive) environment
@@ -661,7 +811,7 @@ statement state environment = \case
         (code', value) <- load state pointer (fieldsAt + index)
         pure (code <> code' <> share value, value)
       _ -> do
-        value <- local state
+        value <- if primitiveWord primitive then localWord state else local state
         pure
           ( line
               [ value,
@@ -673,7 +823,7 @@ statement state environment = \case
               ],
             value
           )
-    rest <- statement state (kept ++ [(name, value)]) rest
+    rest <- statement state token (kept ++ [(name, value)]) rest
     pure $ code <> foldMap erase arguments <> rest
   Rec objects rest -> do
     let mine Recursive {object = Object {captured}, others} = length captured - length others
@@ -683,7 +833,9 @@ statement state environment = \case
         references name = 1 + length [() | Recursive {others} <- objects, other <- others, other == name]
     made <- for objects $ \Recursive {name, object} -> do
       (code, block) <- object' state object
-      count <- store state block 1 (fromString (show (references name)))
+      let Object {kind, captured} = object
+          counted' = header (kindOf kind) 0 (length captured) + toInteger (references name) * one
+      count <- store state block 0 (number counted')
       (code', value) <- word state block
       pure (code <> count <> code', (name, block, value))
     let new = [(name, value) | (_, (name, _, value)) <- made]
@@ -700,7 +852,7 @@ statement state environment = \case
           rest <- fill later rest
           pure $ mconcat captures <> rest
     filled <- fill taken (zip objects made)
-    rest <- statement state (kept ++ new) rest
+    rest <- statement state token (kept ++ new) rest
     pure $ mconcat [foldMap fst made, filled, rest]
   Abort -> pure $ line [fromString "call void @hazy_abort()"] <> line [fromString "unreachable"]
   -- The program is over: whatever is still held is given up.
@@ -725,6 +877,24 @@ bytes state@State {extra} string = do
         fromString "\"\n"
       ]
   pure (name, size)
+
+-- |
+-- Whether what a primitive gives back is always a number that fits in a
+-- word.
+primitiveWord :: Primitive -> Bool
+primitiveWord = \case
+  TextHead -> True
+  IntAdd -> True
+  IntMinus -> True
+  IntMultiply -> True
+  IntNegate -> True
+  IntAbs -> True
+  IntSignum -> True
+  IntQuot -> True
+  IntRem -> True
+  IntegerCastToInt -> True
+  IntegerTruncateToInt -> True
+  _ -> False
 
 -- |
 -- What the runtime calls a primitive.
@@ -775,15 +945,18 @@ prelude = \case
   Package -> runtime ++ "\n" ++ declared
 
 -- |
--- What the runtime provides.
+-- What the runtime provides, and counting, which every unit has for itself
+-- so that it is done in place.
 runtime :: String
 runtime =
   """
   @hazy_gc_pending = external global i64
+  @hazy_reused = external global i64
+  @hazy_nullary = external global [8192 x i64]
   declare ptr @hazy_alloc(i64, i64)
-  declare void @hazy_share(i64)
-  declare void @hazy_erase(i64)
-  declare void @hazy_open(i64)
+  declare void @hazy_free(i64)
+  declare void @hazy_give(i64)
+  declare void @hazy_split(i64)
   declare void @hazy_settle(i64)
   declare void @hazy_collect(ptr, i64)
   declare void @hazy_abort() noreturn
@@ -822,6 +995,75 @@ runtime =
   declare i64 @hazy_prim_integer_signum(i64)
   declare i64 @hazy_prim_integer_quot(i64, i64)
   declare i64 @hazy_prim_integer_rem(i64, i64)
+
+  ; There is one more reference to a value. A number is not counted, and
+  ; neither is a block whose header is negative.
+  define linkonce_odr void @hazy_share(i64 %value) alwaysinline {
+    %odd = and i64 %value, 1
+    %word = icmp ne i64 %odd, 0
+    br i1 %word, label %out, label %block
+  block:
+    %pointer = inttoptr i64 %value to ptr
+    %header = load i64, ptr %pointer
+    %fixed = icmp slt i64 %header, 0
+    br i1 %fixed, label %out, label %count
+  count:
+    %more = add i64 %header, 4294967296
+    store i64 %more, ptr %pointer
+    br label %out
+  out:
+    ret void
+  }
+
+  ; There is one reference fewer to a value. The runtime is told when that
+  ; was the last.
+  define linkonce_odr void @hazy_erase(i64 %value) alwaysinline {
+    %odd = and i64 %value, 1
+    %word = icmp ne i64 %odd, 0
+    br i1 %word, label %out, label %block
+  block:
+    %pointer = inttoptr i64 %value to ptr
+    %header = load i64, ptr %pointer
+    %fixed = icmp slt i64 %header, 0
+    br i1 %fixed, label %out, label %count
+  count:
+    %less = sub i64 %header, 4294967296
+    store i64 %less, ptr %pointer
+    %left = lshr i64 %less, 32
+    %last = icmp eq i64 %left, 0
+    br i1 %last, label %free, label %out
+  free:
+    call void @hazy_free(i64 %value)
+    br label %out
+  out:
+    ret void
+  }
+
+  ; A reference to a block is given up by someone who has read what the
+  ; block holds and now owns that. If it was the last reference only the
+  ; block's words are freed. Otherwise what it holds is shared.
+  define linkonce_odr void @hazy_open(i64 %value) alwaysinline {
+    %odd = and i64 %value, 1
+    %word = icmp ne i64 %odd, 0
+    br i1 %word, label %out, label %block
+  block:
+    %pointer = inttoptr i64 %value to ptr
+    %header = load i64, ptr %pointer
+    %fixed = icmp slt i64 %header, 0
+    br i1 %fixed, label %out, label %count
+  count:
+    %held = lshr i64 %header, 32
+    %only = icmp eq i64 %held, 1
+    br i1 %only, label %give, label %split
+  give:
+    call void @hazy_give(i64 %value)
+    br label %out
+  split:
+    call void @hazy_split(i64 %value)
+    br label %out
+  out:
+    ret void
+  }
   """
 
 -- |
@@ -843,7 +1085,7 @@ forcing linkage =
   ; Give a value to a consumer.
   define internal tailcc void @hazy_return(i64 %consumer, i64 %value) {
     %pointer = inttoptr i64 %consumer to ptr
-    %place = getelementptr i64, ptr %pointer, i64 2
+    %place = getelementptr i64, ptr %pointer, i64 1
     %code = load ptr, ptr %place
     musttail call tailcc void %code(i64 %consumer, i64 %value)
     ret void
@@ -854,19 +1096,29 @@ forcing linkage =
   ; It keeps the value in the thunk and then hands it on.
   define internal tailcc void @hazy_update(i64 %self, i64 %value) {
     %pointer = inttoptr i64 %self to ptr
-    %thunk.place = getelementptr i64, ptr %pointer, i64 3
+    %thunk.place = getelementptr i64, ptr %pointer, i64 2
     %thunk = load i64, ptr %thunk.place
-    %consumer.place = getelementptr i64, ptr %pointer, i64 4
+    %consumer.place = getelementptr i64, ptr %pointer, i64 3
     %consumer = load i64, ptr %consumer.place
     call void @hazy_open(i64 %self)
-    ; The thunk holds the value, and so does the consumer that asked.
-    call void @hazy_share(i64 %value)
     %block = inttoptr i64 %thunk to ptr
     %header = load i64, ptr %block
-    %cleared = and i64 %header, -256
+    ; If this is the only reference to the thunk, nobody will ask for its
+    ; value again: the thunk is freed and the value goes on unshared.
+    %held = lshr i64 %header, 32
+    %only = icmp eq i64 %held, 1
+    br i1 %only, label %alone, label %keep
+  alone:
+    call void @hazy_give(i64 %thunk)
+    musttail call tailcc void @hazy_return(i64 %consumer, i64 %value)
+    ret void
+  keep:
+    ; The thunk holds the value, and so does the consumer that asked.
+    call void @hazy_share(i64 %value)
+    %cleared = and i64 %header, -16
     %done = or i64 %cleared, 4
     store i64 %done, ptr %block
-    %kept = getelementptr i64, ptr %block, i64 2
+    %kept = getelementptr i64, ptr %block, i64 1
     store i64 %value, ptr %kept
     call void @hazy_settle(i64 %thunk)
     musttail call tailcc void @hazy_return(i64 %consumer, i64 %value)
@@ -886,7 +1138,7 @@ forcing linkage =
        block:
          %pointer = inttoptr i64 %value to ptr
          %header = load i64, ptr %pointer
-         %kind = and i64 %header, 255
+         %kind = and i64 %header, 15
          switch i64 %kind, label %evaluated [ i64 2, label %delayed i64 3, label %working i64 4, label %done ]
        evaluated:
          musttail call tailcc void @hazy_return(i64 %consumer, i64 %value)
@@ -894,18 +1146,18 @@ forcing linkage =
        delayed:
          ; The thunk is being forced. Its body takes what it captured, and is
          ; given a consumer that holds the thunk and the consumer that asked.
-         %cleared = and i64 %header, -256
+         %cleared = and i64 %header, -16
          %busy = or i64 %cleared, 3
          store i64 %busy, ptr %pointer
-         %update = call ptr @hazy_alloc(i64 5, i64 8589934593)
-         %update.code = getelementptr i64, ptr %update, i64 2
+         %update = call ptr @hazy_alloc(i64 4, i64 1048577)
+         %update.code = getelementptr i64, ptr %update, i64 1
          store ptr @hazy_update, ptr %update.code
-         %update.thunk = getelementptr i64, ptr %update, i64 3
+         %update.thunk = getelementptr i64, ptr %update, i64 2
          store i64 %value, ptr %update.thunk
-         %update.consumer = getelementptr i64, ptr %update, i64 4
+         %update.consumer = getelementptr i64, ptr %update, i64 3
          store i64 %consumer, ptr %update.consumer
          %updater = ptrtoint ptr %update to i64
-         %place = getelementptr i64, ptr %pointer, i64 2
+         %place = getelementptr i64, ptr %pointer, i64 1
          %code = load ptr, ptr %place
          musttail call tailcc void %code(i64 %value, i64 %updater)
          ret void
@@ -913,11 +1165,19 @@ forcing linkage =
          call void @hazy_loop()
          unreachable
        done:
-         ; The value is shared with the thunk, which is then given up.
-         %kept = getelementptr i64, ptr %pointer, i64 2
+         ; The value is read and the thunk given up. If that was the last
+         ; reference to the thunk, the value is taken and not shared.
+         %kept = getelementptr i64, ptr %pointer, i64 1
          %result = load i64, ptr %kept
+         ; A definition at the top keeps its value for good.
+         %fixed = icmp slt i64 %header, 0
+         br i1 %fixed, label %lasting, label %counted
+       lasting:
          call void @hazy_share(i64 %result)
-         call void @hazy_erase(i64 %value)
+         musttail call tailcc void @hazy_return(i64 %consumer, i64 %result)
+         ret void
+       counted:
+         call void @hazy_open(i64 %value)
          musttail call tailcc void @hazy_return(i64 %consumer, i64 %result)
          ret void
        }
