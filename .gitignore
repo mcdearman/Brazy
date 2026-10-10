@@ -1,3 +1,5 @@
 dist-newstyle/
 cabal.project.local
 .*
+# Dot-files are ignored above; the CI workflows are not.
+!.github/
