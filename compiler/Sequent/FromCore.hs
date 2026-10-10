@@ -71,7 +71,9 @@ import Semantic.Scope (Environment ((:+)))
 import qualified Semantic.Scope as Scope
 import Sequent.Primitive (Primitive (Field))
 import Sequent.Hoist (hoist)
+import qualified Sequent.Uncurry as Uncurry (rewrite, shape, split)
 import qualified Sequent.Runtime as Runtime
+import Sequent.Simplify (simplify)
 import Sequent.Tree
   ( Alternative (..),
     Binder (..),
@@ -108,34 +110,57 @@ generate entry modules =
 definitionOf :: Vector Core.Module -> Global.Global -> Producer
 definitionOf modules = find
   where
-    pre = precontext modules
-    -- A table for each module, by the module's name. A module's table is
-    -- only made when something of the module is asked for: making it has
-    -- the module checked, and most of a program's packages are never used.
-    -- Each definition is with the functions that were taken out of it.
-    tables = Map.fromList $ do
-      (index, modulex@Core.Module {name}) <- zip [0 ..] (toList modules)
-      pure (name, Map.mapWithKey hoist (moduleDefinitions pre index modulex))
-    written global@Global.Global {path}
-      | Just found <- Runtime.definition global = Just (hoist global found)
-      | Just table <- Map.lookup path tables = Map.lookup global table
-      | otherwise = Nothing
-    find global@Global.Global {path, name}
-      | Just (found, _) <- written global = found
-      -- A function that was inside a definition is found through it.
-      | Just (_, inner) <- written Global.Global {path, name = Text.takeWhile (/= separator) name},
-        Just found <- Map.lookup global inner =
-          found
+    family = familyOf modules
+    find global
+      | Just found <- family (top global) >>= Map.lookup global = found
       | otherwise = error $ "undefined global: " ++ Runtime.showGlobal global
 
 -- |
--- Definitions, each without the functions that could be taken out of it,
--- and those functions with them.
-flatten :: Map Global.Global Producer -> Map Global.Global Producer
-flatten definitions = Map.unions $ do
-  (global, written) <- Map.toList definitions
-  let (found, inner) = hoist global written
-  pure $ Map.insert global found inner
+-- The definition at the top of a module that a definition came out of.
+-- Its name is the first part of theirs.
+top :: Global.Global -> Global.Global
+top global@Global.Global {name} = global {Global.name = Text.takeWhile (/= separator) name}
+
+-- |
+-- A definition at the top of a module as it is compiled: itself, the
+-- functions that were taken out of it, and the entries of each that take
+-- every argument together. They are all called by its name and then their
+-- own, so any of them is found through it.
+--
+-- There is a table for each module, by the module's name. A module's table
+-- is only made when something of the module is asked for: making it has the
+-- module checked, and most of a program's packages are never used.
+familyOf :: Vector Core.Module -> Global.Global -> Maybe (Map Global.Global Producer)
+familyOf modules = family
+  where
+    pre = precontext modules
+    -- What each definition is as it comes from Core.
+    written = Map.fromList $ do
+      (index, modulex@Core.Module {name}) <- zip [0 ..] (toList modules)
+      pure (name, moduleDefinitions pre index modulex)
+    -- With the functions inside it taken out.
+    lifted global found =
+      let (outer, inner) = hoist global found
+       in Map.insert global outer inner
+    hoisted = Map.map (Map.mapWithKey lifted) written
+    liftedOf global@Global.Global {path}
+      | Just found <- Runtime.definition global = Just (lifted global found)
+      | otherwise = Map.lookup path hoisted >>= Map.lookup global
+    -- How many arguments a definition takes, which is asked of it as it is
+    -- before any of its calls are changed.
+    known global = liftedOf (top global) >>= Map.lookup global >>= Uncurry.shape
+    -- With the calls that have every argument sent to the entry for them.
+    finish members = Map.unions $ do
+      (global, found) <- Map.toList members
+      let (outer, entry) = Uncurry.split global found
+      pure $
+        Map.fromList $
+          (global, simplify (Uncurry.rewrite known outer))
+            : [(name, simplify (Uncurry.rewrite known inner)) | Just (name, inner) <- [entry]]
+    finished = Map.map (Map.map finish) hoisted
+    family global@Global.Global {path}
+      | Just found <- Runtime.definition global = Just (finish (lifted global found))
+      | otherwise = Map.lookup path finished >>= Map.lookup global
 
 -- |
 -- The statement that runs an action and ends the program.
@@ -158,20 +183,31 @@ data Unit = Unit
 -- The modules at some places among all of the modules, as a unit. What they
 -- use of other modules is left as names.
 unit :: [Int] -> Vector Core.Module -> Unit
-unit indexes modules = Unit {own, shared = flatten (reach Map.empty (globals (Map.elems own)))}
+unit indexes modules = Unit {own, shared = reach Map.empty (globals (Map.elems own))}
   where
     pre = precontext modules
-    own = flatten $ Map.unions $ do
+    family = familyOf modules
+    -- The names of every definition at the top of the unit's modules.
+    names = do
       index <- indexes
       let modulex@Core.Module {name} = modules Vector.! index
       -- The module of primitives is written out in the sequent calculus.
-      pure $ if name == Runtime.hazy then Runtime.fixed else moduleDefinitions pre index modulex
+      if name == Runtime.hazy
+        then Map.keys Runtime.fixed
+        else Map.keys (moduleDefinitions pre index modulex)
+    own = Map.unions $ do
+      name <- names
+      case family name of
+        Just members -> [members]
+        Nothing -> error $ "undefined global: " ++ Runtime.showGlobal name
     reach :: Map Global.Global Producer -> Set Global.Global -> Map Global.Global Producer
     reach known wanted = case Set.minView (Set.filter (`Map.notMember` known) wanted) of
       Nothing -> known
-      Just (global, wanted) -> case Runtime.generated global of
-        Just definition -> reach (Map.insert global definition known) (wanted <> globals definition)
-        Nothing -> reach known wanted
+      Just (global, wanted)
+        | Just _ <- Runtime.generated (top global),
+          Just members <- family (top global) ->
+            reach (Map.union members known) (wanted <> globals (Map.elems members))
+        | otherwise -> reach known wanted
 
 -- |
 -- Every definition of a module. The map is lazy in its values, so only the

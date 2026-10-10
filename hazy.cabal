@@ -457,7 +457,9 @@ executable hazy
     Sequent.Primitive
     Sequent.Printer
     Sequent.Runtime
+    Sequent.Simplify
     Sequent.Tree
+    Sequent.Uncurry
     Status
     Syntax.Extensions
     Syntax.FreeVariables
