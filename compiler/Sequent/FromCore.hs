@@ -71,6 +71,7 @@ import Semantic.Scope (Environment ((:+)))
 import qualified Semantic.Scope as Scope
 import Sequent.Primitive (Primitive (Field))
 import Sequent.Hoist (hoist)
+import Sequent.Inline (inline)
 import qualified Sequent.Uncurry as Uncurry (rewrite, shape, split)
 import qualified Sequent.Runtime as Runtime
 import Sequent.Simplify (simplify)
@@ -158,9 +159,16 @@ familyOf modules = family
           (global, simplify (Uncurry.rewrite known outer))
             : [(name, simplify (Uncurry.rewrite known inner)) | Just (name, inner) <- [entry]]
     finished = Map.map (Map.map finish) hoisted
-    family global@Global.Global {path}
+    familyIn table global@Global.Global {path}
       | Just found <- Runtime.definition global = Just (finish (lifted global found))
-      | otherwise = Map.lookup path finished >>= Map.lookup global
+      | otherwise = Map.lookup path table >>= Map.lookup global
+    memberIn table global = familyIn table (top global) >>= Map.lookup global
+    -- With the small functions each calls put where they are called, which
+    -- is done a few times over: each time reaches one call further.
+    improve before time =
+      let improved global found = simplify (inline time (memberIn before) global found)
+       in Map.map (Map.map (Map.mapWithKey improved)) before
+    family = familyIn (foldl improve finished [1 .. 3])
 
 -- |
 -- The statement that runs an action and ends the program.

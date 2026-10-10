@@ -454,6 +454,26 @@ run in about 0.03, 0.07 and 0.06 seconds. Where M5 began they took about
 0.12, 0.17 and 0.4. `reverse` rebuilds every cell in place, and is down to
 twelve blocks for each number it reverses.
 
+- [x] Small functions are put where they are called
+      (`compiler/Sequent/Inline.hs`): a call that gives every argument, of a
+      function that is small and does not call itself. It is done three
+      times over, each from the definitions as they were the time before,
+      so it reaches three calls deep and always ends. `x < y` at `Int` was a
+      call of a method that made a thunk, called a primitive and called
+      `not`; it is now the primitive and a choice
+- [x] The simplifier goes on from there (`compiler/Sequent/Simplify.hs`). A
+      value that is constructed and at once taken apart is not constructed.
+      A consumer that is only given constructed values, each choosing its
+      own alternative, is put where they are. A value that is forced is
+      itself. A name for a number, a constructor with no fields or a
+      definition is written as what it names, and a definition that is only
+      such a value, as `otherwise` is, is written as it
+- [x] The block that is kept back also goes with a consumer of something
+      that is forced
+
+With those the three allocate 800,246, 4,201,043 and 974,698 blocks and run
+in about 0.02, 0.06 and 0.03 seconds. `tree` builds 289,045 nodes in place.
+
 Left:
 
 - [x] Reuse across calls. In `tree` a node is rebuilt only after a comparison
@@ -465,8 +485,7 @@ Left:
       any other if nothing comes to be built in it. `tree` builds every node
       on the way back up in the block of the one it took apart on the way
       down: 271,507 of them, and 2,898,613 blocks in all where it was
-      3,170,116. Not carried yet: a block for a consumer of something that
-      is forced, which is made by other code
+      3,170,116
 - [ ] Borrow inference
 - [x] Functions that are defined inside a definition and use nothing of
       where they are become definitions of their own, at the top of the

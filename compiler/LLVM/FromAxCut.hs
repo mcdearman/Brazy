@@ -37,6 +37,7 @@ import AxCut.Tree
   )
 import Control.Monad.ST (ST, runST)
 import Data.Char (isAlphaNum, isAscii, ord)
+import Data.Foldable (toList)
 import Data.List (intersperse)
 import Data.Map (Map)
 import qualified Data.Map as Map
@@ -633,23 +634,34 @@ isWord value = case Lazy.Text.unpack (toLazyText value) of
 -- reads what it captured and enters the first. When what is forced turns
 -- out to be a value already, the first is entered at once and the consumer
 -- is never made.
-continuation :: State s -> Text -> Object -> ST s (Builder, Builder)
-continuation outer@State {target = Target {registers}, extra} hint Object {captured, parameters, body} = do
+--
+-- A block that was kept back may go with it, as it may with any consumer:
+-- the first function takes it last, and the object holds it last.
+continuation :: State s -> Text -> Maybe Int -> Object -> ST s (Builder, Builder)
+continuation outer@State {target = Target {registers}, extra} hint husk Object {captured, parameters, body} = do
   entry <- named outer hint
   let direct = entry <> fromString ".direct"
       names = parameters ++ captured
       state = outer {scope = entry}
-  arguments <- for names $ \_ -> local state
-  let (passed, spilled) = splitAt registers arguments
+  named' <- for names $ \_ -> local state
+  kept <- for husk $ \size -> do
+    block <- local state
+    pure (block, size)
+  let arguments = named' ++ map fst (toList kept)
+      (passed, spilled) = splitAt registers arguments
       unspill = mconcat $ do
         (index, argument) <- zip [0 ..] spilled
         pure $ line [argument, fromString " = load i64, ptr ", spill index]
   check <- safepoint state arguments
-  body <- statement state Nothing (zip names arguments) body
+  body <- statement state kept (zip names named') body
   self <- local state
   given <- for parameters $ \_ -> local state
   (code, pointer) <- address state self
   captures <- for (zip [capturesAt ..] captured) $ \(index, _) -> load state pointer index
+  carried <- for (toList husk) $ \_ -> do
+    (loading, held) <- load state pointer (capturesAt + length captured)
+    (unpacking, block) <- unpacked state held
+    pure (loading, unpacking, block)
   modifySTRef' extra $ \known ->
     mconcat
       [ known,
@@ -667,9 +679,11 @@ continuation outer@State {target = Target {registers}, extra} hint Object {captu
         fromString "(",
         commas [fromString "i64 " <> argument | argument <- self : given],
         fromString ") {\n",
-        if null captured then mempty else code <> foldMap fst captures,
+        if null captured && null carried then mempty else code <> foldMap fst captures,
+        mconcat [loading | (loading, _, _) <- carried],
         open self,
-        enter state (quoted direct) (given ++ map snd captures),
+        mconcat [unpacking | (_, unpacking, _) <- carried],
+        enter state (quoted direct) (given ++ map snd captures ++ [block | (_, _, block) <- carried]),
         fromString "}\n"
       ]
   pure (entry, direct)
@@ -711,12 +725,9 @@ wants size = \case
 
 -- |
 -- Whether a block can go with an object to where a value is built in it:
--- the object is a consumer, which is entered once, and it builds one. A
--- consumer of what is forced is made differently and is left out.
+-- the object is a consumer, which is entered once, and it builds one.
 carries :: Int -> Object -> Statement -> Bool
-carries size Object {kind = Closure, method = Return, body} rest = case rest of
-  Substitute _ Force -> False
-  _ -> wants size body
+carries size Object {kind = Closure, method = Return, body} _ = wants size body
 carries _ _ _ = False
 
 -- |
@@ -964,15 +975,21 @@ wanted state token environment = \case
     | (kept, taken) <- splitEnd (length captured) environment,
       (adjust, [(_, consumer), (_, value)]) <- substitute (kept ++ [(name, unmade)]) pairs,
       toLazyText consumer == toLazyText unmade -> do
-        (entry, direct) <- continuation state name object
+        (entry, direct) <- continuation state name (fmap snd token) object
         let captures = map snd taken
-            fast = enter state (quoted direct) (value : captures)
+            husks = map fst (toList token)
+            held = length captured + length husks
+            fast = enter state (quoted direct) (value : captures ++ husks)
         if isWord value
           then pure $ adjust <> fast
           else do
-            (code, block) <- allocate state (capturesAt + length captured) (header closureKind 0 (length captured))
+            (code, block) <- allocate state (capturesAt + held) (header closureKind 0 held)
             (code', place) <- slot state block codeAt
             stores <- for (zip [capturesAt ..] captures) $ \(index, capture) -> store state block index capture
+            carried <- for husks $ \husk -> do
+              (packing, packed') <- packed state husk
+              storing <- store state block (capturesAt + length captured) packed'
+              pure $ packing <> storing
             (code'', made) <- word state block
             odd' <- local state
             small <- local state
@@ -1005,6 +1022,7 @@ wanted state token environment = \case
                   code',
                   line [fromString "store ptr ", quoted entry, fromString ", ptr ", place],
                   mconcat stores,
+                  mconcat carried,
                   code'',
                   enter state (fromString "@hazy_force") [made, value]
                 ]
