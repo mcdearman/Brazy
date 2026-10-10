@@ -331,8 +331,8 @@ The collector is not meant to stay. Freddy never planned one: his plan is
 to have no cycles to collect, by lambda lifting the bindings that refer to
 themselves, with a low-level linear system that rules cycles out before the
 program runs. Chris decided on 2026-10-10 to keep the collector for now and
-to take it out when that is in place. Taking closed local functions out to
-the top (see M5) already removes the cycles those made. What remains is
+to take it out when that is in place. Taking local functions out to the top (see M5), with the variables they
+use passed to them, already removes the cycles those made. What remains is
 functions that use variables of where they are, which need those passed to
 them, and values defined by themselves, such as `ones = 1 : ones`.
 
@@ -475,10 +475,16 @@ Left:
       number in `map`. Much of it is laziness: `x + 1` passed on is a thunk,
       and so is every tail of a list. Knowing where a value is certainly
       wanted, or being told with a strict function, would remove those
-- [ ] Lambda lifting of the local functions that do use variables of where
-      they are, passing those to them. With the closed ones already out,
-      this is what Freddy's plan to have no cycles needs next, and it lets
-      more calls be direct
+- [x] Lambda lifting. A local function that does use variables of where it
+      is goes to the top as well, with those variables as arguments before
+      its own, and every use of it passes them. Functions defined together
+      are given the same variables, since they may call each other. Used as
+      a value, it is the function once given its variables. No function
+      defined in a `let` or a `where` is an object that holds itself any
+      more, which is the first step of Freddy's plan to have no cycles, and
+      calls to them are direct. Left where they are: local values (thunks),
+      and a function that uses a consumer of where it is, which cannot be
+      passed as an argument
 - [ ] The rest of decision trees: tests on different variables, and on what
       is inside a constructor
 
