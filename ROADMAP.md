@@ -364,6 +364,18 @@ What that means here, to be weighed when it is built:
 - Only values that are defined by themselves and do use variables of where
   they are need the rewrite, and those are the ones that pay.
 
+Asked about the cost in time, Freddy confirmed the plan the same day and
+said he is not sure how bad it would be in practice. His reason for counting
+references in the first place is that Hazy should follow C++'s "you pay for
+what you use", with no garbage collection. He would like a warning where the
+rewrite loses sharing. So:
+
+- [ ] Rewrite the recursion of local values so that it does not share, as
+      above, and then take the cycle collector out
+- [ ] Warn where that is done to a value, since it may then be worked out
+      many times. The compiler has no warnings yet, only errors, so this
+      needs somewhere for a warning to go
+
 What it left, all three dealt with in M5:
 
 - Counting was done by calls into the runtime, and for every value.
