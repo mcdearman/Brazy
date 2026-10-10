@@ -444,10 +444,17 @@ twelve blocks for each number it reverses.
 
 Left:
 
-- [ ] Reuse across calls. In `tree` a node is rebuilt only after a comparison
-      and a recursive call, which are elsewhere in the code, so the block
-      cannot be kept back for it. It has to travel with the continuation, as
-      a value in its own right
+- [x] Reuse across calls. In `tree` a node is rebuilt only after a comparison
+      and a recursive call, which are elsewhere in the code. The block that
+      is kept back now goes on past where control divides, and when the
+      value is built by a consumer that is made here and entered later, the
+      block goes with the consumer, as one more thing it holds. While it
+      waits it is a husk: a block that holds nothing, and is given up like
+      any other if nothing comes to be built in it. `tree` builds every node
+      on the way back up in the block of the one it took apart on the way
+      down: 271,507 of them, and 2,898,613 blocks in all where it was
+      3,170,116. Not carried yet: a block for a consumer of something that
+      is forced, which is made by other code
 - [ ] Borrow inference
 - [x] Functions that are defined inside a definition and use nothing of
       where they are become definitions of their own, at the top of the
