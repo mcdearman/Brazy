@@ -5,10 +5,9 @@
 > Freddy (Superstar64). It is a place to try ideas and experiments before any
 > of them are offered to Hazy. The fork has Freddy's blessing, but none of the
 > work here is necessarily his. It keeps Hazy's git history and Hazy's
-> licenses. The
-> plan for the fork is in [ROADMAP.md](ROADMAP.md). The rest of this file is
-> Hazy's README, with additions for what the fork has added; where it says
-> "I", that is Hazy's author.
+> licenses. The plan for the fork is in [ROADMAP.md](ROADMAP.md). The rest of
+> this file is Hazy's README, with additions for what the fork has added;
+> where it says "I", that is Hazy's author.
 >
 > **AI use.** Most of the work that is in this fork and not in Hazy was written
 > by an AI coding assistant (Anthropic's Claude, through Claude Code) under
@@ -16,8 +15,9 @@
 > intermediate languages, the LLVM backend, the Rust runtime, the REPL and the
 > roadmap. Those commits carry a `Co-Authored-By: Claude` line. Freddy's
 > blessing is for the fork as a whole: he has not reviewed this code, and it
-> should not be taken as his work or as approved by him. It is tested against Hazy's Javascript backend, but it
-> is experimental, so read it with care before relying on it.
+> should not be taken as his work or as approved by him. It is tested against
+> Hazy's Javascript backend, but it is experimental, so read it with care
+> before relying on it.
 
 # The Hazy Haskell Compiler
 
