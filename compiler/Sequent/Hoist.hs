@@ -1,13 +1,17 @@
 -- |
--- Take the functions that are defined inside a definition, and that use
--- nothing of where they are, out to the top of the program.
+-- Take the functions that are defined inside a definition out to the top of
+-- the program.
 --
 -- A function in a @let@ or a @where@ is an object that is made each time
--- control passes it. If it mentions no variable of the definition it is in,
--- there is nothing for the object to capture, and it may as well be a
--- definition of its own: it is then made once, and what uses it knows
--- exactly which function it is. Functions that are defined together go
--- together.
+-- control passes it, and one that calls itself is an object that holds
+-- itself, which counting references never frees. At the top of the program
+-- a function is made once, what uses it knows exactly which function it is,
+-- and nothing holds anything.
+--
+-- A function that mentions no variable of the definition it is in goes as
+-- it is. One that does is given those variables as arguments, before its
+-- own, and every use of it passes them: this is lambda lifting. Functions
+-- that are defined together go together, and are given the same variables.
 --
 -- What is taken out is called by the whole path to it: the name of the
 -- definition it was in, and then its own, with 'separator' between. So no
@@ -28,9 +32,11 @@ import Data.Traversable (for)
 import qualified Generate.Global as Global (Global (..))
 import Sequent.Tree
   ( Alternative (..),
+    Binder (..),
     Consumer (..),
     Producer (..),
     Statement (..),
+    Strategy (..),
     free,
     separator,
   )
@@ -71,13 +77,37 @@ hoist' Global.Global {path, name} producer = do
             value <- producerx (Text.snoc prefix separator <> local) value
             pure (local, value)
           body <- statement prefix body
-          let moved = closed bindings
+          let global local = Global.Global {path, name = Text.snoc prefix separator <> local}
+              names = Set.fromList (map fst bindings)
+              moved = closed bindings
+              -- Of the rest, the functions that can be given what they use.
+              lifting = Set.fromList $ do
+                (local, value@Function {}) <- bindings
+                if Set.notMember local moved && Set.null (continuations value)
+                  then [local]
+                  else []
+              -- What they use of where they are: the same for all of them,
+              -- since they may call each other.
+              given =
+                Set.toList $
+                  mconcat [free value | (local, value) <- bindings, Set.member local lifting]
+                    Set.\\ Set.union moved lifting
               renamed = Map.fromList $ do
-                local <- Set.toList moved
-                pure (local, Global.Global {path, name = Text.snoc prefix separator <> local})
+                local <- Set.toList names
+                if Set.member local moved
+                  then [(local, Top (global local))]
+                  else
+                    if Set.member local lifting
+                      then [(local, Lifted (global local) given)]
+                      else []
               (out', kept) = foldr part ([], []) bindings
               part (local, value) (out', kept) = case Map.lookup local renamed of
-                Just global -> ((global, rename renamed value) : out', kept)
+                Just (Top name') -> ((name', rename renamed value) : out', kept)
+                Just (Lifted name' _) ->
+                  let result = local <> Text.pack "%to"
+                      parameters = [Binder {name = variable, strategy = ByNeed} | variable <- given]
+                      lifted = Function parameters result (Cut (rename renamed value) (Covariable result))
+                   in ((name', lifted) : out', kept)
                 Nothing -> (out', (local, rename renamed value) : kept)
           modifySTRef' out (Map.union (Map.fromList out'))
           pure $ case kept of
@@ -105,9 +135,56 @@ closed bindings = go (Set.fromList [local | (local, Function {}) <- bindings])
             else []
 
 -- |
--- Put the definitions some variables have become in their place.
+-- The consumers something uses and does not bind. A function that uses one
+-- is left where it is: a consumer cannot be given as an argument.
+class Continuations a where
+  continuations :: a -> Set.Set Text
+
+instance (Continuations a) => Continuations [a] where
+  continuations = foldMap continuations
+
+instance (Continuations a) => Continuations (Maybe a) where
+  continuations = foldMap continuations
+
+instance Continuations Producer where
+  continuations = \case
+    Constructor _ fields -> continuations fields
+    Mu covariable body -> Set.delete covariable (continuations body)
+    Function _ covariable body -> Set.delete covariable (continuations body)
+    Thunk covariable body -> Set.delete covariable (continuations body)
+    _ -> Set.empty
+
+instance Continuations Consumer where
+  continuations = \case
+    Covariable name -> Set.singleton name
+    MuTilde _ body -> continuations body
+    Case alternatives otherwise -> continuations alternatives <> continuations otherwise
+    Apply arguments result -> continuations arguments <> continuations result
+    Force result -> continuations result
+
+instance Continuations Alternative where
+  continuations (Alternative _ _ body) = continuations body
+
+instance Continuations Statement where
+  continuations = \case
+    Cut left right -> continuations left <> continuations right
+    Primitive _ arguments result -> continuations arguments <> continuations result
+    LetRec bindings body -> continuations (map snd bindings) <> continuations body
+    Abort -> Set.empty
+    Halt -> Set.empty
+
+-- |
+-- What a variable has become.
+data Moved
+  = -- | A definition at the top.
+    Top Global.Global
+  | -- | A definition at the top that is first given some variables.
+    Lifted Global.Global [Text]
+
+-- |
+-- Put what some variables have become in their place.
 class Rename a where
-  rename :: Map Text Global.Global -> a -> a
+  rename :: Map Text Moved -> a -> a
 
 instance (Rename a) => Rename [a] where
   rename renamed = map (rename renamed)
@@ -117,9 +194,13 @@ instance (Rename a) => Rename (Maybe a) where
 
 instance Rename Producer where
   rename renamed = \case
-    Variable local
-      | Just global <- Map.lookup local renamed -> Global global
-      | otherwise -> Variable local
+    Variable local -> case Map.lookup local renamed of
+      Just (Top global) -> Global global
+      -- Used as a value: the function it is once it has its variables.
+      Just (Lifted global given) ->
+        let result = local <> Text.pack "%as"
+         in Mu result (Cut (Global global) (Apply (map Variable given) (Covariable result)))
+      Nothing -> Variable local
     Global global -> Global global
     Literal literal -> Literal literal
     Constructor tag fields -> Constructor tag (rename renamed fields)
@@ -140,6 +221,14 @@ instance Rename Alternative where
 
 instance Rename Statement where
   rename renamed = \case
+    -- Used where it is called: the variables are passed with the arguments.
+    -- It is a function, so it is not forced.
+    Cut (Variable local) consumer
+      | Just (Lifted global given) <- Map.lookup local renamed ->
+          let unforced = case consumer of
+                Force inner -> inner
+                other -> other
+           in Cut (Global global) (Apply (map Variable given) (rename renamed unforced))
     Cut left right -> Cut (rename renamed left) (rename renamed right)
     Primitive primitive arguments result -> Primitive primitive (rename renamed arguments) (rename renamed result)
     LetRec bindings body ->
