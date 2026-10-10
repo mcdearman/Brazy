@@ -7,7 +7,7 @@ import Control.Exception (catch)
 import Control.Monad (zipWithM_)
 import qualified Core.Tree.Module as Core (Module, name)
 import qualified Core.Tree.Module as Module (simplify)
-import Data.Char (toUpper)
+import Data.Char (toLower, toUpper)
 import Data.Foldable (for_, toList, traverse_)
 import Data.Functor.Identity (Identity (..))
 import Data.List.Reverse (List (..))
@@ -62,10 +62,22 @@ import System.Console.GetOpt (ArgDescr (..), ArgOrder (..), OptDescr (..), getOp
 import System.Directory (createDirectoryIfMissing, listDirectory)
 import System.Environment (getArgs, getExecutablePath)
 import System.Exit (exitFailure)
-import System.FilePath (dropExtension, dropFileName, hasDrive, pathSeparators, takeDirectory, takeExtension, (</>))
+import System.FilePath
+  ( dropExtension,
+    dropFileName,
+    dropTrailingPathSeparator,
+    hasDrive,
+    pathSeparators,
+    takeDirectory,
+    takeExtension,
+    takeFileName,
+    (</>),
+  )
 import System.IO (IOMode (..), hClose, hSetEncoding, openFile, stdout, utf8)
 import System.Process (callProcess)
 import System.IO.Unsafe (unsafeInterleaveIO, unsafePerformIO)
+import Status (Status)
+import qualified Status (finished, progress, start, status)
 import Verbose (runVerbose)
 import Prelude hiding (Show (show))
 import qualified Prelude
@@ -166,28 +178,31 @@ stage4 _ = pure . Vector.map Module.simplify
 stage5 :: Debug -> Vector Core.Module -> IO (Vector Stage5.Module)
 stage5 _ = pure . Module.generate
 
-message :: String -> Int -> Int -> FullQualifiers -> IO ()
-message stage index total name =
-  putStrLn $
-    mconcat
-      [ "[",
-        Prelude.show index,
-        " of ",
-        Prelude.show total,
-        "] ",
-        stage,
-        " ",
-        Lazy.Text.unpack $ Builder.toLazyText $ Variable.print' name
-      ]
+-- |
+-- What a directory is called: its own name, without what it is in.
+packageName :: FilePath -> String
+packageName = takeFileName . dropTrailingPathSeparator
 
-forceModules :: (Foldable t, Prelude.Show a) => String -> Show -> Verbose -> (a -> FullQualifiers) -> t a -> IO ()
-forceModules stage show verbose name modules = traverse_ go $ zip [1 ..] (toList modules)
+-- |
+-- The name of a module, as it is said to someone.
+moduleName :: FullQualifiers -> String
+moduleName = Lazy.Text.unpack . Builder.toLazyText . Variable.print'
+
+-- |
+-- Take some modules through a stage, one at a time, saying how far along it
+-- is. A module's errors are found when it is its turn.
+forceModules :: (Foldable t, Prelude.Show a) => String -> Show -> Status -> (a -> FullQualifiers) -> t a -> IO ()
+forceModules stage show progress name modules = do
+  traverse_ go $ zip [1 ..] (toList modules)
+  case show of
+    NoShow -> Status.finished progress $ map toLower stage ++ " " ++ counted total
+    Show -> pure ()
   where
     total = length modules
+    counted 1 = "1 module"
+    counted count = Prelude.show count ++ " modules"
     go (index, modulex) = do
-      case verbose of
-        Loud -> message stage index total (name modulex)
-        Quiet -> pure ()
+      Status.progress progress stage index total (moduleName (name modulex))
       case show of
         NoShow -> do
           -- todo, implement deepseq
@@ -374,6 +389,9 @@ main'' args = case getOpt order options args of
             language
           } =
             foldl (flip id) defaultx flags
+    progress <- Status.start $ case verbose of
+      Loud -> True
+      Quiet -> False
     language <- pure $ pack <$> toList language
     let extensions = foldl extend hazy toggles
           where
@@ -405,27 +423,27 @@ main'' args = case getOpt order options args of
           Help -> help
           Parse -> do
             all <- stage1 debug all
-            forceModules "Parsing" show verbose Syntax.name (Vector.drop split all)
+            forceModules "Parsing" show progress Syntax.name (Vector.drop split all)
           Resolve -> do
             all <- stage1 debug all
             all <- stage2 debug all
-            forceModules "Resolving" show verbose Semantic.name (Vector.drop split all)
+            forceModules "Resolving" show progress Semantic.name (Vector.drop split all)
           Group -> do
             all <- stage1 debug all
             all <- stage2 debug all
             all <- stage2x debug all
-            forceModules "Grouping" show verbose Semantic.name (Vector.drop split all)
+            forceModules "Grouping" show progress Semantic.name (Vector.drop split all)
           Check -> do
             all <- stage1 debug all
             all <- stage2 debug all
             all <- stage3 debug all
-            forceModules "Checking" show verbose Semantic.name (Vector.drop split all)
+            forceModules "Checking" show progress Semantic.name (Vector.drop split all)
           Simplify -> do
             all <- stage1 debug all
             all <- stage2 debug all
             all <- stage3 debug all
             all <- stage4 debug all
-            forceModules "Simplifying" show verbose Core.name (Vector.drop split all)
+            forceModules "Simplifying" show progress Core.name (Vector.drop split all)
           Sequent -> do
             program <- whole all
             hSetEncoding stdout utf8
@@ -445,6 +463,7 @@ main'' args = case getOpt order options args of
           Native target -> do
             createDirectoryIfMissing True (dropFileName target)
             let runtime = root </> "lib" </> "hazy" </> "native" </> "libhazy_runtime.a"
+            Status.status progress "Compiling" (packageName target ++ " to native code")
             case linking of
               Whole -> do
                 program <- whole all
@@ -461,12 +480,16 @@ main'' args = case getOpt order options args of
                         start = Just (AxCut.entry (AxCut.lower (startProgram)))
                       }
                 let objects = [directory </> "native.o" | Package {root = directory} <- packages]
+                Status.status progress "Linking" target
                 callProcess "clang" $
                   ["-O1", "-Wno-override-module", target ++ ".ll"]
                     ++ objects
                     ++ [runtime, "-Wl,-dead_strip", "-o", target]
+            Status.finished progress (packageName target)
           Object target -> do
             createDirectoryIfMissing True (dropFileName target)
+            let label = packageName (takeDirectory target) ++ " to native code"
+            Status.status progress "Compiling" label
             Sequent.Unit {own, shared} <- unit all
             let source = dropExtension target ++ ".ll"
             emit source $
@@ -478,6 +501,7 @@ main'' args = case getOpt order options args of
                     start = Nothing
                   }
             callProcess "clang" ["-O1", "-Wno-override-module", "-c", source, "-o", target]
+            Status.finished progress label
           Generate target -> do
             all <- stage1 debug all
             all <- stage2 debug all
@@ -486,12 +510,14 @@ main'' args = case getOpt order options args of
             all <- stage5 debug all
             let code = Vector.drop split all
                 total = length code
+                -- What is being made: a package is called by its directory.
+                label = case format of
+                  Partial -> packageName (takeDirectory (dropTrailingPathSeparator target))
+                  _ -> packageName target
+            Status.status progress "Compiling" label
             out <- case format of
               Partial -> pure target
               Full -> do
-                case verbose of
-                  Loud -> putStrLn "Copying Artifacts"
-                  Quiet -> pure ()
                 for_ packages $ \Package {modules} ->
                   for_ modules $ \Package.Module {target = subtarget, artifacts} -> do
                     let file = target </> subtarget
@@ -515,9 +541,7 @@ main'' args = case getOpt order options args of
                 pure target
               Pack -> pure $ target </> "artifacts"
             for_ (zip [1 ..] $ toList code) $ \(index, Stage5.Module {name, statements}) -> do
-              case verbose of
-                Loud -> message "Compiling" index total name
-                Quiet -> pure ()
+              Status.progress progress "Building" index total (moduleName name)
               let file = out </> (Mangle.pathSys name ++ ".mjs")
               createDirectoryIfMissing True (dropFileName file)
               let javascript = Javascript.print $ Module.print statements
@@ -525,9 +549,6 @@ main'' args = case getOpt order options args of
               Text.Lazy.IO.writeFile file text
             case format of
               Pack -> do
-                case verbose of
-                  Loud -> putStrLn "Copying Headers Files"
-                  Quiet -> pure ()
                 let copy Stage5.Module {name = path} loaded = do
                       let file = target </> "header" </> Mangle.pathSys path ++ ".hs"
                       createDirectoryIfMissing True (dropFileName file)
@@ -536,9 +557,6 @@ main'' args = case getOpt order options args of
                       Text.IO.hPutStr handle (contents loaded)
                       hClose handle
                 zipWithM_ copy (toList code) (toList modules)
-                case verbose of
-                  Loud -> putStrLn "Writing Package Meta"
-                  Quiet -> pure ()
                 let format Stage5.Module {name = path} =
                       pack "\n" <> Mangle.pathJS path <> pack ".hs"
                     files = foldMap format code
@@ -549,6 +567,7 @@ main'' args = case getOpt order options args of
                 Text.IO.hPutStr handle meta
                 hClose handle
               _ -> pure ()
+            Status.finished progress label
         -- The native pipeline takes the whole program, packages included.
         whole all = do
           all <- stage1 debug all

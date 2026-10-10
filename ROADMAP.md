@@ -198,6 +198,10 @@ Not a milestone of the native backend, but built alongside it.
       Javascript), coloured by shape. Tab turns the page. The pages come from
       one table in `compiler/Repl.hs`, and the viewer is
       `viewer/Viewer.hs`, over the `brick` package
+- [x] What the compiler says while it works, in the manner of Cargo and of
+      Meadow (`compiler/Status.hs`): a bold green verb for each thing done, a
+      bar that is drawn over itself while modules are built, and how long it
+      took. It goes to stderr, and the bar and the colour only to a terminal
 - [ ] Show the type of an expression (`:type`). Nothing prints types yet
 - [ ] A printer for Core. Its page is the derived `Show` output, broken into
       lines
