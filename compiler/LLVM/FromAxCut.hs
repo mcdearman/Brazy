@@ -558,6 +558,83 @@ object' state object@Object {kind, captured} = do
     )
 
 -- |
+-- Make the environment again. This is where values are shared and erased: a
+-- value that is wanted more times than it is held is shared, and one that
+-- is held more times than it is wanted is erased.
+substitute :: Environment -> [(Text, Text)] -> (Builder, Environment)
+substitute environment pairs = (adjust, [(new, find old) | (new, old) <- pairs])
+  where
+    held = Map.fromListWith (+) [(name, 1 :: Int) | (name, _) <- environment]
+    wanted = Map.fromListWith (+) [(old, 1 :: Int) | (_, old) <- pairs]
+    find old = case lookup old environment of
+      Just value -> value
+      Nothing -> error $ unpack old ++ " is not in the environment"
+    adjust = mconcat $ do
+      (name, have) <- Map.toList held
+      let want = Map.findWithDefault 0 name wanted
+          value = find name
+      if want >= have
+        then replicate (want - have) (share value)
+        else replicate (have - want) (erase value)
+
+-- |
+-- Whether a value is known, where the program is compiled, to be a number
+-- that fits in a word.
+isWord :: Builder -> Bool
+isWord value = case Lazy.Text.unpack (toLazyText value) of
+  '%' : 'w' : _ -> True
+  first : _ -> first `elem` "-0123456789"
+  [] -> False
+
+-- |
+-- A consumer that is made only to be given the value of something that is
+-- forced, as two functions: one that is entered with the value and what
+-- the consumer captured, and one for the consumer as an object, which
+-- reads what it captured and enters the first. When what is forced turns
+-- out to be a value already, the first is entered at once and the consumer
+-- is never made.
+continuation :: State s -> Object -> ST s (Builder, Builder)
+continuation state@State {target = Target {registers}, extra} Object {captured, parameters, body} = do
+  next <- fresh state
+  let entry = fromString ("closure." ++ show next)
+      direct = fromString ("closure." ++ show next ++ ".direct")
+      names = parameters ++ captured
+  arguments <- for names $ \_ -> local state
+  let (passed, spilled) = splitAt registers arguments
+      unspill = mconcat $ do
+        (index, argument) <- zip [0 ..] spilled
+        pure $ line [argument, fromString " = load i64, ptr ", spill index]
+  check <- safepoint state arguments
+  body <- statement state Nothing (zip names arguments) body
+  self <- local state
+  given <- for parameters $ \_ -> local state
+  (code, pointer) <- address state self
+  captures <- for (zip [capturesAt ..] captured) $ \(index, _) -> load state pointer index
+  modifySTRef' extra $ \known ->
+    mconcat
+      [ known,
+        fromString "\ndefine internal tailcc void ",
+        quoted direct,
+        fromString "(",
+        commas [fromString "i64 " <> argument | argument <- passed],
+        fromString ") {\n",
+        unspill,
+        check,
+        body,
+        fromString "}\n",
+        fromString "\ndefine internal tailcc void ",
+        quoted entry,
+        fromString "(",
+        commas [fromString "i64 " <> argument | argument <- self : given],
+        fromString ") {\n",
+        if null captured then mempty else code <> foldMap fst captures,
+        open self,
+        enter state (quoted direct) (given ++ map snd captures),
+        fromString "}\n"
+      ]
+  pure (entry, direct)
+
+-- |
 -- The block of a value that was just taken apart, and how many fields it
 -- had, when the value was the only reference to it: a constructed value
 -- with as many fields is built in its place. The block is zero when there
@@ -585,23 +662,9 @@ reusable size = \case
 
 statement :: State s -> Token -> Environment -> Statement -> ST s Builder
 statement state token environment = \case
-  -- Where values are shared and erased. A value that is wanted more times
-  -- than it is held is shared, and one that is held more times than it is
-  -- wanted is erased.
   Substitute pairs rest -> do
-    let held = Map.fromListWith (+) [(name, 1 :: Int) | (name, _) <- environment]
-        wanted = Map.fromListWith (+) [(old, 1 :: Int) | (_, old) <- pairs]
-        find old = case lookup old environment of
-          Just value -> value
-          Nothing -> error $ unpack old ++ " is not in the environment"
-        adjust = mconcat $ do
-          (name, have) <- Map.toList held
-          let want = Map.findWithDefault 0 name wanted
-              value = find name
-          if want >= have
-            then replicate (want - have) (share value)
-            else replicate (have - want) (erase value)
-    rest <- statement state token [(new, find old) | (new, old) <- pairs] rest
+    let (adjust, after) = substitute environment pairs
+    rest <- statement state token after rest
     pure $ adjust <> rest
   -- A constructor with no fields is not made: there is one of each already.
   Let name tag 0 rest
@@ -746,6 +809,61 @@ statement state token environment = \case
           otherwise' <> fromString ":\n",
           fallback
         ]
+  -- A consumer made only to be given what something evaluates to. If the
+  -- thing is a value already, the consumer's code is entered with it and
+  -- the consumer is never made.
+  New name object@Object {kind = Closure, method = Return, captured, parameters = [_]} (Substitute pairs Force)
+    | (kept, taken) <- splitEnd (length captured) environment,
+      (adjust, [(_, consumer), (_, value)]) <- substitute (kept ++ [(name, unmade)]) pairs,
+      toLazyText consumer == toLazyText unmade -> do
+        (entry, direct) <- continuation state object
+        let captures = map snd taken
+            fast = enter state (quoted direct) (value : captures)
+        if isWord value
+          then pure $ adjust <> fast
+          else do
+            (code, block) <- allocate state (capturesAt + length captured) (header closureKind 0 (length captured))
+            (code', place) <- slot state block codeAt
+            stores <- for (zip [capturesAt ..] captures) $ \(index, capture) -> store state block index capture
+            (code'', made) <- word state block
+            odd' <- local state
+            small <- local state
+            (pointing, pointer) <- address state value
+            (loading, head') <- load state pointer 0
+            kind' <- local state
+            offset <- local state
+            thunk <- local state
+            boxed <- label state
+            quick <- label state
+            slow <- label state
+            pure $
+              mconcat
+                [ adjust,
+                  line [odd', fromString " = and i64 ", value, fromString ", 1"],
+                  line [small, fromString " = icmp ne i64 ", odd', fromString ", 0"],
+                  line [fromString "br i1 ", small, fromString ", label %", quick, fromString ", label %", boxed],
+                  boxed <> fromString ":\n",
+                  pointing,
+                  loading,
+                  line [kind', fromString " = and i64 ", head', fromString ", 15"],
+                  -- The three kinds of thunk are 2, 3 and 4.
+                  line [offset, fromString " = sub i64 ", kind', fromString ", 2"],
+                  line [thunk, fromString " = icmp ult i64 ", offset, fromString ", 3"],
+                  line [fromString "br i1 ", thunk, fromString ", label %", slow, fromString ", label %", quick],
+                  quick <> fromString ":\n",
+                  fast,
+                  slow <> fromString ":\n",
+                  code,
+                  code',
+                  line [fromString "store ptr ", quoted entry, fromString ", ptr ", place],
+                  mconcat stores,
+                  code'',
+                  enter state (fromString "@hazy_force") [made, value]
+                ]
+    where
+      -- Stands for the consumer while the environment is worked out. It is
+      -- never written.
+      unmade = fromString "%unmade"
   New name object@Object {captured} rest -> do
     let (kept, taken) = splitEnd (length captured) environment
     (code, block) <- object' state object

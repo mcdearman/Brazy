@@ -13,6 +13,7 @@ module Sequent.Runtime
     definition,
     fixed,
     generated,
+    member,
     showGlobal,
   )
 where
@@ -112,6 +113,18 @@ tuple classx number = case classx of
           { path = hazy,
             name = pack name <> pack " " <> pack (show number)
           }
+
+-- |
+-- A method of an instance that needs nothing, as a definition of its own.
+-- Every such instance at the top of a module has its methods defined this
+-- way, so that a use of a method of a known instance can go straight to it
+-- and not through the instance.
+member :: Global -> Int -> Global
+member Global.Global {path, name} index =
+  Global.Global
+    { path,
+      name = name <> pack " #" <> pack (show index)
+    }
 
 -- |
 -- What a name of the @Hazy@ module is defined as, if it is one.

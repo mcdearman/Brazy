@@ -17,9 +17,12 @@ for bench_dir in bench/*/; do
     $HAZY -q "bench/$bench" --native "$OUT/$bench" --whole
     $HAZY -q "bench/$bench" --native "$OUT/$bench-no-reuse" --whole --no-reuse
     for variant in "$bench" "$bench-no-reuse"; do
-        start=$(date +%s%N)
-        result=$(HAZY_GC_STATS=1 "$OUT/$variant" 2> "$OUT/$variant.stats")
-        end=$(date +%s%N)
-        printf '%-20s %6d ms  result %s\n    %s\n' "$variant" $(((end - start) / 1000000)) "$result" "$(cat "$OUT/$variant.stats")"
+        # Run it once unmeasured: the first run of a new executable is slow
+        # on macOS, which checks it over.
+        "$OUT/$variant" > /dev/null
+        # The time the program itself took, as the shell measures it
+        TIMEFORMAT=%R
+        seconds=$({ time HAZY_GC_STATS=1 "$OUT/$variant" > "$OUT/$variant.result" 2> "$OUT/$variant.stats"; } 2>&1)
+        printf '%-20s %6ss  result %s\n    %s\n' "$variant" "$seconds" "$(cat "$OUT/$variant.result")" "$(cat "$OUT/$variant.stats")"
     done
 done

@@ -64,6 +64,7 @@ import qualified Semantic.Index.Method as Method
 import qualified Semantic.Index.Selector as Selector
 import qualified Semantic.Index.Term as Term (Index)
 import Semantic.Index.Type2 (Index (Index, Tuple))
+import qualified Semantic.Index.Type2 as Type2 (Index (..))
 import Semantic.Scope (Environment ((:+)))
 import qualified Semantic.Scope as Scope
 import Sequent.Primitive (Primitive (Field))
@@ -151,6 +152,14 @@ moduleDefinitions
     | name == Runtime.hazy = Map.empty
     | otherwise = Map.fromList $ concat [termDefinitions, classDefinitions, dataDefinitions]
     where
+      -- An instance, and its methods as definitions of their own if it
+      -- needs nothing.
+      instanceDefinitions global instancex@Instance {prerequisites, members} = case prerequisites of
+        None ->
+          (global, runST (globalInstance pre (Just global) instancex)) : do
+            (index, method) <- zip [0 ..] (toList members)
+            pure (Runtime.member global index, runST (globalMember pre method))
+        Constraints {} -> [(global, runST (globalInstance pre Nothing instancex))]
       termDefinitions = do
         (termIndex, Declaration {definition}) <- zip [0 ..] (toList terms)
         let global = termNames Vector.! moduleIndex Vector.! termIndex
@@ -159,22 +168,31 @@ moduleDefinitions
         (typeIndex, instances) <- zip [0 ..] (toList classInstances)
         (target, instancex) <- Map.toList instances
         let global = typeNames Vector.! moduleIndex Vector.! typeIndex `GlobalType.indexClass` target
-        pure (global, runST (globalInstance pre instancex))
+        instanceDefinitions global instancex
       dataDefinitions = do
         (typeIndex, instances) <- zip [0 ..] (toList dataInstances)
         (target, instancex) <- Map.toList instances
         let global = typeNames Vector.! moduleIndex Vector.! typeIndex `GlobalType.indexData` target
-        pure (global, runST (globalInstance pre instancex))
+        instanceDefinitions global instancex
 
 globalDeclaration :: Precontext -> TypeLambda Scope.Global -> ST s Producer
 globalDeclaration pre definition = do
   context <- Context.start pre
   declaration context definition
 
-globalInstance :: Precontext -> Instance Scope.Global -> ST s Producer
-globalInstance pre instancex = do
+globalInstance :: Precontext -> Maybe Global.Global -> Instance Scope.Global -> ST s Producer
+globalInstance pre lifted instancex = do
   context <- Context.start pre
-  generateInstance context instancex
+  generateInstance context lifted instancex
+
+-- |
+-- A method of an instance at the top of a module, as a definition of its
+-- own. The instance must need nothing, so that the method needs nothing but
+-- what it says it does.
+globalMember :: Precontext -> MethodConcrete Scope.Global -> ST s Producer
+globalMember pre Definition {definition} = do
+  context <- Context.start pre
+  declaration (Context.evidenceBindings Vector.empty context) definition
 
 byValue, byNeed :: Text -> Binder
 byValue name = Binder {name, strategy = ByValue}
@@ -217,6 +235,62 @@ generateEvidences context list continue = case list of
     generateEvidences context tail $ \tail -> continue (head : tail)
 
 -- |
+-- What the evidence a name stands for is, and whether it is known to hold a
+-- value: an instance, or evidence that was passed in.
+instanceOf :: Context s scope -> Evidence.Index scope -> (Producer, Bool)
+instanceOf context = \case
+  Evidence.Direct target (Index index)
+    | Type.Binding {dataInstances} <- context !=. index,
+      Just binding <- Map.lookup target dataInstances ->
+        (fromBinding binding, False)
+  Evidence.Direct (Index index) target
+    | Type.Binding {classInstances} <- context !=. index,
+      Just binding <- Map.lookup target classInstances ->
+        (fromBinding binding, False)
+  Evidence.Index index
+    | Evidence.Binding name <- context !~ index ->
+        (Variable name, True)
+  Evidence.Direct classx typex -> (Global (Runtime.builtin classx typex), False)
+  where
+    fromBinding = \case
+      Variable.Local name -> Variable name
+      Variable.Global global -> Global global
+
+-- |
+-- The method of an instance, when the instance is known where the method is
+-- used: it is an instance at the top of a module that needs nothing, whose
+-- methods are definitions of their own. The instance is then not looked at.
+knownMethod :: Context s scope -> Evidence scope -> Int -> Maybe Producer
+knownMethod context dictionary index = case dictionary of
+  Evidence.Variable {variable = Direct _ (Tuple _)} -> Nothing
+  Evidence.Variable {variable = variable@Direct {}, instanciation = Instanciation.Mono}
+    | (Global global, _) <- instanceOf context variable -> Just (Global (Runtime.member global index))
+  _ -> Nothing
+
+-- |
+-- A number written in the program, when its type is known to be one whose
+-- numbers the program can hold as they are. Otherwise a number is an
+-- @Integer@ that is turned into its type as the program runs.
+number :: Expression scope -> Maybe Literal
+number = \case
+  Core.Call
+    { function =
+        Core.Method
+          { method = Method.Index {typeIndex = Type2.Num, methodIndex},
+            evidence = Evidence.Variable {variable = Direct Type2.Num target, instanciation = Instanciation.Mono}
+          },
+      argument = Core.Integer {integer}
+    }
+      | methodIndex == fromInteger' -> case target of
+          -- As the instance has it, an Int keeps the low 32 bits.
+          Type2.Int -> Just (Int (fromInteger integer))
+          Type2.Integer -> Just (Integer integer)
+          _ -> Nothing
+  _ -> Nothing
+  where
+    Method.Index {methodIndex = fromInteger'} = Method.fromInteger
+
+-- |
 -- Evaluate evidence. What the continuation is given is a value.
 generateEvidence ::
   Context s scope ->
@@ -233,22 +307,7 @@ generateEvidence context = \case
             pure $ Cut (Global global) (Apply arguments (MuTilde (byValue name) body))
         Instanciation.Mono -> error "bad tuple instance"
   Evidence.Variable {variable, instanciation} -> \continue -> do
-    let fromBinding = \case
-          Variable.Local name -> Variable name
-          Variable.Global global -> Global global
-        (producer, strict) = case variable of
-          Evidence.Direct target (Index index)
-            | Type.Binding {dataInstances} <- context !=. index,
-              Just binding <- Map.lookup target dataInstances ->
-                (fromBinding binding, False)
-          Evidence.Direct (Index index) target
-            | Type.Binding {classInstances} <- context !=. index,
-              Just binding <- Map.lookup target classInstances ->
-                (fromBinding binding, False)
-          Evidence.Index index
-            | Evidence.Binding name <- context !~ index ->
-                (Variable name, True)
-          Evidence.Direct classx typex -> (Global (Runtime.builtin classx typex), False)
+    let (producer, strict) = instanceOf context variable
     case instanciation of
       Instanciation.Mono
         | strict -> continue producer
@@ -291,6 +350,7 @@ object context = \case
 -- 'object', this can be a variable, a literal or a constructor.
 delayed :: Context s scope -> Expression scope -> ST s Producer
 delayed context = \case
+  expression | Just literal <- number expression -> pure (Literal literal)
   Core.Variable {variable = index, instanciation = Instanciation.Mono} ->
     pure $ fst $ variable context index
   Core.Constructor
@@ -312,6 +372,14 @@ delayed context = \case
 -- Evaluate an expression. What the consumer is given is a value.
 evaluate :: Context s scope -> Expression scope -> Consumer -> ST s Statement
 evaluate context expression consumer = case expression of
+  _ | Just literal <- number expression -> pure $ Cut (Literal literal) consumer
+  Core.Method
+    { method = Method.Index {methodIndex},
+      evidence = dictionary,
+      instanciation
+    }
+      | Just method <- knownMethod context dictionary methodIndex ->
+          implicit context False method instanciation consumer
   Core.Variable {variable = index, instanciation} -> do
     let (producer, strict) = variable context index
     implicit context strict producer instanciation consumer
@@ -551,7 +619,7 @@ generateDeclarations context Declarations {terms, classInstances, dataInstances}
   let instanceBindings variables instances =
         for (zip (toList variables) (toList instances)) $ \(names, instances) ->
           for (Map.toList instances) $ \(index, instancex) -> do
-            value <- generateInstance context instancex
+            value <- generateInstance context Nothing instancex
             pure (names Map.! index, value)
   classBindings <- instanceBindings classVariables classInstances
   dataBindings <- instanceBindings dataVariables dataInstances
@@ -560,8 +628,8 @@ generateDeclarations context Declarations {terms, classInstances, dataInstances}
 -- |
 -- An instance: a constructed value of the evidence for its superclasses and
 -- then its methods. It is a thunk, or a function of what it requires.
-generateInstance :: Context s scope -> Instance scope -> ST s Producer
-generateInstance context Instance {evidence = EvidenceSet supers, prerequisites, members} = do
+generateInstance :: Context s scope -> Maybe Global.Global -> Instance scope -> ST s Producer
+generateInstance context lifted Instance {evidence = EvidenceSet supers, prerequisites, members} = do
   let count = case prerequisites of
         Constraints count -> length count
         None -> 0
@@ -569,8 +637,11 @@ generateInstance context Instance {evidence = EvidenceSet supers, prerequisites,
   context <- pure $ Context.evidenceBindings names context
   result <- fresh context
   body <- generateEvidences context (toList supers) $ \supers -> do
-    members <- for (toList members) $ \Definition {definition} ->
-      declaration context definition
+    members <- case lifted of
+      -- The methods are definitions of their own, and are only named here.
+      Just global -> pure [Global (Runtime.member global index) | index <- [0 .. length members - 1]]
+      Nothing -> for (toList members) $ \Definition {definition} ->
+        declaration context definition
     pure $ Cut (Constructor 0 (supers ++ members)) (Covariable result)
   pure $ case prerequisites of
     None -> Thunk result body
