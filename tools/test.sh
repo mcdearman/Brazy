@@ -70,8 +70,12 @@ for run_dir in test/run/*/; do
     diff "test/run/$run/result" ".test/$run/axcut"
 done
 
-# Run the execution tests natively
+# Run the execution tests natively. Collections are made often, and at each
+# one every count of references is worked out again and compared, so that a
+# reference that is lost or given up twice is found where it happens.
 echo "=== Execution (native) ==="
+export HAZY_GC_VERIFY=1
+export HAZY_GC_THRESHOLD=4096
 for run_dir in test/run/*/; do
     run=$(basename "$run_dir")
     mkdir -p ".test/native"
@@ -80,6 +84,10 @@ for run_dir in test/run/*/; do
     ".test/native/$run" > ".test/native/$run.result"
     diff "test/run/$run/result" ".test/native/$run.result"
 done
+
+# Values that refer to themselves are freed by tracing, not by counting
+echo "Checking that cycles are collected"
+HAZY_GC_STATS=1 ".test/native/cycles" 2>&1 > /dev/null | grep -q "freed by tracing: [1-9]"
 
 # Run one test natively as a whole program, with the packages compiled again
 echo "=== Execution (native, whole program) ==="

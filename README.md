@@ -62,7 +62,18 @@ make run ARGS="test/run/hello/source --native .hello"
 
 Only the program's own modules are compiled. The packages it loads were
 compiled when they were made, and are linked in. `--whole` compiles everything
-together instead. Nothing is freed yet.
+together instead.
+
+Memory is freed by counting references, and values that refer to themselves
+are found by a tracing collector. Three environment variables are read by a
+compiled program:
+
+* `HAZY_GC_THRESHOLD`: how many bytes may be allocated before a collection is
+  due. The default is 8 MB.
+* `HAZY_GC_VERIFY`: at each collection and at exit, work every count out again
+  and stop if one is wrong.
+* `HAZY_GC_STATS`: at exit, print how many blocks were freed by counting and
+  how many by tracing.
 
 # Interactive Session
 
