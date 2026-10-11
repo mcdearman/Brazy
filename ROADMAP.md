@@ -481,6 +481,43 @@ twelve blocks for each number it reverses.
 With those the three allocate 800,243, 3,101,041 and 974,695 blocks and run
 in about 0.02, 0.05 and 0.03 seconds. `tree` builds 289,045 nodes in place.
 
+- [x] What is certain to be evaluated is evaluated at once
+      (`compiler/Sequent/Strict.hs`). For each function it is worked out
+      which parameters are forced on every path, before the function gives
+      anything back and before anything is printed. Where such a function is
+      called with every argument, those arguments are evaluated first and
+      passed as values, and a thunk that is given a name and is certain to be
+      forced after is evaluated where it is. Neither makes an object. A call
+      of a function by itself is taken to force what the whole is found to,
+      so `go (n - 1) (acc + n)` keeps no chain of additions waiting, with no
+      `seq` written. A name that has been forced is written from there on as
+      the name of its value, so what is kept in a constructor is the value
+      and not the thunk it was
+- [x] A test of what must be left alone (`test/run/demand`): an argument
+      that is used on one path, two that change places at each call, a seed
+      that the last call does not look at, the rest of a list, and what an
+      action is given before the actions in front of it have run
+
+With that the three allocate 400,180, 2,601,033 and 299,333 blocks. In
+`tree`, `build` makes nothing each time round: the next seed and the tree
+with one more in it were both thunks. `count` no longer delays `from + 1`.
+
+What it does not do:
+
+- A function is called as it was, and still forces what it is given. That
+  is a test when it is given a value. So nothing has to be known of who
+  calls a function, and a function that is passed around and called with
+  thunks is as right as before; but it also gains nothing.
+- It goes two calls deep. What a function forces is first worked out with
+  nothing known of the functions it calls, and then once more with what
+  was found for them. Functions that call each other get less than one
+  that calls itself.
+- A program that was going to fail may fail differently: if two things
+  would each stop it, the one that is evaluated first now may not be the
+  one that was. A program that does not fail prints what it did.
+- `trace` is not counted as something that is seen, so what it prints may
+  come in another order.
+
 Left:
 
 - [x] Reuse across calls. In `tree` a node is rebuilt only after a comparison
@@ -504,10 +541,14 @@ Left:
       is the definition it is in and then every object around it, as
       `Main.count.go.k%5`. Nothing is called `closure.52` any more, and no
       two things can be called the same
-- [ ] What is left of the cost of arithmetic. It is about 45 blocks for each
-      number in `map`. Much of it is laziness: `x + 1` passed on is a thunk,
-      and so is every tail of a list. Knowing where a value is certainly
-      wanted, or being told with a strict function, would remove those
+- [ ] What is left of the cost of laziness. `map` makes about nine blocks
+      for each number it maps: the cell, a thunk for `f x`, a thunk for the
+      rest of the list, and a consumer each time one of those is forced.
+      The thunks are what a lazy list is, and only being told, with a strict
+      function or a strict field, would remove them. Still to try: forcing a
+      thunk that has been evaluated already goes the long way round, and a
+      function could be entered past its forcing by a caller that has
+      evaluated the arguments
 - [x] Lambda lifting. A local function that does use variables of where it
       is goes to the top as well, with those variables as arguments before
       its own, and every use of it passes them. Functions defined together

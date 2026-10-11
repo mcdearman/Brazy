@@ -16,7 +16,7 @@
 --
 -- The evidence a definition takes for its constraints counts as its first
 -- arguments.
-module Sequent.Uncurry (Shape, shape, split, direct, rewrite) where
+module Sequent.Uncurry (Shape, shape, split, direct, whole, rewrite) where
 
 import Data.Text (pack)
 import qualified Data.Text as Text
@@ -58,6 +58,14 @@ shape producer = do
 -- What the entry that takes every argument is called.
 direct :: Global.Global -> Global.Global
 direct global@Global.Global {name} = global {Global.name = Text.snoc name separator <> pack "direct"}
+
+-- |
+-- The definition that an entry that takes every argument is an entry of.
+-- Anything else is itself.
+whole :: Global.Global -> Global.Global
+whole global@Global.Global {name} = case Text.stripSuffix (pack (separator : "direct")) name of
+  Just before -> global {Global.name = before}
+  Nothing -> global
 
 -- |
 -- A definition as it is left, and the entry that takes every argument, if
