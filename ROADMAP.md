@@ -202,6 +202,14 @@ Not a milestone of the native backend, but built alongside it.
       Meadow (`compiler/Status.hs`): a bold green verb for each thing done, a
       bar that is drawn over itself while modules are built, and how long it
       took. It goes to stderr, and the bar and the colour only to a terminal
+- [x] The same on macOS, Linux and Windows. Native code needed nothing but
+      the linker's flags to run on x86-64 Linux. Windows needed more: the
+      line editor of the interactive session learnt to drive a Windows
+      console (in `lambline`), a function the C library of Windows lacks is
+      supplied for the library that draws errors, a call passes four
+      arguments in registers there and not eight, and what the compiler
+      prints ends its lines the same way everywhere. The tests are run on
+      all three for every change
 - [ ] Show the type of an expression (`:type`). Nothing prints types yet
 - [ ] A printer for Core. Its page is the derived `Show` output, broken into
       lines

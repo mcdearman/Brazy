@@ -34,7 +34,13 @@ mv -f $DIST/bin/$(basename $HAZY).new $DIST/bin/$(basename $HAZY)
 # Compile the native runtime
 (cd runtime/native && cargo build --release --quiet)
 mkdir -p $DIST/lib/hazy/native
-cp runtime/native/target/release/libhazy_runtime.a $DIST/lib/hazy/native/libhazy_runtime.a
+# The library has one name where the linker is Microsoft's and another
+# everywhere else.
+if [ -f runtime/native/target/release/hazy_runtime.lib ]; then
+    cp runtime/native/target/release/hazy_runtime.lib $DIST/lib/hazy/native/hazy_runtime.lib
+else
+    cp runtime/native/target/release/libhazy_runtime.a $DIST/lib/hazy/native/libhazy_runtime.a
+fi
 
 # Copy and Compile the runtime
 mkdir $PACKAGE/hazy-internal

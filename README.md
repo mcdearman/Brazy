@@ -69,13 +69,26 @@ hazy test/run/hello/source -o .hello
 bun .hello/index.mjs
 ```
 
+# Windows
+
+Everything here works on Windows 10 or later: the compiler, the interactive
+session and native code. The build and the tests are shell scripts, so they
+are run from Git Bash, with `make`, GHC, Cabal, Bun, `cargo` and `clang` on
+the path. `clang` is the one that comes with LLVM for Windows and uses
+Microsoft's linker, so Visual Studio's build tools have to be installed too.
+
+A native program is `PATH.exe`. A call passes four arguments in registers
+there and the rest through memory, where the other systems pass eight,
+because LLVM cannot guarantee a tail call that passes arguments on the stack
+on Windows.
+
 # Native Code
 
 `hazy SOURCE --native PATH` compiles a program to a native executable. It
 writes LLVM IR to `PATH.ll` and has `clang` compile it and link it with the
 runtime in `runtime/native`, which is written in Rust. Both `clang` and
-`cargo` are needed. It is run on arm64 macOS, which is what the tests are run
-on for every change, and it has been run on x86-64 Linux.
+`cargo` are needed. The tests are run for every change on arm64 macOS, on
+x86-64 Linux and on x86-64 Windows.
 
 ```sh
 make run ARGS="test/run/hello/source --native .hello"

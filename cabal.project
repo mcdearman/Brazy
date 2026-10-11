@@ -8,4 +8,4 @@ allow-newer: diagnose:*
 source-repository-package
   type: git
   location: https://github.com/mcdearman/lambline.git
-  tag: 78e0fe5fe73ef121477b732dccfd9528f0762117
+  tag: 210fb1f5fcf819f7ec7e4425cf8dbb94ec179b60

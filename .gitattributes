@@ -1,1 +1,6 @@
 result eol=lf
+
+# Every other file is checked out with the line endings it has here as well,
+# on every system. The build and the tests are shell scripts, and Git for
+# Windows would otherwise give them line endings a shell does not take.
+* text=auto eol=lf

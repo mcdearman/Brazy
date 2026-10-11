@@ -19,6 +19,7 @@
 module LLVM.FromAxCut
   ( Target (..),
     arm64,
+    windows,
     withoutReuse,
     lending,
     generate,
@@ -75,8 +76,17 @@ data Target = Target
     lends :: Global -> Maybe [Bool]
   }
 
+-- |
+-- What code is generated for where nothing says otherwise. It was first
+-- written for arm64, and is as right for x86-64 on Linux.
 arm64 :: Target
 arm64 = Target {registers = 8, reuse = True, lends = const Nothing}
+
+-- |
+-- Windows on x86-64. A call there passes four arguments in registers, and
+-- LLVM cannot guarantee a tail call that passes any on the stack.
+windows :: Target
+windows = arm64 {registers = 4}
 
 -- |
 -- A target whose functions take lent the parameters they only read.
