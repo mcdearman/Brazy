@@ -75,7 +75,7 @@ import Sequent.Inline (inline)
 import qualified Sequent.Uncurry as Uncurry (rewrite, shape, split, whole)
 import qualified Sequent.Runtime as Runtime
 import Sequent.Simplify (simplify)
-import Sequent.Strict (demand, strengthen)
+import Sequent.Strict (demand, strengthen, valued)
 import Sequent.Tree
   ( Alternative (..),
     Binder (..),
@@ -184,7 +184,24 @@ familyOf modules = family
             | otherwise = Map.lookup path demands >>= Map.lookup (top global) >>= Map.lookup global >>= id
           stronger found = simplify (strengthen time demanded acts found)
        in (Map.map (Map.map (Map.map stronger)) before, demanded)
-    family = familyIn (fst (foldl strict (inlined, const Nothing) [1, 2 :: Int]))
+    (strengthened, demanded) = foldl strict (inlined, const Nothing) [1, 2 :: Int]
+    -- An entry that takes every argument is only got to by a call that
+    -- names its definition, and each of those now evaluates first what the
+    -- entry is certain to force. So the entry takes those as values.
+    settle global found
+      | Uncurry.whole global /= global,
+        Just wanted <- demanded global,
+        or wanted =
+          simplify (strengthen 4 demanded acts (valued wanted found))
+      | otherwise = found
+    settled = Map.map (Map.map (Map.mapWithKey settle)) strengthened
+    -- The definitions that are written in the sequent calculus call the
+    -- others too, and have to call them the same way.
+    family global@Global.Global {path}
+      | Just found <- Runtime.definition global =
+          let stronger = simplify . strengthen 3 demanded acts
+           in Just (Map.mapWithKey settle (Map.map stronger (finish (lifted global found))))
+      | otherwise = Map.lookup path settled >>= Map.lookup global
 
 -- |
 -- The statement that runs an action and ends the program.

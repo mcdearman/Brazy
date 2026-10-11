@@ -504,10 +504,12 @@ with one more in it were both thunks. `count` no longer delays `from + 1`.
 
 What it does not do:
 
-- A function is called as it was, and still forces what it is given. That
-  is a test when it is given a value. So nothing has to be known of who
-  calls a function, and a function that is passed around and called with
-  thunks is as right as before; but it also gains nothing.
+- A function that is passed around is called as it was, with thunks, and
+  still forces what it is given: nothing is known of who calls it, so it
+  gains nothing. Only the entry of a definition that takes every argument
+  together is different. Nothing gets to that but a call that names the
+  definition, and each of those evaluates first what the entry is certain
+  to force, so the entry takes those as values and does not force them.
 - It goes two calls deep. What a function forces is first worked out with
   nothing known of the functions it calls, and then once more with what
   was found for them. Functions that call each other get less than one
@@ -546,9 +548,7 @@ Left:
       rest of the list, and a consumer each time one of those is forced.
       The thunks are what a lazy list is, and only being told, with a strict
       function or a strict field, would remove them. Still to try: forcing a
-      thunk that has been evaluated already goes the long way round, and a
-      function could be entered past its forcing by a caller that has
-      evaluated the arguments
+      thunk that has been evaluated already goes the long way round
 - [x] Lambda lifting. A local function that does use variables of where it
       is goes to the top as well, with those variables as arguments before
       its own, and every use of it passes them. Functions defined together
