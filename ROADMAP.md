@@ -588,8 +588,24 @@ Left:
       calls to them are direct. Left where they are: local values (thunks),
       and a function that uses a consumer of where it is, which cannot be
       passed as an argument
-- [ ] The rest of decision trees: tests on different variables, and on what
-      is inside a constructor
+- [x] The rest of decision trees: tests on different variables, and on what
+      is inside a constructor. Clauses were put into one test only while
+      each tested the same variable against a constructor of its own. A
+      second clause for the same constructor started again from the top,
+      and looked at the value again. Now the clauses that test a variable
+      against the same constructor share an alternative, even when they are
+      not next to each other, and what each goes on to do is tried in turn
+      inside it in the same way (`match` in `compiler/Sequent/FromCore.hs`).
+      The fields have the same names for all of them, so a next test of a
+      field, or of another argument, is one test as well. In
+      `inside (Just (x : y : _))` after `inside (Just [x])` each of the
+      three values is looked at once. A test, `test/run/patterns`, has
+      these, with arguments that must not be looked at
+
+      What it does not do: it takes the tests in the order the clauses have
+      them, and does not choose which variable is best tested first. A
+      clause that names something with `let` before its next test is tried
+      by itself from there
 
 ### M6. Bootstrapping
 

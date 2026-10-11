@@ -34,6 +34,7 @@ import qualified Core.Tree.Statements as Statements (Statements (..))
 import Core.Tree.TypeLambda (TypeLambda, TypeLambdaOver (..))
 import Data.Char (ord)
 import Data.Foldable (toList)
+import Data.List (nub)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Set (Set)
@@ -599,31 +600,90 @@ letRec bindings body = LetRec bindings body
 -- The consumer must be a name and the failure statement must be small,
 -- because both are copied into every branch.
 attempt :: Context s scope -> Statements scope -> Consumer -> Statement -> ST s Statement
-attempt context statements success failure
-  -- Clauses that each start by testing the same value are one test with an
-  -- alternative for each. The value is then looked at once, and no clause
-  -- holds it while another is tried, which is what lets it be taken apart
-  -- in place.
-  | (heads@(Head name strict _ _ _ _ : _ : _), rest) <- chain context statements = do
-      rest <- maybe (pure failure) (\rest -> attempt context rest success failure) rest
-      joined context rest $ \failure -> do
-        alternatives <- for heads $ \(Head _ _ tag info inner thenx) -> do
-          let ConstructorInfo {entries} = info
-          names <- replicateM (length entries) (fresh inner)
-          thenx <-
-            attempt
-              (Context.patternBindings (Strict.Vector.fromList names) info inner)
-              thenx
-              success
-              failure
-          pure $ Alternative tag (zipWith binder names (toList entries)) thenx
-        let test = Case alternatives (Just failure)
-        pure $ Cut (Variable name) (if strict then test else Force test)
-  | otherwise = attemptOne context statements success failure
+attempt context statements = match (clauses context statements)
+
+-- |
+-- A clause: some statements that are tried as a whole, with the names that
+-- are in scope for them.
+data Clause s where
+  Clause :: Context s scope -> Statements scope -> Clause s
+
+-- |
+-- The clauses that some statements are, in the order they are tried.
+clauses :: Context s scope -> Statements scope -> [Clause s]
+clauses context = \case
+  Statements.Branch {left, right} -> clauses context left ++ clauses context right
+  statements -> [Clause context statements]
+
+-- |
+-- Try some clauses in turn, as a tree of tests in which nothing is looked
+-- at twice.
+--
+-- The clauses at the front that each start by testing the same variable
+-- are one test of it, with an alternative for each constructor they test it
+-- against. The value is then looked at once, and no clause holds it while
+-- another is tried, which is what lets it be taken apart in place.
+--
+-- Clauses that test it against the same constructor share an alternative,
+-- and what each goes on to do is tried in turn inside it, in the same way.
+-- So a second clause that starts as the first did does not start again: its
+-- next test, of another variable or of something inside the constructor,
+-- is put together with the first clause's next test. The fields of the
+-- constructor have the same names for all of them, which is what lets
+-- tests of a field be seen to be tests of the same thing.
+--
+-- A clause whose test fails without looking at anything else can be passed
+-- over, so putting together clauses that were not next to each other
+-- changes nothing that is evaluated or the order it is evaluated in.
+match :: [Clause s] -> Consumer -> Statement -> ST s Statement
+match [] _ failure = pure failure
+match (first@(Clause context statements) : later) success failure = case heading first of
+  Just (Head name strict _ _ _ _) -> do
+    let (same, rest) = headed name (first : later)
+        tags = nub [tag | Head _ _ tag _ _ _ <- same]
+    rest <- match rest success failure
+    joined context rest $ \failure -> do
+      alternatives <- for tags $ \tag -> do
+        let chosen = [head | head@(Head _ _ other _ _ _) <- same, other == tag]
+            entries = concatMap fields (take 1 chosen)
+        names <- replicateM (length entries) (fresh context)
+        body <- match (concatMap (onward names) chosen) success failure
+        pure $ Alternative tag (zipWith binder names entries) body
+      let test = Case alternatives (Just failure)
+      pure $ Cut (Variable name) (if strict then test else Force test)
+  Nothing -> do
+    rest <- match later success failure
+    joined context rest $ \failure -> attemptOne context statements success failure
   where
-    binder name EntryInfo {strict}
-      | Info.strict strict = byValue name
+    binder name strict
+      | strict = byValue name
       | otherwise = byNeed name
+
+heading :: Clause s -> Maybe (Head s)
+heading (Clause context statements) = peel context statements
+
+-- |
+-- The clauses at the front that start by testing a variable, and the rest.
+headed :: Text -> [Clause s] -> ([Head s], [Clause s])
+headed name = \case
+  clause : later
+    | Just head@(Head other _ _ _ _ _) <- heading clause,
+      other == name ->
+        let (more, rest) = headed name later
+         in (head : more, rest)
+  rest -> ([], rest)
+
+-- |
+-- Whether each field of the constructor a clause tests for holds a value.
+fields :: Head s -> [Bool]
+fields (Head _ _ _ ConstructorInfo {entries} _ _) = [Info.strict strict | EntryInfo {strict} <- toList entries]
+
+-- |
+-- What a clause goes on to do when its test has matched, given the names of
+-- the constructor's fields.
+onward :: [Text] -> Head s -> [Clause s]
+onward names (Head _ _ _ info inner thenx) =
+  clauses (Context.patternBindings (Strict.Vector.fromList names) info inner) thenx
 
 -- |
 -- The first thing a clause does, when that is to test a variable against a
@@ -658,20 +718,6 @@ peel context = \case
       | (Variable name, strict) <- variable context index ->
           Just (Head name strict constructorIndex constructorInfo context thenx)
   _ -> Nothing
-
--- |
--- The clauses at the front that test the same variable, each against a
--- constructor of its own, and what is tried after them.
-chain :: Context s scope -> Statements scope -> ([Head s], Maybe (Statements scope))
-chain context = \case
-  Statements.Branch {left, right}
-    | Just head@(Head name _ tag _ _ _) <- peel context left -> case chain context right of
-        (more@(Head name' _ _ _ _ _ : _), rest)
-          | name' == name && tag `notElem` [other | Head _ _ other _ _ _ <- more] -> (head : more, rest)
-        _ -> ([head], Just right)
-  statements
-    | Just head <- peel context statements -> ([head], Nothing)
-    | otherwise -> ([], Just statements)
 
 -- |
 -- Use a statement in more than one place. If it is not small it is named,
