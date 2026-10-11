@@ -21,8 +21,9 @@ mkdir -p $PACKAGE
 # Compile the compiler
 cabal build hazy
 
-# Get the compiler from Cabal's store
-HAZY=$(cabal list-bin hazy)
+# Get the compiler from Cabal's store. Where it is is the last line Cabal
+# prints: it may say other things first, when it fetches what it builds from.
+HAZY=$(cabal list-bin hazy | tail -n 1)
 
 # Copy the compiler while preserving the file extension
 # It is copied beside its place and then moved there, so that the old file is
