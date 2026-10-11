@@ -74,7 +74,8 @@ bun .hello/index.mjs
 `hazy SOURCE --native PATH` compiles a program to a native executable. It
 writes LLVM IR to `PATH.ll` and has `clang` compile it and link it with the
 runtime in `runtime/native`, which is written in Rust. Both `clang` and
-`cargo` are needed, and only arm64 is generated for so far.
+`cargo` are needed. It is run on arm64 macOS, which is what the tests are run
+on for every change, and it has been run on x86-64 Linux.
 
 ```sh
 make run ARGS="test/run/hello/source --native .hello"
