@@ -452,6 +452,7 @@ executable hazy
     Semantic.Unify.Solve
     Semantic.Unify.Type
     Semantic.Unify.Zonk
+    Sequent.Borrow
     Sequent.FromCore
     Sequent.Hoist
     Sequent.Inline

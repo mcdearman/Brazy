@@ -26,7 +26,7 @@ import qualified Generate.Go.Module as Stage5
 import qualified Generate.Mangle as Mangle
 import qualified Javascript.Printer.Lexer as Javascript (print, run)
 import qualified AxCut.Lower as AxCut (lowerDefinitions)
-import qualified LLVM.FromAxCut as LLVM (Unit (..), arm64, generate, generateUnit, withoutReuse)
+import qualified LLVM.FromAxCut as LLVM (Unit (..), arm64, generate, generateUnit, lending, withoutReuse)
 import qualified Javascript.Tree.Module as Module (print)
 import Package as X (Module (Module), Package (Package))
 import qualified Package
@@ -39,7 +39,7 @@ import qualified Semantic.Scope as Scope
 import qualified Semantic.Stage as Stage
 import qualified Semantic.Tree.Module as Module (connect, seperate)
 import qualified Semantic.Tree.Module as Semantic (Module, name)
-import qualified Sequent.FromCore as Sequent (Unit (..), generate, start, unit)
+import qualified Sequent.FromCore as Sequent (Unit (..), complete, start, unit)
 import qualified Sequent.Printer as Sequent (print)
 import qualified Sequent.Tree as Sequent (Program (..))
 import qualified AxCut.Tree as AxCut (Program (..))
@@ -266,6 +266,7 @@ data Linking
 data Execute = Execute
   { linking :: !Linking,
     reusing :: !Bool,
+    lending :: !Bool,
     include :: List String,
     modules :: List String,
     packages :: List String,
@@ -284,6 +285,7 @@ defaultx =
   Execute
     { linking = Separate,
       reusing = True,
+      lending = True,
       include = Nil,
       modules = Nil,
       packages = Nil,
@@ -327,6 +329,7 @@ options =
     Option [] ["native-object"] (ReqArg object "PATH") "Compile the modules to a native object, for a package",
     Option [] ["whole"] (NoArg whole') "Compile packages again with the program, instead of linking them",
     Option [] ["no-reuse"] (NoArg noReuse) "Never build a value in the place of one just taken apart",
+    Option [] ["no-lend"] (NoArg noLend) "Never lend a function what it only reads",
     Option [] ["repl"] (NoArg interactive) "Start an interactive session",
     Option [] ["debug-message"] (NoArg debug) "Show debug messages",
     Option [] ["debug-show"] (NoArg show) "Show internal AST",
@@ -348,6 +351,7 @@ options =
     object path execute = execute {mode = Object path}
     whole' execute = execute {linking = Whole}
     noReuse execute = execute {reusing = False}
+    noLend execute = execute {lending = False}
     generate path execute = execute {mode = Generate path}
     debug execute = execute {debug = Debug}
     fail error execute = execute {failure = Expect error}
@@ -377,6 +381,7 @@ main'' args = case getOpt order options args of
     let Execute
           { linking,
             reusing,
+            lending,
             include,
             modules,
             packages,
@@ -446,36 +451,36 @@ main'' args = case getOpt order options args of
             all <- stage4 debug all
             forceModules "Simplifying" show progress Core.name (Vector.drop split all)
           Sequent -> do
-            program <- whole all
+            (program, _) <- whole all
             hSetEncoding stdout utf8
             Text.Lazy.IO.putStr $ Builder.toLazyText $ Sequent.print program
           AxCut -> do
-            program <- whole all
+            (program, _) <- whole all
             hSetEncoding stdout utf8
             Text.Lazy.IO.putStr $ Builder.toLazyText $ AxCut.print $ AxCut.lower program
           Run -> do
-            program <- whole all
+            (program, _) <- whole all
             hSetEncoding stdout utf8
             AxCut.run $ AxCut.lower program
           LLVM -> do
-            program <- whole all
+            (program, lends) <- whole all
             hSetEncoding stdout utf8
-            Text.Lazy.IO.putStr $ Builder.toLazyText $ LLVM.generate machine $ AxCut.lower program
+            Text.Lazy.IO.putStr $ Builder.toLazyText $ LLVM.generate (machine lends) $ AxCut.lower program
           Native target -> do
             createDirectoryIfMissing True (dropFileName target)
             let runtime = root </> "lib" </> "hazy" </> "native" </> "libhazy_runtime.a"
             Status.status progress "Compiling" (packageName target ++ " to native code")
             case linking of
               Whole -> do
-                program <- whole all
-                emit (target ++ ".ll") $ LLVM.generate machine $ AxCut.lower program
+                (program, lends) <- whole all
+                emit (target ++ ".ll") $ LLVM.generate (machine lends) $ AxCut.lower program
                 callProcess "clang" $
                   ["-O1", "-Wno-override-module"] ++ sections ++ [target ++ ".ll", runtime] ++ strip ++ ["-o", target]
               Separate -> do
-                Sequent.Unit {own, shared} <- unit all
+                Sequent.Unit {own, shared, lends} <- unit all
                 emit (target ++ ".ll") $
                   LLVM.generateUnit
-                    machine
+                    (machine lends)
                     LLVM.Unit
                       { defined = AxCut.lowerDefinitions own,
                         shared = AxCut.lowerDefinitions shared,
@@ -496,11 +501,11 @@ main'' args = case getOpt order options args of
             createDirectoryIfMissing True (dropFileName target)
             let label = packageName (takeDirectory target) ++ " to native code"
             Status.status progress "Compiling" label
-            Sequent.Unit {own, shared} <- unit all
+            Sequent.Unit {own, shared, lends} <- unit all
             let source = dropExtension target ++ ".ll"
             emit source $
               LLVM.generateUnit
-                machine
+                (machine lends)
                 LLVM.Unit
                   { defined = AxCut.lowerDefinitions own,
                     shared = AxCut.lowerDefinitions shared,
@@ -580,7 +585,7 @@ main'' args = case getOpt order options args of
           all <- stage2 debug all
           all <- stage3 debug all
           all <- stage4 debug all
-          pure $ Sequent.generate Runtime.main all
+          pure $ Sequent.complete Runtime.main all
         -- The modules that are not a package's, as a unit to be linked with
         -- the packages.
         unit all = do
@@ -590,9 +595,15 @@ main'' args = case getOpt order options args of
           all <- stage4 debug all
           pure $ Sequent.unit [length system .. length all - 1] all
         -- What native code is generated for.
-        machine
-          | reusing = LLVM.arm64
-          | otherwise = LLVM.withoutReuse LLVM.arm64
+        -- It is given which parameters each definition only reads.
+        machine lends = lent (reused LLVM.arm64)
+          where
+            reused
+              | reusing = id
+              | otherwise = LLVM.withoutReuse
+            lent
+              | lending = LLVM.lending lends
+              | otherwise = id
         -- What has the linker leave out the code that nothing reaches. Apple's
         -- linker can do it to any object. The others do it a section at a
         -- time, so there every function is given a section of its own.

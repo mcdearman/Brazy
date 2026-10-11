@@ -8,7 +8,7 @@
 --
 -- The whole program is translated at once, and only the definitions that
 -- the one it starts at can reach are kept.
-module Sequent.FromCore (generate, definitionOf, Unit (..), unit, start) where
+module Sequent.FromCore (generate, complete, definitionOf, Unit (..), unit, start) where
 
 import Control.Monad (replicateM)
 import Control.Monad.ST (ST, runST)
@@ -70,6 +70,7 @@ import qualified Semantic.Index.Type2 as Type2 (Index (..))
 import Semantic.Scope (Environment ((:+)))
 import qualified Semantic.Scope as Scope
 import Sequent.Primitive (Primitive (Field))
+import Sequent.Borrow (Lending, lending)
 import Sequent.Hoist (hoist)
 import Sequent.Inline (inline)
 import qualified Sequent.Uncurry as Uncurry (rewrite, shape, split, whole)
@@ -92,13 +93,24 @@ import Sequent.Tree
 -- |
 -- The program that runs a definition, which must be an action.
 generate :: Global.Global -> Vector Core.Module -> Program
-generate entry modules =
-  Program
-    { definitions = reach Map.empty (globals (start entry)),
-      entry = start entry
-    }
+generate entry modules = fst (complete entry modules)
+
+-- |
+-- The same, with which parameters each definition only reads, for where
+-- native code is generated: see "Sequent.Borrow".
+complete :: Global.Global -> Vector Core.Module -> (Program, Global.Global -> Maybe Lending)
+complete entry modules =
+  ( Program
+      { definitions = reach Map.empty (globals (start entry)),
+        entry = start entry
+      },
+    lends
+  )
   where
-    find = definitionOf modules
+    (family, lends) = tablesOf modules
+    find global
+      | Just found <- family (top global) >>= Map.lookup global = found
+      | otherwise = error $ "undefined global: " ++ Runtime.showGlobal global
     reach :: Map Global.Global Producer -> Set Global.Global -> Map Global.Global Producer
     reach known wanted = case Set.minView (Set.filter (`Map.notMember` known) wanted) of
       Nothing -> known
@@ -133,7 +145,13 @@ top global@Global.Global {name} = global {Global.name = Text.takeWhile (/= separ
 -- is only made when something of the module is asked for: making it has the
 -- module checked, and most of a program's packages are never used.
 familyOf :: Vector Core.Module -> Global.Global -> Maybe (Map Global.Global Producer)
-familyOf modules = family
+familyOf modules = fst (tablesOf modules)
+
+
+tablesOf ::
+  Vector Core.Module ->
+  (Global.Global -> Maybe (Map Global.Global Producer), Global.Global -> Maybe Lending)
+tablesOf modules = (family, lends)
   where
     pre = precontext modules
     -- What each definition is as it comes from Core.
@@ -202,6 +220,16 @@ familyOf modules = family
           let stronger = simplify . strengthen 3 demanded acts
            in Just (Map.mapWithKey settle (Map.map stronger (finish (lifted global found))))
       | otherwise = Map.lookup path settled >>= Map.lookup global
+    -- Which parameters each only reads. This is also done twice over, so
+    -- that a function that passes a parameter on to one that only reads it
+    -- is found to only read it too.
+    reading others =
+      let table = Map.map (Map.map (Map.mapWithKey (lending others))) settled
+       in \global@Global.Global {path} ->
+            if null (Runtime.definition (top global))
+              then Map.lookup path table >>= Map.lookup (top global) >>= Map.lookup global >>= id
+              else family (top global) >>= Map.lookup global >>= lending (const Nothing) global
+    lends = reading (reading (const Nothing))
 
 -- |
 -- The statement that runs an action and ends the program.
@@ -217,17 +245,21 @@ data Unit = Unit
     own :: Map Global.Global Producer,
     -- | The definitions that are made where they are used, which another
     -- unit may have made as well.
-    shared :: Map Global.Global Producer
+    shared :: Map Global.Global Producer,
+    -- | Which parameters a definition only reads, whether it is this
+    -- unit's or another's: see "Sequent.Borrow". A unit that calls a
+    -- definition and the unit that has it are told the same.
+    lends :: Global.Global -> Maybe Lending
   }
 
 -- |
 -- The modules at some places among all of the modules, as a unit. What they
 -- use of other modules is left as names.
 unit :: [Int] -> Vector Core.Module -> Unit
-unit indexes modules = Unit {own, shared = reach Map.empty (globals (Map.elems own))}
+unit indexes modules = Unit {own, shared = reach Map.empty (globals (Map.elems own)), lends}
   where
     pre = precontext modules
-    family = familyOf modules
+    (family, lends) = tablesOf modules
     -- The names of every definition at the top of the unit's modules.
     names = do
       index <- indexes

@@ -13,11 +13,14 @@
 -- layouts are written out in @runtime/native/src/lib.rs@, which has to agree
 -- with what is here.
 --
--- Nothing is freed yet. Counting references is a later milestone.
+-- A function owns what it is given, and each value in the row is a
+-- reference it has to give up. The exception is a value that is lent: see
+-- 'lentValue'.
 module LLVM.FromAxCut
   ( Target (..),
     arm64,
     withoutReuse,
+    lending,
     generate,
     generateBody,
     generateDefinitions,
@@ -37,7 +40,7 @@ import AxCut.Tree
   )
 import Control.Monad.ST (ST, runST)
 import Data.Char (isAlphaNum, isAscii, ord)
-import Data.Foldable (toList)
+import Data.Foldable (for_, toList)
 import Data.List (intersperse)
 import Data.Map (Map)
 import qualified Data.Map as Map
@@ -65,11 +68,20 @@ data Target = Target
     -- | Whether a constructed value is built in the place of one that was
     -- just taken apart. This is here so that it can be turned off, to see
     -- what it is worth.
-    reuse :: !Bool
+    reuse :: !Bool,
+    -- | For a definition that is a function, which of its parameters it
+    -- only reads, if any. Such a function has a second entry that takes
+    -- those lent.
+    lends :: Global -> Maybe [Bool]
   }
 
 arm64 :: Target
-arm64 = Target {registers = 8, reuse = True}
+arm64 = Target {registers = 8, reuse = True, lends = const Nothing}
+
+-- |
+-- A target whose functions take lent the parameters they only read.
+lending :: (Global -> Maybe [Bool]) -> Target -> Target
+lending lends target = target {lends}
 
 -- |
 -- A target that never builds a value in the place of another.
@@ -141,7 +153,17 @@ data State s = State
     -- is generated is called by it.
     scope :: !Builder,
     -- | The names that have been given to functions.
-    taken :: !(STRef s (Set Lazy.Text.Text))
+    taken :: !(STRef s (Set Lazy.Text.Text)),
+    -- | The values that keep alive what a function was lent: the consumer
+    -- of its result, and every object made that holds one of these.
+    holders :: !(STRef s (Set Lazy.Text.Text)),
+    -- | What each object that was made holds.
+    captures :: !(STRef s (Map Lazy.Text.Text [Lazy.Text.Text])),
+    -- | The definition each value that is one stands for.
+    standing :: !(STRef s (Map Lazy.Text.Text Global)),
+    -- | The definitions whose second entry is called, and how many
+    -- arguments it is called with.
+    called :: !(STRef s (Map Global Int))
   }
 
 generate' ::
@@ -156,9 +178,36 @@ generate' shape target defined shared start = do
   extra <- newSTRef mempty
   mentioned <- newSTRef Set.empty
   taken <- newSTRef Set.empty
-  let state = State {target, counter, extra, mentioned, scope = fromString "entry", taken}
-      global linkage (name, object@Object {kind}) = do
-        function state {scope = symbol name} (symbol name <> fromString ".code") (comment name) Nothing object
+  holders <- newSTRef Set.empty
+  captures <- newSTRef Map.empty
+  standing <- newSTRef Map.empty
+  called <- newSTRef Map.empty
+  let state =
+        State {target, counter, extra, mentioned, scope = fromString "entry", taken, holders, captures, standing, called}
+      global linkage (name, object@Object {kind, parameters}) = do
+        function
+          state {scope = symbol name}
+          (symbol name <> fromString ".code")
+          (comment name)
+          Nothing
+          []
+          "internal "
+          object
+        -- The entry that takes lent what the function only reads. It is
+        -- seen from wherever the definition is.
+        case lends target name of
+          Just lent
+            | or lent,
+              length lent + 1 == length parameters ->
+                function
+                  state {scope = symbol name}
+                  (symbol name <> fromString ".lent")
+                  (comment name)
+                  Nothing
+                  lent
+                  linkage
+                  object
+          _ -> pure ()
         pure $
           mconcat
             [ quoted (symbol name),
@@ -179,13 +228,27 @@ generate' shape target defined shared start = do
     Nothing -> pure mempty
   extra <- readSTRef extra
   mentioned <- readSTRef mentioned
+  called <- readSTRef called
   -- What is used and is not here is some other unit's.
   let elsewhere = do
         name <- Set.toList mentioned
         if Map.member name defined || Map.member name shared
           then []
           else [quoted (symbol name) <> fromString " = external global { i64, ptr }\n"]
-  pure $ mconcat [mconcat elsewhere, mconcat globals, mconcat common, body, extra]
+      entries = do
+        (name, count) <- Map.toList called
+        if Map.member name defined || Map.member name shared
+          then []
+          else
+            [ mconcat
+                [ fromString "declare tailcc void ",
+                  quoted (symbol name <> fromString ".lent"),
+                  fromString "(",
+                  commas (replicate (min count (registers target)) (fromString "i64")),
+                  fromString ")\n"
+                ]
+            ]
+  pure $ mconcat [mconcat elsewhere, mconcat entries, mconcat globals, mconcat common, body, extra]
   where
     comment global = fromString "; " <> Sequent.global global <> fromString "\n"
 
@@ -360,6 +423,36 @@ counted :: Builder -> Bool
 counted value = take 2 (Lazy.Text.unpack (toLazyText value)) == "%t"
 
 -- |
+-- A new name for a value that the function has been lent. It is not a
+-- reference the function has to give up, and it is not counted when it is
+-- copied or dropped: whoever lent it holds it for as long as the function
+-- can use it. A use that needs a reference of its own makes one first: see
+-- 'own'.
+lentLocal :: State s -> ST s Builder
+lentLocal state = do
+  next <- fresh state
+  pure $ fromString "%b" <> fromString (show next)
+
+lentValue :: Builder -> Bool
+lentValue value = take 2 (Lazy.Text.unpack (toLazyText value)) == "%b"
+
+-- |
+-- Make a reference of a value that was lent, for a use that keeps it or
+-- hands it on. For any other value this is nothing: the reference the
+-- function has is the one that is used.
+own :: Builder -> Builder
+own value
+  | lentValue value = line [fromString "call void @hazy_share(i64 ", value, fromString ")"]
+  | otherwise = mempty
+
+-- |
+-- The values that are only still held because something that was lent may
+-- depend on them. They have no name, and are given up when the function
+-- goes on to something else.
+waiting :: Environment -> (Environment, Environment)
+waiting = span (Text.null . fst)
+
+-- |
 -- Say that there are more references to a value, or fewer.
 share, erase :: Builder -> Builder
 share value
@@ -404,6 +497,15 @@ load :: State s -> Builder -> Int -> ST s (Builder, Builder)
 load state pointer index = do
   (code, place) <- slot state pointer index
   value <- local state
+  pure (code <> line [value, fromString " = load i64, ptr ", place], value)
+
+-- |
+-- Read a word out of a block that was lent. It is lent as well: the block
+-- holds it.
+loadLent :: State s -> Builder -> Int -> ST s (Builder, Builder)
+loadLent state pointer index = do
+  (code, place) <- slot state pointer index
+  value <- lentLocal state
   pure (code <> line [value, fromString " = load i64, ptr ", place], value)
 
 store :: State s -> Builder -> Int -> Builder -> ST s Builder
@@ -531,11 +633,19 @@ safepoint state roots
 -- An object may also have been given the block of a value that was taken
 -- apart, to build a value of as many fields in: see 'Token'. It is held
 -- after what the object captured.
-function :: State s -> Builder -> Builder -> Maybe Int -> Object -> ST s ()
-function state@State {target = Target {registers}, extra} name comment husk object = do
+--
+-- Some of the parameters may be lent and not owned, which is said for each
+-- in turn. What keeps those alive is the consumer of the function's result,
+-- the last parameter: the caller saw to it that it holds them.
+function :: State s -> Builder -> Builder -> Maybe Int -> [Bool] -> String -> Object -> ST s ()
+function state@State {target = Target {registers}, extra} name comment husk lent linkage object = do
   let Object {kind, captured, parameters, body} = object
   self <- local state
-  arguments <- for parameters $ \_ -> local state
+  arguments <- for (zip parameters (lent ++ repeat False)) $ \(_, only) ->
+    if only then lentLocal state else local state
+  if or lent
+    then modifySTRef' (holders state) (Set.insert (toLazyText (last arguments)))
+    else pure ()
   let (passed, spilled) = splitAt (registers - 1) arguments
       unspill = mconcat $ do
         (index, argument) <- zip [0 ..] spilled
@@ -551,14 +661,18 @@ function state@State {target = Target {registers}, extra} name comment husk obje
       (loading, held) <- load state pointer (capturesAt + length captured)
       (code, block) <- unpacked state held
       pure (loading, [(held, code)], Just (block, size))
-  check <- safepoint state (arguments ++ map snd captures ++ map fst carried)
+  -- What was lent is not handed over: it is not the function's, and whoever
+  -- lent it is reached through the consumer.
+  check <- safepoint state (filter (not . lentValue) arguments ++ map snd captures ++ map fst carried)
   body <- statement state token (zip parameters arguments ++ zip captured (map snd captures)) body
   modifySTRef' extra $ \known ->
     mconcat
       [ known,
         fromString "\n",
         comment,
-        fromString "define internal tailcc void ",
+        fromString "define ",
+        fromString linkage,
+        fromString "tailcc void ",
         quoted name,
         fromString "(",
         commas [fromString "i64 " <> argument | argument <- self : passed],
@@ -578,7 +692,7 @@ function state@State {target = Target {registers}, extra} name comment husk obje
 anonymous :: State s -> Text -> Maybe Int -> Object -> ST s Builder
 anonymous state hint husk object = do
   name <- named state hint
-  function state {scope = name} name mempty husk object
+  function state {scope = name} name mempty husk [] "internal " object
   pure name
 
 -- |
@@ -602,21 +716,108 @@ object' state hint husk object@Object {kind, captured} = do
 -- Make the environment again. This is where values are shared and erased: a
 -- value that is wanted more times than it is held is shared, and one that
 -- is held more times than it is wanted is erased.
-substitute :: Environment -> [(Text, Text)] -> (Builder, Environment)
-substitute environment pairs = (adjust, [(new, find old) | (new, old) <- pairs])
+--
+-- It is given the values that keep alive what the function was lent. One of
+-- those that is no longer wanted is not erased here, since something lent
+-- may be used after: it goes on at the front of the environment with no
+-- name, and is given up when the function goes on to something else.
+substitute :: Set Lazy.Text.Text -> Environment -> [(Text, Text)] -> (Builder, Environment)
+substitute keeping environment pairs =
+  (adjust, already ++ later ++ [(new, find old) | (new, old) <- pairs])
   where
-    held = Map.fromListWith (+) [(name, 1 :: Int) | (name, _) <- environment]
+    (already, named') = waiting environment
+    held = Map.fromListWith (+) [(name, 1 :: Int) | (name, _) <- named']
     wanted = Map.fromListWith (+) [(old, 1 :: Int) | (_, old) <- pairs]
-    find old = case lookup old environment of
+    find old = case lookup old named' of
       Just value -> value
       Nothing -> error $ unpack old ++ " is not in the environment"
-    adjust = mconcat $ do
+    changes = do
       (name, have) <- Map.toList held
-      let want = Map.findWithDefault 0 name wanted
-          value = find name
-      if want >= have
-        then replicate (want - have) (share value)
-        else replicate (have - want) (erase value)
+      pure (find name, Map.findWithDefault 0 name wanted - have)
+    kept value = Set.member (toLazyText value) keeping
+    adjust = mconcat $ do
+      (value, more) <- changes
+      if more >= 0
+        then replicate more (share value)
+        else if kept value then [] else replicate (negate more) (erase value)
+    later = do
+      (value, more) <- changes
+      if more < 0 && kept value then replicate (negate more) (Text.empty, value) else []
+
+-- |
+-- Note what an object that was just made holds. If it holds something that
+-- keeps alive what the function was lent, then so does it.
+remember :: State s -> Builder -> [Builder] -> ST s ()
+remember state made held = do
+  let texts = map toLazyText held
+  modifySTRef' (captures state) (Map.insert (toLazyText made) texts)
+  keeping <- readSTRef (holders state)
+  if any (`Set.member` keeping) texts
+    then modifySTRef' (holders state) (Set.insert (toLazyText made))
+    else pure ()
+
+-- |
+-- Whether one of some objects holds a value, itself or through an object it
+-- holds, going by what each was made holding.
+holds :: Map Lazy.Text.Text [Lazy.Text.Text] -> Set Lazy.Text.Text -> [Lazy.Text.Text] -> Lazy.Text.Text -> Bool
+holds made seen objects value = case objects of
+  [] -> False
+  first : rest
+    | Set.member first seen -> holds made seen rest value
+    | otherwise ->
+        let held = Map.findWithDefault [] first made
+         in value `elem` held || holds made (Set.insert first seen) (held ++ rest) value
+
+-- |
+-- Call a function with its arguments, the last of which is the consumer of
+-- its result. It is given what has to be given up first.
+--
+-- If the function is a definition that only reads some of its parameters,
+-- and each argument for one of those can be lent, the entry that takes them
+-- lent is gone to. An argument can be lent when something keeps it alive
+-- until the function is done, which has to be the consumer that is passed,
+-- since nothing else is left of the caller: the consumer holds the same
+-- value, or, for a value the caller was lent itself, holds what keeps that
+-- alive. A value that is never counted can always be lent.
+call :: State s -> Builder -> Builder -> [Builder] -> ST s Builder
+call state@State {target} first callee arguments = do
+  standing' <- readSTRef (standing state)
+  keeping <- readSTRef (holders state)
+  made <- readSTRef (captures state)
+  let consumer = last arguments
+      given = init arguments
+      found = do
+        global <- Map.lookup (toLazyText callee) standing'
+        lent <- lends target global
+        if or lent && length lent == length given then Just (global, lent) else Nothing
+      -- What is done to an argument to lend it, if it can be lent.
+      lend argument
+        | lentValue argument = if Set.member (toLazyText consumer) keeping then Just mempty else Nothing
+        | not (counted argument) = Just mempty
+        -- The consumer holds it too, so the caller's reference is not the
+        -- last, and is given up.
+        | holds made Set.empty [toLazyText consumer] (toLazyText argument) = Just (erase argument)
+        | otherwise = Nothing
+      prepare (only, argument) = if only then lend argument else Just (own argument)
+  case found of
+    Just (global, lent)
+      | Just prepared <- traverse prepare (zip lent given) -> do
+          modifySTRef' (called state) (Map.insert global (length arguments + 1))
+          modifySTRef' (mentioned state) (Set.insert global)
+          before <- local state
+          more <- local state
+          pure $
+            mconcat
+              [ mconcat prepared,
+                first,
+                line [before, fromString " = load i64, ptr @hazy_lent"],
+                line [more, fromString " = add i64 ", before, fromString ", 1"],
+                line [fromString "store i64 ", more, fromString ", ptr @hazy_lent"],
+                enter state (quoted (symbol global <> fromString ".lent")) (callee : arguments)
+              ]
+    _ -> do
+      code <- invoke state callee arguments
+      pure $ foldMap own (callee : given) <> first <> code
 
 -- |
 -- Whether a value is known, where the program is compiled, to be a number
@@ -637,23 +838,88 @@ isWord value = case Lazy.Text.unpack (toLazyText value) of
 --
 -- A block that was kept back may go with it, as it may with any consumer:
 -- the first function takes it last, and the object holds it last.
-continuation :: State s -> Text -> Maybe Int -> Object -> ST s (Builder, Builder)
-continuation outer@State {target = Target {registers}, extra} hint husk Object {captured, parameters, body} = do
+--
+-- It is also given what was forced and what the consumer captures, as they
+-- are where the consumer is made, so that what is known there of what holds
+-- what is still known inside it. An object that holds what was forced holds
+-- the value too: either they are the same, or the one is a thunk that has
+-- been evaluated and now holds the other. That is what lets the value be
+-- lent to a function that is called with such an object as its consumer.
+--
+-- Some of what the consumer would capture may have been lent to the
+-- function it is made in. The consumer as an object has to own what it
+-- holds. But when the first function is entered at once, nothing is held by
+-- anything new, and what was lent can stay lent as long as what keeps it
+-- alive is passed along too. Then there is a third function, the first over
+-- again taking those lent, which is what is entered at once: its name is
+-- the last thing given back.
+continuation ::
+  State s -> Text -> Maybe Int -> Builder -> [Builder] -> Object -> ST s (Builder, Builder, Maybe Builder)
+continuation outer@State {target = Target {registers}, extra} hint husk forced outside object = do
+  let Object {captured, parameters, body} = object
   entry <- named outer hint
+  keeping <- readSTRef (holders outer)
   let direct = entry <> fromString ".direct"
       names = parameters ++ captured
       state = outer {scope = entry}
-  named' <- for names $ \_ -> local state
-  kept <- for husk $ \size -> do
-    block <- local state
-    pure (block, size)
-  let arguments = named' ++ map fst (toList kept)
-      (passed, spilled) = splitAt registers arguments
-      unspill = mconcat $ do
-        (index, argument) <- zip [0 ..] spilled
-        pure $ line [argument, fromString " = load i64, ptr ", spill index]
-  check <- safepoint state arguments
-  body <- statement state kept (zip names named') body
+      lent = map lentValue (forced : outside)
+      kept' value = Set.member (toLazyText value) keeping
+      -- The function that is entered with the value and what was captured,
+      -- given which of those it takes lent.
+      entered name only = do
+        named' <- for (zip names (only ++ repeat False)) $ \(_, flag) ->
+          if flag then lentLocal state else local state
+        made <- readSTRef (captures outer)
+        let inside = zip outside (map toLazyText (drop (length parameters) named'))
+            here text =
+              [new | (old, new) <- inside, toLazyText old == text]
+                ++ [toLazyText value | text == toLazyText forced, value <- take 1 named']
+        for_ inside $ \(old, new) -> do
+          case Map.lookup (toLazyText old) made of
+            Just held -> modifySTRef' (captures outer) (Map.insert new (concatMap here held))
+            Nothing -> pure ()
+          if or only && kept' old
+            then modifySTRef' (holders outer) (Set.insert new)
+            else pure ()
+          -- What was lent outside is kept alive by whatever kept it alive
+          -- there, whether it comes in lent or owned.
+          if kept' old
+            then
+              modifySTRef' (captures outer) $
+                Map.insertWith (++) new $
+                  [toLazyText value | (value, was) <- zip named' (forced : outside), lentValue was]
+            else pure ()
+        kept <- for husk $ \size -> do
+          block <- local state
+          pure (block, size)
+        let arguments = named' ++ map fst (toList kept)
+            (passed, spilled) = splitAt registers arguments
+            unspill = mconcat $ do
+              (index, argument) <- zip [0 ..] spilled
+              pure $ line [argument, fromString " = load i64, ptr ", spill index]
+        check <- safepoint state (filter (not . lentValue) arguments)
+        body <- statement state kept (zip names named') body
+        modifySTRef' extra $ \known ->
+          mconcat
+            [ known,
+              fromString "\ndefine internal tailcc void ",
+              quoted name,
+              fromString "(",
+              commas [fromString "i64 " <> argument | argument <- passed],
+              fromString ") {\n",
+              unspill,
+              check,
+              body,
+              fromString "}\n"
+            ]
+  entered direct []
+  borrowed <-
+    if or lent && any kept' outside
+      then do
+        let name = direct <> fromString ".lent"
+        entered name lent
+        pure (Just name)
+      else pure Nothing
   self <- local state
   given <- for parameters $ \_ -> local state
   (code, pointer) <- address state self
@@ -666,15 +932,6 @@ continuation outer@State {target = Target {registers}, extra} hint husk Object {
     mconcat
       [ known,
         fromString "\ndefine internal tailcc void ",
-        quoted direct,
-        fromString "(",
-        commas [fromString "i64 " <> argument | argument <- passed],
-        fromString ") {\n",
-        unspill,
-        check,
-        body,
-        fromString "}\n",
-        fromString "\ndefine internal tailcc void ",
         quoted entry,
         fromString "(",
         commas [fromString "i64 " <> argument | argument <- self : given],
@@ -686,7 +943,7 @@ continuation outer@State {target = Target {registers}, extra} hint husk Object {
         enter state (quoted direct) (given ++ map snd captures ++ [block | (_, _, block) <- carried]),
         fromString "}\n"
       ]
-  pure (entry, direct)
+  pure (entry, direct, borrowed)
 
 -- |
 -- The block of a value that was just taken apart, and how many fields it
@@ -814,7 +1071,8 @@ statement state token environment body = wanted state token environment body
 wanted :: State s -> Token -> Environment -> Statement -> ST s Builder
 wanted state token environment = \case
   Substitute pairs rest -> do
-    let (adjust, after) = substitute environment pairs
+    keeping <- readSTRef (holders state)
+    let (adjust, after) = substitute keeping environment pairs
     rest <- statement state token after rest
     pure $ adjust <> rest
   -- A constructor with no fields is not made: there is one of each already.
@@ -879,7 +1137,7 @@ wanted state token environment = \case
     fields <- for (zip [fieldsAt ..] taken) $ \(index, (_, value)) -> store state block index value
     (code', value) <- word state block
     rest <- statement state token (kept ++ [(name, value)]) rest
-    pure $ mconcat [code, mconcat fields, code', rest]
+    pure $ mconcat [foldMap (own . snd) taken, code, mconcat fields, code', rest]
   Switch clauses fallback -> do
     let (kept, taken) = splitEnd 1 environment
         scrutinee = snd (head taken)
@@ -891,7 +1149,10 @@ wanted state token environment = \case
     let reusing = reuse (target state)
     clauses <- for clauses $ \(Clause tag names body) -> do
       target <- label state
-      fields <- for (zip [fieldsAt ..] names) $ \(index, _) -> load state pointer index
+      -- What is read out of a value that was lent is lent too, and the
+      -- value is not given up: nothing below counts it.
+      fields <- for (zip [fieldsAt ..] names) $ \(index, _) ->
+        if lentValue scrutinee then loadLent state pointer index else load state pointer index
       let size = length names
       -- The fields are read, and then the value they were in is given up.
       -- If a value of the same size is built next, its block is kept back
@@ -973,13 +1234,25 @@ wanted state token environment = \case
   -- the consumer is never made.
   New name object@Object {kind = Closure, method = Return, captured, parameters = [_]} (Substitute pairs Force)
     | (kept, taken) <- splitEnd (length captured) environment,
-      (adjust, [(_, consumer), (_, value)]) <- substitute (kept ++ [(name, unmade)]) pairs,
+      (_, [(_, consumer), (_, forced)]) <- snd . waiting <$> substitute Set.empty (kept ++ [(name, unmade)]) pairs,
       toLazyText consumer == toLazyText unmade -> do
-        (entry, direct) <- continuation state name (fmap snd token) object
-        let captures = map snd taken
+        (entry, direct, borrowed) <- continuation state name (fmap snd token) forced (map snd taken) object
+        keeping <- readSTRef (holders state)
+        let (adjust, after) = substitute keeping (kept ++ [(name, unmade)]) pairs
+            (late, named') = waiting after
+            value = snd (last named')
+            captures = map snd taken
+            -- What was lent has to be owned by whoever goes on from here,
+            -- unless it goes on lent. Then what was only held for its sake
+            -- can go.
+            owning = foldMap own (value : captures)
             husks = map fst (toList token)
             held = length captured + length husks
-            fast = enter state (quoted direct) (value : captures ++ husks)
+            fast = case borrowed of
+              Just lent ->
+                foldMap (erase . snd) late <> enter state (quoted lent) (value : captures ++ husks)
+              Nothing ->
+                owning <> foldMap (erase . snd) late <> enter state (quoted direct) (value : captures ++ husks)
         if isWord value
           then pure $ adjust <> fast
           else do
@@ -1018,12 +1291,14 @@ wanted state token environment = \case
                   quick <> fromString ":\n",
                   fast,
                   slow <> fromString ":\n",
+                  owning,
                   code,
                   code',
                   line [fromString "store ptr ", quoted entry, fromString ", ptr ", place],
                   mconcat stores,
                   mconcat carried,
                   code'',
+                  foldMap (erase . snd) late,
                   enter state (fromString "@hazy_force") [made, value]
                 ]
     where
@@ -1042,22 +1317,34 @@ wanted state token environment = \case
         (packing, held) <- packed state husk
         carried <- store state block (capturesAt + length captured) held
         (code', value) <- word state block
+        remember state value (map snd taken)
         rest <- statement state Nothing (kept ++ [(name, value)]) rest
-        pure $ mconcat [code, mconcat captures, packing, carried, code', rest]
+        pure $ mconcat [foldMap (own . snd) taken, code, mconcat captures, packing, carried, code', rest]
   New name object@Object {captured} rest -> do
     let (kept, taken) = splitEnd (length captured) environment
     (code, block) <- object' state name Nothing object
     captures <- for (zip [capturesAt ..] taken) $ \(index, (_, value)) -> store state block index value
     (code', value) <- word state block
+    remember state value (map snd taken)
     rest <- statement state token (kept ++ [(name, value)]) rest
-    pure $ mconcat [code, mconcat captures, code', rest]
-  Invoke method -> case (method, map snd environment) of
-    (Return, [value, consumer]) -> invoke state consumer [value]
-    (Apply, values@(_ : _ : _)) -> invoke state (last values) (init values)
-    _ -> error $ "bad invoke " ++ show method
-  Force -> case map snd environment of
-    [consumer, value] -> pure $ enter state (fromString "@hazy_force") [consumer, value]
-    _ -> error "force with the wrong environment"
+    pure $ mconcat [foldMap (own . snd) taken, code, mconcat captures, code', rest]
+  -- The function goes on to something else. What it gives away it has to
+  -- own, and what was only held for the sake of something lent is given up.
+  Invoke method -> do
+    let (late, named') = waiting environment
+        first = foldMap (erase . snd) late
+    case (method, map snd named') of
+      (Return, [value, consumer]) -> do
+        code <- invoke state consumer [value]
+        pure $ own value <> first <> code
+      (Apply, values@(_ : _ : _)) -> call state first (last values) (init values)
+      _ -> error $ "bad invoke " ++ show method
+  Force -> do
+    let (late, named') = waiting environment
+    case map snd named' of
+      [consumer, value] ->
+        pure $ own value <> foldMap (erase . snd) late <> enter state (fromString "@hazy_force") [consumer, value]
+      _ -> error "force with the wrong environment"
   Literal name literal rest -> do
     (code, value) <- case literal of
       Literal.Int int -> pure (mempty, number (immediate (toInteger int)))
@@ -1098,6 +1385,7 @@ wanted state token environment = \case
   Global name global rest -> do
     modifySTRef' (mentioned state) (Set.insert global)
     let value = fromString "ptrtoint (ptr " <> quoted (symbol global) <> fromString " to i64)"
+    modifySTRef' (standing state) (Map.insert (toLazyText value) global)
     statement state token (environment ++ [(name, value)]) rest
   -- A primitive borrows its arguments, which are given up afterwards.
   Primitive name primitive rest -> do
@@ -1151,7 +1439,7 @@ wanted state token environment = \case
           pure $ mconcat captures <> rest
     filled <- fill taken (zip objects made)
     rest <- statement state token (kept ++ new) rest
-    pure $ mconcat [foldMap fst made, filled, rest]
+    pure $ mconcat [foldMap (own . snd) taken, foldMap fst made, filled, rest]
   Abort -> pure $ line [fromString "call void @hazy_abort()"] <> line [fromString "unreachable"]
   -- The program is over: whatever is still held is given up.
   Halt -> pure $ foldMap (erase . snd) environment <> line [fromString "ret void"]
@@ -1250,6 +1538,7 @@ runtime =
   """
   @hazy_gc_pending = external global i64
   @hazy_reused = external global i64
+  @hazy_lent = external global i64
   @hazy_nullary = external global [8192 x i64]
   declare ptr @hazy_alloc(i64, i64)
   declare void @hazy_free(i64)

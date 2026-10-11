@@ -532,7 +532,36 @@ Left:
       on the way back up in the block of the one it took apart on the way
       down: 271,507 of them, and 2,898,613 blocks in all where it was
       3,170,116
-- [ ] Borrow inference
+- [x] Borrowing. A function that only reads a parameter can take it lent:
+      it counts nothing for it, or for what it reads out of it, and whoever
+      lent it goes on holding it. Which parameters those are is worked out
+      on the sequent calculus (`compiler/Sequent/Borrow.hs`): the ones that
+      hold a value and are only taken apart, given to a primitive, or passed
+      on to a function that only reads them too. Such a definition has a
+      second entry, called by its name and then `lent`, that takes them so
+      (`compiler/LLVM/FromAxCut.hs`). Inside it a lent value is copied and
+      dropped for nothing, and a use that has to own it, such as keeping it
+      in a constructor or giving it back, shares it there and then.
+
+      A call goes to the second entry only when something keeps each such
+      argument alive until the function is done. Nothing is left of a caller
+      but the consumer it passes, so that has to be what does: it holds the
+      value, or holds the thunk the value was forced out of, or, for what
+      the caller was lent itself, holds what keeps that alive. So lending
+      never makes a value live longer than it did; a caller that has no
+      more use for a value hands it over as before, to be freed or built on.
+
+      A new benchmark, `member`, searches a tree of 20,000 numbers 200,000
+      times while keeping it. All 3,003,785 steps down the tree are lent,
+      and it runs in about 0.026 seconds where it took 0.041 (on x86-64).
+      `--no-lend` switches lending off. A test, `test/run/lend`, has the
+      uses that have to own what was lent
+
+      What it does not do: a value that is lent and then held by an object
+      that is made, such as the consumer of a call that is not the last
+      thing a function does, is shared for it. A function that is lent to has
+      two copies of its code where it had one. And the LLVM page of `:ir`
+      shows a definition without its second entry
 - [x] Functions that are defined inside a definition and use nothing of
       where they are become definitions of their own, at the top of the
       program (`compiler/Sequent/Hoist.hs`). A `go` in a `where` is then made
