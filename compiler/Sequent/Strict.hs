@@ -31,10 +31,14 @@
 -- been forced is written from there on as the name of its value, so that
 -- what is kept and passed on is the value and not the thunk it was.
 --
--- A function is called the same way as before. It still forces what it is
--- given, which costs a test when that is a value, so a caller that knows
--- nothing of the function and passes thunks is as right as it was.
-module Sequent.Strict (Demand, demand, strengthen) where
+-- A function is called the same way as before, and still forces what it is
+-- given, so a caller that knows nothing of the function and passes thunks
+-- is as right as it was. The one exception is the entry of a definition
+-- that takes every argument together ('Sequent.Uncurry'). Nothing can get
+-- to that but a call that names the definition, and every such call is
+-- changed here, so that entry takes what it is certain to force as values
+-- and does not force them: see 'valued'.
+module Sequent.Strict (Demand, demand, strengthen, valued) where
 
 import Control.Monad.ST (ST, runST)
 import Data.Map (Map)
@@ -174,6 +178,17 @@ demand others acting self = \case
   _ -> Nothing
 
 -- |
+-- A function that takes as values the parameters it is certain to force.
+-- This is only for a function whose every caller is known to evaluate them
+-- first: it no longer forces them itself.
+valued :: Demand -> Producer -> Producer
+valued strict = \case
+  Function parameters result body ->
+    let taken (wanted, binder) = if wanted then binder {strategy = ByValue} else binder
+     in Function (map taken (zip strict parameters)) result body
+  other -> other
+
+-- |
 -- Where something is: the names that hold a value, the names that are
 -- written as another, and what the consumers that have a name are certain
 -- to force.
@@ -237,6 +252,17 @@ strengthen' time known definition = do
                 let binder = Binder {name = new, strategy = ByValue}
                 pure (Variable new, Cut (Variable (current scope variable)) . Force . MuTilde binder)
           (True, Thunk result body) -> do
+            new <- fresh
+            body <- statement scope {consumers = Map.insert result none (consumers scope)} body
+            let binder = Binder {name = new, strategy = ByValue}
+            pure (Variable new, Cut (Mu result body) . MuTilde binder)
+          -- A definition that is not a function may not be evaluated yet.
+          (True, Global global)
+            | Nothing <- demands known global -> do
+                new <- fresh
+                let binder = Binder {name = new, strategy = ByValue}
+                pure (Variable new, Cut (Global global) . Force . MuTilde binder)
+          (True, Mu result body) -> do
             new <- fresh
             body <- statement scope {consumers = Map.insert result none (consumers scope)} body
             let binder = Binder {name = new, strategy = ByValue}
