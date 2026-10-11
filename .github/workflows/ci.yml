@@ -52,3 +52,55 @@ jobs:
 
       - name: Test
         run: make test
+
+  # The same on the other systems. Master does not wait for these: it waits
+  # for the one above.
+  others:
+    name: Test (${{ matrix.name }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux
+            os: ubuntu-24.04
+          - name: Windows
+            os: windows-2025
+    defaults:
+      run:
+        shell: bash
+    steps:
+      # The build and the tests are shell scripts, so their lines end the
+      # same way on Windows as anywhere. The file .gitattributes says so.
+      - uses: actions/checkout@v4
+
+      - uses: haskell-actions/setup@v2
+        id: haskell
+        with:
+          ghc-version: "9.12.2"
+          cabal-version: "3.14"
+
+      - uses: oven-sh/setup-bun@v2
+
+      - name: Restore what cabal built before
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ steps.haskell.outputs.cabal-store }}
+            dist-newstyle
+          key: cabal-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('hazy.cabal', 'cabal.project') }}-${{ github.sha }}
+          restore-keys: |
+            cabal-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('hazy.cabal', 'cabal.project') }}-
+            cabal-${{ runner.os }}-${{ runner.arch }}-
+
+      - name: Build
+        run: |
+          cabal update
+          make
+
+      - name: Check that Hazy resolves its own source
+        run: .dist/bin/hazy -XStableImports --resolve compiler
+
+      - name: Test
+        run: make test

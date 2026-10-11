@@ -24,14 +24,14 @@ ARGS ?= --repl
 all: $(BUILT)
 
 $(BUILT): $(SOURCES)
-	tools/build.sh $(DIST)
+	env bash tools/build.sh $(DIST)
 	@touch $@
 
 run: all
 	@$(HAZY) $(ARGS)
 
 test: all
-	tools/test.sh $(HAZY)
+	env bash tools/test.sh $(HAZY)
 
 clean:
 	rm -rf $(DIST) .test

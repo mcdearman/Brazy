@@ -29,6 +29,11 @@ library diagnostics
   hs-source-dirs:
     diagnostics
 
+  -- The C library of Windows lacks a function that diagnose uses.
+  if os(windows)
+    c-sources:
+      diagnostics/wcwidth.c
+
   default-language: Haskell2010
 
 library viewer

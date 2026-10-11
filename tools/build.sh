@@ -21,8 +21,9 @@ mkdir -p $PACKAGE
 # Compile the compiler
 cabal build hazy
 
-# Get the compiler from Cabal's store
-HAZY=$(cabal list-bin hazy)
+# Get the compiler from Cabal's store. Where it is is the last line Cabal
+# prints: it may say other things first, when it fetches what it builds from.
+HAZY=$(cabal list-bin hazy | tail -n 1)
 
 # Copy the compiler while preserving the file extension
 # It is copied beside its place and then moved there, so that the old file is
@@ -34,7 +35,13 @@ mv -f $DIST/bin/$(basename $HAZY).new $DIST/bin/$(basename $HAZY)
 # Compile the native runtime
 (cd runtime/native && cargo build --release --quiet)
 mkdir -p $DIST/lib/hazy/native
-cp runtime/native/target/release/libhazy_runtime.a $DIST/lib/hazy/native/libhazy_runtime.a
+# The library has one name where the linker is Microsoft's and another
+# everywhere else.
+if [ -f runtime/native/target/release/hazy_runtime.lib ]; then
+    cp runtime/native/target/release/hazy_runtime.lib $DIST/lib/hazy/native/hazy_runtime.lib
+else
+    cp runtime/native/target/release/libhazy_runtime.a $DIST/lib/hazy/native/libhazy_runtime.a
+fi
 
 # Copy and Compile the runtime
 mkdir $PACKAGE/hazy-internal

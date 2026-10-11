@@ -26,7 +26,7 @@ import qualified Generate.Go.Module as Stage5
 import qualified Generate.Mangle as Mangle
 import qualified Javascript.Printer.Lexer as Javascript (print, run)
 import qualified AxCut.Lower as AxCut (lowerDefinitions)
-import qualified LLVM.FromAxCut as LLVM (Unit (..), arm64, generate, generateUnit, lending, withoutReuse)
+import qualified LLVM.FromAxCut as LLVM (Unit (..), arm64, generate, generateUnit, lending, windows, withoutReuse)
 import qualified Javascript.Tree.Module as Module (print)
 import Package as X (Module (Module), Package (Package))
 import qualified Package
@@ -73,7 +73,17 @@ import System.FilePath
     takeFileName,
     (</>),
   )
-import System.IO (IOMode (..), hClose, hSetEncoding, openFile, stdout, utf8)
+import System.IO
+  ( IOMode (..),
+    hClose,
+    hSetEncoding,
+    hSetNewlineMode,
+    noNewlineTranslation,
+    openFile,
+    stderr,
+    stdout,
+    utf8,
+  )
 import System.Info (os)
 import System.Process (callProcess)
 import System.IO.Unsafe (unsafeInterleaveIO, unsafePerformIO)
@@ -378,6 +388,10 @@ main'' args = case getOpt order options args of
     exitFailure
   (_, _ : _, _) -> error "flags not processed"
   (flags, [], []) -> do
+    -- What is printed ends its lines the same way on every system, so that
+    -- it can be compared with what is expected.
+    hSetNewlineMode stdout noNewlineTranslation
+    hSetNewlineMode stderr noNewlineTranslation
     let Execute
           { linking,
             reusing,
@@ -468,14 +482,18 @@ main'' args = case getOpt order options args of
             Text.Lazy.IO.putStr $ Builder.toLazyText $ LLVM.generate (machine lends) $ AxCut.lower program
           Native target -> do
             createDirectoryIfMissing True (dropFileName target)
-            let runtime = root </> "lib" </> "hazy" </> "native" </> "libhazy_runtime.a"
+            let runtime = root </> "lib" </> "hazy" </> "native" </> library
             Status.status progress "Compiling" (packageName target ++ " to native code")
             case linking of
               Whole -> do
                 (program, lends) <- whole all
                 emit (target ++ ".ll") $ LLVM.generate (machine lends) $ AxCut.lower program
                 callProcess "clang" $
-                  ["-O1", "-Wno-override-module"] ++ sections ++ [target ++ ".ll", runtime] ++ strip ++ ["-o", target]
+                  ["-O1", "-Wno-override-module"]
+                    ++ sections
+                    ++ [target ++ ".ll", runtime]
+                    ++ strip
+                    ++ ["-o", executable target]
               Separate -> do
                 Sequent.Unit {own, shared, lends} <- unit all
                 emit (target ++ ".ll") $
@@ -495,7 +513,7 @@ main'' args = case getOpt order options args of
                     ++ objects
                     ++ [runtime]
                     ++ strip
-                    ++ ["-o", target]
+                    ++ ["-o", executable target]
             Status.finished progress (packageName target)
           Object target -> do
             createDirectoryIfMissing True (dropFileName target)
@@ -596,8 +614,11 @@ main'' args = case getOpt order options args of
           pure $ Sequent.unit [length system .. length all - 1] all
         -- What native code is generated for.
         -- It is given which parameters each definition only reads.
-        machine lends = lent (reused LLVM.arm64)
+        machine lends = lent (reused base)
           where
+            base
+              | os == "mingw32" = LLVM.windows
+              | otherwise = LLVM.arm64
             reused
               | reusing = id
               | otherwise = LLVM.withoutReuse
@@ -609,12 +630,23 @@ main'' args = case getOpt order options args of
         -- time, so there every function is given a section of its own.
         -- They also keep the mathematics the runtime uses apart from the
         -- rest of C's library, and have to be asked for it.
+        -- Microsoft's linker is asked in its own words, and for the parts of
+        -- Windows that the runtime's library uses.
         strip
           | os == "darwin" = ["-Wl,-dead_strip"]
+          | os == "mingw32" =
+              ["-Wl,/OPT:REF"] ++ map ("-l" ++) ["kernel32", "ntdll", "userenv", "ws2_32", "dbghelp"]
           | otherwise = ["-Wl,--gc-sections", "-lm"]
         sections
           | os == "darwin" = []
           | otherwise = ["-ffunction-sections", "-fdata-sections"]
+        -- What a program's file is called, and the runtime's library.
+        executable target
+          | os == "mingw32" = target ++ ".exe"
+          | otherwise = target
+        library
+          | os == "mingw32" = "hazy_runtime.lib"
+          | otherwise = "libhazy_runtime.a"
         -- Where a program starts, lowered by itself.
         startProgram =
           Sequent.Program {definitions = Map.empty, entry = Sequent.start Runtime.main}
