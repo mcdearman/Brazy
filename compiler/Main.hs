@@ -74,6 +74,7 @@ import System.FilePath
     (</>),
   )
 import System.IO (IOMode (..), hClose, hSetEncoding, openFile, stdout, utf8)
+import System.Info (os)
 import System.Process (callProcess)
 import System.IO.Unsafe (unsafeInterleaveIO, unsafePerformIO)
 import Status (Status)
@@ -468,7 +469,8 @@ main'' args = case getOpt order options args of
               Whole -> do
                 program <- whole all
                 emit (target ++ ".ll") $ LLVM.generate machine $ AxCut.lower program
-                callProcess "clang" ["-O1", "-Wno-override-module", target ++ ".ll", runtime, "-o", target]
+                callProcess "clang" $
+                  ["-O1", "-Wno-override-module"] ++ sections ++ [target ++ ".ll", runtime] ++ strip ++ ["-o", target]
               Separate -> do
                 Sequent.Unit {own, shared} <- unit all
                 emit (target ++ ".ll") $
@@ -482,9 +484,13 @@ main'' args = case getOpt order options args of
                 let objects = [directory </> "native.o" | Package {root = directory} <- packages]
                 Status.status progress "Linking" target
                 callProcess "clang" $
-                  ["-O1", "-Wno-override-module", target ++ ".ll"]
+                  ["-O1", "-Wno-override-module"]
+                    ++ sections
+                    ++ [target ++ ".ll"]
                     ++ objects
-                    ++ [runtime, "-Wl,-dead_strip", "-o", target]
+                    ++ [runtime]
+                    ++ strip
+                    ++ ["-o", target]
             Status.finished progress (packageName target)
           Object target -> do
             createDirectoryIfMissing True (dropFileName target)
@@ -500,7 +506,7 @@ main'' args = case getOpt order options args of
                     shared = AxCut.lowerDefinitions shared,
                     start = Nothing
                   }
-            callProcess "clang" ["-O1", "-Wno-override-module", "-c", source, "-o", target]
+            callProcess "clang" $ ["-O1", "-Wno-override-module"] ++ sections ++ ["-c", source, "-o", target]
             Status.finished progress label
           Generate target -> do
             all <- stage1 debug all
@@ -587,6 +593,17 @@ main'' args = case getOpt order options args of
         machine
           | reusing = LLVM.arm64
           | otherwise = LLVM.withoutReuse LLVM.arm64
+        -- What has the linker leave out the code that nothing reaches. Apple's
+        -- linker can do it to any object. The others do it a section at a
+        -- time, so there every function is given a section of its own.
+        -- They also keep the mathematics the runtime uses apart from the
+        -- rest of C's library, and have to be asked for it.
+        strip
+          | os == "darwin" = ["-Wl,-dead_strip"]
+          | otherwise = ["-Wl,--gc-sections", "-lm"]
+        sections
+          | os == "darwin" = []
+          | otherwise = ["-ffunction-sections", "-fdata-sections"]
         -- Where a program starts, lowered by itself.
         startProgram =
           Sequent.Program {definitions = Map.empty, entry = Sequent.start Runtime.main}
