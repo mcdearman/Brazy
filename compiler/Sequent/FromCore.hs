@@ -72,9 +72,10 @@ import qualified Semantic.Scope as Scope
 import Sequent.Primitive (Primitive (Field))
 import Sequent.Hoist (hoist)
 import Sequent.Inline (inline)
-import qualified Sequent.Uncurry as Uncurry (rewrite, shape, split)
+import qualified Sequent.Uncurry as Uncurry (rewrite, shape, split, whole)
 import qualified Sequent.Runtime as Runtime
 import Sequent.Simplify (simplify)
+import Sequent.Strict (demand, strengthen)
 import Sequent.Tree
   ( Alternative (..),
     Binder (..),
@@ -168,7 +169,22 @@ familyOf modules = family
     improve before time =
       let improved global found = simplify (inline time (memberIn before) global found)
        in Map.map (Map.map (Map.mapWithKey improved)) before
-    family = familyIn (foldl improve finished [1 .. 3])
+    inlined = foldl improve finished [1 .. 3]
+    -- Whether calling a definition with every argument runs an action,
+    -- which it does when one of the functions it is made of takes none.
+    acts global = maybe False (elem 0) (known (Uncurry.whole global))
+    -- With what is certain to be evaluated evaluated at once. This is done
+    -- twice over as well: what a function is certain to force is worked out
+    -- from what the functions it calls were found to force the time before.
+    strict (before, others) time =
+      let demands = Map.map (Map.map (Map.mapWithKey (demand others acts))) before
+          demanded global@Global.Global {path}
+            | Just _ <- Runtime.definition (top global) =
+                memberIn before global >>= demand (const Nothing) acts global
+            | otherwise = Map.lookup path demands >>= Map.lookup (top global) >>= Map.lookup global >>= id
+          stronger found = simplify (strengthen time demanded acts found)
+       in (Map.map (Map.map (Map.map stronger)) before, demanded)
+    family = familyIn (fst (foldl strict (inlined, const Nothing) [1, 2 :: Int]))
 
 -- |
 -- The statement that runs an action and ends the program.

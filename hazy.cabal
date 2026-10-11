@@ -459,6 +459,7 @@ executable hazy
     Sequent.Printer
     Sequent.Runtime
     Sequent.Simplify
+    Sequent.Strict
     Sequent.Tree
     Sequent.Uncurry
     Status
