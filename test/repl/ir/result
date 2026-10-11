@@ -119,9 +119,26 @@ L35:
   %t32 = and i64 %t31, 15
   %t33 = sub i64 %t32, 2
   %t34 = icmp ult i64 %t33, 3
-  br i1 %t34, label %L37, label %L36
+  br i1 %t34, label %L39, label %L36
 L36:
   musttail call tailcc void @"Repl.double.k%0.direct"(i64 %t1, i64 %t2)
+  ret void
+L39:
+  %t38 = icmp eq i64 %t32, 4
+  br i1 %t38, label %L40, label %L37
+L40:
+  %t41 = getelementptr i64, ptr %t29, i64 1
+  %t42 = load i64, ptr %t41
+  %t43 = icmp slt i64 %t31, 0
+  br i1 %t43, label %L44, label %L45
+L44:
+  call void @hazy_share(i64 %t42)
+  br label %L46
+L45:
+  call void @hazy_open(i64 %t1)
+  br label %L46
+L46:
+  musttail call tailcc void @"Repl.double.k%0.direct"(i64 %t42, i64 %t2)
   ret void
 L37:
   %t23 = call ptr @hazy_alloc(i64 3, i64 524289)

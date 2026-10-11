@@ -833,8 +833,8 @@ isWord value = case Lazy.Text.unpack (toLazyText value) of
 -- forced, as two functions: one that is entered with the value and what
 -- the consumer captured, and one for the consumer as an object, which
 -- reads what it captured and enters the first. When what is forced turns
--- out to be a value already, the first is entered at once and the consumer
--- is never made.
+-- out to be a value already, or a thunk that has been evaluated already,
+-- the first is entered at once and the consumer is never made.
 --
 -- A block that was kept back may go with it, as it may with any consumer:
 -- the first function takes it last, and the object holds it last.
@@ -1248,11 +1248,14 @@ wanted state token environment = \case
             owning = foldMap own (value : captures)
             husks = map fst (toList token)
             held = length captured + length husks
-            fast = case borrowed of
+            -- Go on with a value, given what makes what goes with it owned
+            -- if it has to be.
+            onward first owned = case borrowed of
               Just lent ->
-                foldMap (erase . snd) late <> enter state (quoted lent) (value : captures ++ husks)
+                foldMap (erase . snd) late <> enter state (quoted lent) (first : captures ++ husks)
               Nothing ->
-                owning <> foldMap (erase . snd) late <> enter state (quoted direct) (value : captures ++ husks)
+                owned <> foldMap (erase . snd) late <> enter state (quoted direct) (first : captures ++ husks)
+            fast = onward value owning
         if isWord value
           then pure $ adjust <> fast
           else do
@@ -1274,6 +1277,37 @@ wanted state token environment = \case
             boxed <- label state
             quick <- label state
             slow <- label state
+            -- A thunk that has been evaluated already has its value read
+            -- out of it here, and the consumer is not made for that either.
+            over <- local state
+            delayed' <- label state
+            done <- label state
+            (reading, result) <- load state pointer 1
+            fixed <- local state
+            lasting <- label state
+            counting <- label state
+            ready <- label state
+            let taking
+                  -- A thunk that was lent goes on holding its value. The
+                  -- value is lent as well, if what goes on can take it so.
+                  | lentValue value = case borrowed of
+                      Just _ -> mempty
+                      Nothing -> share result
+                  -- Otherwise the thunk is given up, as forcing it would:
+                  -- a definition at the top keeps its value for good, and
+                  -- any other gives it over if this was the last reference.
+                  | otherwise =
+                      mconcat
+                        [ line [fixed, fromString " = icmp slt i64 ", head', fromString ", 0"],
+                          line [fromString "br i1 ", fixed, fromString ", label %", lasting, fromString ", label %", counting],
+                          lasting <> fromString ":\n",
+                          share result,
+                          line [fromString "br label %", ready],
+                          counting <> fromString ":\n",
+                          open value,
+                          line [fromString "br label %", ready],
+                          ready <> fromString ":\n"
+                        ]
             pure $
               mconcat
                 [ adjust,
@@ -1287,9 +1321,16 @@ wanted state token environment = \case
                   -- The three kinds of thunk are 2, 3 and 4.
                   line [offset, fromString " = sub i64 ", kind', fromString ", 2"],
                   line [thunk, fromString " = icmp ult i64 ", offset, fromString ", 3"],
-                  line [fromString "br i1 ", thunk, fromString ", label %", slow, fromString ", label %", quick],
+                  line [fromString "br i1 ", thunk, fromString ", label %", delayed', fromString ", label %", quick],
                   quick <> fromString ":\n",
                   fast,
+                  delayed' <> fromString ":\n",
+                  line [over, fromString " = icmp eq i64 ", kind', fromString ", 4"],
+                  line [fromString "br i1 ", over, fromString ", label %", done, fromString ", label %", slow],
+                  done <> fromString ":\n",
+                  reading,
+                  taking,
+                  onward result (foldMap own captures),
                   slow <> fromString ":\n",
                   owning,
                   code,

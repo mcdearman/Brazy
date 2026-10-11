@@ -385,11 +385,18 @@ What it left, all three dealt with in M5:
 
 ### M5. Reuse and borrowing
 
-In progress on the `m5-reuse` branch. The first part is done: counting is in
-place and cheaper, values are reused where the code between taking one apart
-and building the next is straight, and there are measurements.
+Done, over the branches whose names start with `m5`. Counting is done in the
+program's own code, values are built in the place of ones just taken apart,
+what is certain to be evaluated is evaluated at once, a function is lent
+what it only reads, and matching looks at each value once. There are four
+benchmarks that say what each of these is worth.
 
-Done:
+What is left of the cost of laziness is what the language asks for: a lazy
+list is a thunk for each element and one for the rest. Taking that away
+means being told that something is strict, which is the first experiment
+under Track B.
+
+The first part:
 
 - [x] Counting in the program's own code. Sharing and erasing are a few
       instructions where they happen, and the runtime is called only when a
@@ -520,7 +527,7 @@ What it does not do:
 - `trace` is not counted as something that is seen, so what it prints may
   come in another order.
 
-Left:
+The rest:
 
 - [x] Reuse across calls. In `tree` a node is rebuilt only after a comparison
       and a recursive call, which are elsewhere in the code. The block that
@@ -572,12 +579,20 @@ Left:
       is the definition it is in and then every object around it, as
       `Main.count.go.k%5`. Nothing is called `closure.52` any more, and no
       two things can be called the same
-- [ ] What is left of the cost of laziness. `map` makes about nine blocks
-      for each number it maps: the cell, a thunk for `f x`, a thunk for the
-      rest of the list, and a consumer each time one of those is forced.
+- [x] Forcing a thunk that has been evaluated already makes nothing. Where
+      something is forced, the code that takes the value was entered at once
+      only when it was a value as it stood. A thunk that had been evaluated
+      went the long way: a consumer was made, and the runtime read the value
+      out and gave it to that. Now the value is read out where the forcing
+      is, and the consumer is not made. `map` allocates 2,400,950 blocks
+      where it allocated 2,601,033, and `member` 1,294,330 where it
+      allocated 1,494,354
+- [x] What is left of the cost of laziness is not for this milestone. `map`
+      makes eight blocks for each number it maps: the cell, a thunk for
+      `f x`, a thunk for the rest of the list, and what forcing those needs.
       The thunks are what a lazy list is, and only being told, with a strict
-      function or a strict field, would remove them. Still to try: forcing a
-      thunk that has been evaluated already goes the long way round
+      function or a strict field, would remove them: see "Strictness in type
+      schemes" under Track B
 - [x] Lambda lifting. A local function that does use variables of where it
       is goes to the top as well, with those variables as arguments before
       its own, and every use of it passes them. Functions defined together
@@ -588,8 +603,24 @@ Left:
       calls to them are direct. Left where they are: local values (thunks),
       and a function that uses a consumer of where it is, which cannot be
       passed as an argument
-- [ ] The rest of decision trees: tests on different variables, and on what
-      is inside a constructor
+- [x] The rest of decision trees: tests on different variables, and on what
+      is inside a constructor. Clauses were put into one test only while
+      each tested the same variable against a constructor of its own. A
+      second clause for the same constructor started again from the top,
+      and looked at the value again. Now the clauses that test a variable
+      against the same constructor share an alternative, even when they are
+      not next to each other, and what each goes on to do is tried in turn
+      inside it in the same way (`match` in `compiler/Sequent/FromCore.hs`).
+      The fields have the same names for all of them, so a next test of a
+      field, or of another argument, is one test as well. In
+      `inside (Just (x : y : _))` after `inside (Just [x])` each of the
+      three values is looked at once. A test, `test/run/patterns`, has
+      these, with arguments that must not be looked at
+
+      What it does not do: it takes the tests in the order the clauses have
+      them, and does not choose which variable is best tested first. A
+      clause that names something with `let` before its next test is tried
+      by itself from there
 
 ### M6. Bootstrapping
 
