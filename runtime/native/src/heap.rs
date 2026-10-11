@@ -201,6 +201,11 @@ struct Heap {
 #[no_mangle]
 pub static mut hazy_reused: u64 = 0;
 
+/// How many times a function was called with what it only reads lent to it.
+/// The program counts these itself.
+#[no_mangle]
+pub static mut hazy_lent: u64 = 0;
+
 static mut HEAP: Option<Heap> = None;
 
 /// Whether a collection is due. The program reads this at the start of every
@@ -526,9 +531,10 @@ pub fn finish() {
     }
     if heap.report {
         eprintln!(
-            "allocated: {}, reused: {}, collections: {}, freed by counting: {}, freed by tracing: {}",
+            "allocated: {}, reused: {}, lent: {}, collections: {}, freed by counting: {}, freed by tracing: {}",
             heap.allocated,
             unsafe { hazy_reused },
+            unsafe { hazy_lent },
             heap.collections,
             heap.counted,
             heap.traced
