@@ -32,6 +32,13 @@ class (Category a) => Arrow a where
   infixr 3 &&&
   (&&&) :: a b c -> a b c' -> a b (c, c')
 
+instance Arrow (->) where
+  arr f = f
+  first f (b, d) = (f b, d)
+  second f (d, b) = (d, f b)
+  (f *** g) (b, b') = (f b, g b')
+  (f &&& g) b = (f b, g b)
+
 newtype Kleisli m a b = Kleisli
   { runKleisli :: a -> m b
   }

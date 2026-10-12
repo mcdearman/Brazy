@@ -33,7 +33,7 @@ import qualified Semantic.Resolve.Go.Scheme as Scheme (augment, resolve)
 import qualified Semantic.Resolve.Go.Select as Select (resolve)
 import qualified Semantic.Resolve.Go.Statements as Statements (resolve)
 import {-# SOURCE #-} qualified Semantic.Resolve.Temporary.ExpressionInfix as Infix (fix, fixWith, resolve)
-import Semantic.Stage (Equal (..), Resolve)
+import Semantic.Stage (Resolve)
 import Semantic.Tree.Combinators.Inferred (Inferred (..))
 import Semantic.Tree.Expression (Explicit (..), Expression (..))
 import Syntax.Extensions (permissiveUpdates)
@@ -53,12 +53,12 @@ resolveTerm2 ::
   Term2.Index scope ->
   Reverse.List (Expression Normal Resolve scope) ->
   Expression Normal Resolve scope
+resolveTerm2 startPosition Term2.RunST Nil = RunSTAlone {startPosition}
 resolveTerm2 position index Nil = CallHead {callHead = CallHead.resolveVariable position index}
 resolveTerm2 startPosition Term2.RunST (Nil :> imperative) =
   RunST
     { startPosition,
-      imperative,
-      unsupported = Refl
+      imperative
     }
 resolveTerm2 position index (arguments :> argument) =
   Call

@@ -19,7 +19,7 @@ import Semantic.Scope as Null (Environment (..))
 import qualified Semantic.Scope as Scope
 import qualified Semantic.Shift as Shift
 import qualified Semantic.Shift0 as Shift0
-import Semantic.Stage (Check, Resolve, Unsupported)
+import Semantic.Stage (Check, Resolve)
 import Semantic.Tree.Alternative (Alternative (..))
 import Semantic.Tree.CallHead (CallHead)
 import Semantic.Tree.Combinators.Inferred (Inferred (..))
@@ -138,8 +138,14 @@ data Expression layout stage scope
       }
   | RunST
       { startPosition :: !Position,
-        imperative :: !(Expression layout stage scope),
-        unsupported :: !(Unsupported stage)
+        imperative :: !(Expression layout stage scope)
+      }
+  | -- | @runST@ with no action after it. It is not a function that can be
+    -- given anything, so this is only allowed where the checker can see
+    -- what it is given all the same, and nothing of it is left once a
+    -- program is checked.
+    RunSTAlone
+      { startPosition :: !Position
       }
   | Negate
       { startPosition :: !Position,
@@ -254,6 +260,7 @@ instance Shift.Functor (Expression layout stage) where
           right = Shift.map category right
         }
     Generalized {expression} -> Generalized {expression = Shift.map category expression}
+    RunSTAlone {startPosition} -> RunSTAlone {startPosition}
     Annotation {expression, operatorPosition, annotation, instanciation} ->
       Annotation
         { expression = Shift.map category expression,
@@ -261,11 +268,10 @@ instance Shift.Functor (Expression layout stage) where
           annotation = Shift.map category annotation,
           instanciation = Shift.map category instanciation
         }
-    RunST {startPosition, imperative, unsupported} ->
+    RunST {startPosition, imperative} ->
       RunST
         { startPosition,
-          imperative = Shift.map category imperative,
-          unsupported
+          imperative = Shift.map category imperative
         }
     Negate {startPosition, evidence, negative} ->
       Negate
@@ -318,6 +324,7 @@ instance FreeTermVariables Expression where
       freeTermVariables target expression
     Generalized {expression} ->
       freeTermVariables target expression
+    RunSTAlone {} -> []
     RunST {imperative} -> freeTermVariables target imperative
     Negate {negative} -> freeTermVariables target negative
 
@@ -429,6 +436,7 @@ instance Connect Expression where
           right = connect right
         }
     Generalized {expression} -> Generalized {expression = connect expression}
+    RunSTAlone {startPosition} -> RunSTAlone {startPosition}
     Annotation {expression, operatorPosition, annotation} ->
       Annotation
         { expression = connect expression,
@@ -436,11 +444,10 @@ instance Connect Expression where
           annotation,
           instanciation = Inferred
         }
-    RunST {startPosition, imperative, unsupported} ->
+    RunST {startPosition, imperative} ->
       RunST
         { startPosition,
-          imperative = connect imperative,
-          unsupported
+          imperative = connect imperative
         }
     Negate {startPosition, negative} ->
       Negate
@@ -537,6 +544,12 @@ instance Connect Expression where
           right = seperate right
         }
     Generalized {expression} -> Generalized {expression = seperate expression}
+    RunSTAlone {startPosition} -> RunSTAlone {startPosition}
+    RunST {startPosition, imperative} ->
+      RunST
+        { startPosition,
+          imperative = seperate imperative
+        }
     Annotation {expression, operatorPosition, annotation, instanciation} ->
       Annotation
         { expression = seperate expression,

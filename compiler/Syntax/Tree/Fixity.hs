@@ -17,7 +17,7 @@ data Fixity
     { associativity :: Associativity,
       precedence :: !Int
     }
-  deriving (Show, Read)
+  deriving (Show)
 
 parse :: Parser Fixity
 parse = fixity <$> Associativity.parse <*> (fromMaybe 9 <$> optional (fromInteger <$> integer))

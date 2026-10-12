@@ -16,6 +16,16 @@ import Hazy.Prelude (placeholder)
 
 data Builder
 
+instance Eq Builder
+
+instance Ord Builder
+
+instance Show Builder
+
+instance Semigroup Builder
+
+instance Monoid Builder
+
 toLazyText :: Builder -> Lazy.Text
 toLazyText = placeholder
 

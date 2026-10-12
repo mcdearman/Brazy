@@ -820,8 +820,31 @@ The order to take it in:
 - [ ] Instances the library lacks. `Data.Functor.Identity` and
       `Data.Functor.Compose` have theirs now, and work. `Data.Map`,
       `Data.Set` and `Data.Vector` have instances that are placeholders,
-      as the types are: enough to check against, and nothing to run. The
-      check now stops for want of `Show Void`
+      as the types are: enough to check against, and nothing to run. So
+      do lazy text and its builder, and the integers of a fixed width.
+      `Data.Void`, `Data.Ord`, `Control.Category` and `Control.Arrow` for
+      functions, and `Control.Applicative.Const` have real ones. The check
+      now stops for want of `MonadFix IO`
+- [x] The type variables of an instance, in its methods. A type written
+      after an expression in a method meant the wrong variable, or none:
+      the method's own type variables were put outside the instance's where
+      they belong inside (test `instance-scope`)
+- [x] `runST`. What is run is checked against `forall s. ST s a`, the way
+      what a constructor holds of such a type is, so nothing of the state
+      can be part of what it gives. It may be given its action through a
+      function that only applies, as in `runST $ do`. An action is a
+      function of nothing, and running it calls it (`Run`, in
+      `Core.Tree.Expression`). The references an action is for,
+      `Data.STRef`, are still placeholders in the library
+- [ ] What the compiler's own source was changed to get past, and Hazy
+      still cannot do:
+  - Derive `Read`. Three types derived it and never used it
+  - A definition with no type written that requires something of its type
+    and is used at two types: `parse` in `Main` now has its type written
+  - A name for a type that is defined by way of the types the name is used
+    in: `Environment` in `AxCut.Machine` is written out where that is so
+  - `Functor`, `Foldable` and `Traversable` for a pair, which the library
+    cannot give because both the classes and the type are built in
 - [ ] Run the check again after each of these and count what stops it next.
       Each of the items below is a guess until then
 
