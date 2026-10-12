@@ -37,6 +37,29 @@ readSigned readPos = readParen False read'
     read' r = read'' r ++ [(-x, t) | ("-", s) <- lex r, (x, t) <- read'' s]
     read'' r = [(n, s) | (str, s) <- lex r, (n, "") <- readPos str]
 
+-- A whole number as a program has it, with its sign: in tens, or in
+-- sixteens, eights or twos after @0x@, @0o@ or @0b@.
+readWhole :: ReadS Integer
+readWhole = readParen False signed
+  where
+    signed text = case dropWhile isSpace text of
+      '-' : rest -> [(negate number, after) | (number, after) <- unsigned (dropWhile isSpace rest)]
+      rest -> unsigned rest
+    unsigned text = case text of
+      '0' : letter : rest
+        | letter == 'x' || letter == 'X', found@(_ : _) <- digits 16 rest -> found
+        | letter == 'o' || letter == 'O', found@(_ : _) <- digits 8 rest -> found
+        | letter == 'b' || letter == 'B', found@(_ : _) <- digits 2 rest -> found
+      _ -> digits 10 text
+    digits base text = case span (\c -> value c < base) text of
+      ([], _) -> []
+      (found, after) -> [(foldl (\number c -> number * base + value c) 0 found, after)]
+    value c
+      | c >= '0' && c <= '9' = toInteger (fromEnum c - fromEnum '0')
+      | c >= 'a' && c <= 'f' = toInteger (fromEnum c - fromEnum 'a' + 10)
+      | c >= 'A' && c <= 'F' = toInteger (fromEnum c - fromEnum 'A' + 10)
+      | otherwise = 16
+
 readDec :: (Eq a, Num a) => ReadS a
 readDec string = do
   (digits, string) <- lexDigits string
