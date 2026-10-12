@@ -8,7 +8,7 @@
 --
 -- The whole program is translated at once, and only the definitions that
 -- the one it starts at can reach are kept.
-module Sequent.FromCore (generate, complete, definitionOf, Unit (..), unit, start) where
+module Sequent.FromCore (generate, complete, definitionOf, Unit (..), Unshared (..), unit, start) where
 
 import Control.Monad (replicateM)
 import Control.Monad.ST (ST, runST)
@@ -72,7 +72,7 @@ import Semantic.Scope (Environment ((:+)))
 import qualified Semantic.Scope as Scope
 import Sequent.Primitive (Primitive (Field))
 import Sequent.Borrow (Lending, lending)
-import Sequent.Hoist (hoist)
+import Sequent.Hoist (Unshared (..), hoist)
 import Sequent.Inline (inline)
 import qualified Sequent.Uncurry as Uncurry (rewrite, shape, split, whole)
 import qualified Sequent.Runtime as Runtime
@@ -152,7 +152,26 @@ familyOf modules = fst (tablesOf modules)
 tablesOf ::
   Vector Core.Module ->
   (Global.Global -> Maybe (Map Global.Global Producer), Global.Global -> Maybe Lending)
-tablesOf modules = (family, lends)
+tablesOf modules = (members, borrowed)
+  where
+    Tables {members, borrowed} = tables modules
+
+-- |
+-- What is worked out of some modules for the native pipeline, each a table
+-- that is lazy in what it holds.
+data Tables = Tables
+  { -- | A definition at the top of a module as it is compiled, with what was
+    -- taken out of it.
+    members :: Global.Global -> Maybe (Map Global.Global Producer),
+    -- | Which parameters a definition only reads.
+    borrowed :: Global.Global -> Maybe Lending,
+    -- | The values of a definition at the top of a module that are no
+    -- longer shared with themselves: see "Sequent.Hoist".
+    lost :: Global.Global -> [Unshared]
+  }
+
+tables :: Vector Core.Module -> Tables
+tables modules = Tables {members = family, borrowed = lends, lost = unshared}
   where
     pre = precontext modules
     -- What each definition is as it comes from Core.
@@ -161,8 +180,13 @@ tablesOf modules = (family, lends)
       pure (name, moduleDefinitions pre index modulex)
     -- With the functions inside it taken out.
     lifted global found =
-      let (outer, inner) = hoist global found
+      let (outer, inner, _) = hoist global found
        in Map.insert global outer inner
+    -- The values of a definition that are no longer shared with themselves.
+    unshared global@Global.Global {path} =
+      case Map.lookup path written >>= Map.lookup global of
+        Just found -> let (_, _, lost) = hoist global found in lost
+        Nothing -> []
     hoisted = Map.map (Map.mapWithKey lifted) written
     liftedOf global@Global.Global {path}
       | Just found <- Runtime.definition global = Just (lifted global found)
@@ -247,6 +271,9 @@ data Unit = Unit
     -- | The definitions that are made where they are used, which another
     -- unit may have made as well.
     shared :: Map Global.Global Producer,
+    -- | The values in the unit's own definitions that are no longer shared
+    -- with themselves, to be warned of.
+    unshared :: [Unshared],
     -- | Which parameters a definition only reads, whether it is this
     -- unit's or another's: see "Sequent.Borrow". A unit that calls a
     -- definition and the unit that has it are told the same.
@@ -257,10 +284,11 @@ data Unit = Unit
 -- The modules at some places among all of the modules, as a unit. What they
 -- use of other modules is left as names.
 unit :: [Int] -> Vector Core.Module -> Unit
-unit indexes modules = Unit {own, shared = reach Map.empty (globals (Map.elems own)), lends}
+unit indexes modules =
+  Unit {own, shared = reach Map.empty (globals (Map.elems own)), unshared = concatMap lost names, lends}
   where
     pre = precontext modules
-    (family, lends) = tablesOf modules
+    Tables {members = family, borrowed = lends, lost} = tables modules
     -- The names of every definition at the top of the unit's modules.
     names = do
       index <- indexes

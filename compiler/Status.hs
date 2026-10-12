@@ -18,6 +18,7 @@ module Status
     status,
     progress,
     finished,
+    warning,
     barLine,
   )
 where
@@ -72,6 +73,15 @@ status :: Status -> String -> String -> IO ()
 status state@Status {enabled, colour} word text = when enabled $ do
   clear state
   hPutStrLn stderr $ verb colour "32" word ++ " " ++ text
+  hFlush stderr
+
+-- |
+-- Something the program's writer should know of, in bold yellow. It is said
+-- even when the compiler was asked to be quiet.
+warning :: Status -> String -> IO ()
+warning state@Status {colour} text = do
+  clear state
+  hPutStrLn stderr $ verb colour "33" "Warning" ++ " " ++ text
   hFlush stderr
 
 -- |

@@ -1,5 +1,4 @@
-//! The heap: blocks, counting references to them, and collecting the ones
-//! that counting cannot.
+//! The heap: blocks, and counting references to them.
 //!
 //! # Blocks
 //!
@@ -7,7 +6,7 @@
 //! what the block is and how many references there are to it:
 //!
 //! * bits 0 to 3: the kind;
-//! * bits 4 and 5: flags the collector uses;
+//! * bits 4 and 5: flags used while blocks are freed and checked;
 //! * bits 6 to 18: a constructor's tag;
 //! * bits 19 to 31: a count, of fields or of captured values;
 //! * bits 32 to 63: how many references there are. A block with the top bit
@@ -40,26 +39,30 @@
 //!
 //! A definition at the top of a program is not counted.
 //!
-//! # Collecting
+//! # No collector
 //!
-//! Counting never frees blocks that refer to each other in a circle, and a
-//! lazy language makes those freely. So now and then everything that can
-//! still be reached is marked, and what is not marked is freed.
+//! Counting never frees blocks that refer to each other in a circle. There
+//! was a collector here that traced what could be reached and freed the
+//! rest. It is gone: the compiler now sees to it that a program makes no
+//! circle outside the definitions at its top, which are never freed anyway
+//! (`compiler/Sequent/Hoist.hs`). So a program pays for counting and for
+//! nothing else.
 //!
-//! A collection is due when the heap has grown by as much as was alive after
-//! the last one. Memory that counting frees does not bring one nearer, so a
-//! program that makes no circles is hardly ever traced.
+//! # Checking
 //!
-//! What can be reached is known exactly, and cheaply, because a compiled
+//! What a program holds is known exactly, and cheaply, because a compiled
 //! program has no stack: every call is a tail call. At the start of a
 //! function the only values alive are the ones the function was given, and
-//! the values of definitions at the top that have been forced. The program
-//! checks at the start of each function whether a collection is due and, if
-//! it is, hands over what it was given.
+//! the values of definitions at the top that have been forced.
 //!
-//! At a collection every count can also be worked out again from nothing and
-//! compared with what was counted. That is what `HAZY_GC_VERIFY` asks for,
-//! and `HAZY_GC_STRESS` makes a collection due at every chance.
+//! So a program that was compiled to be checked (`--checked`) hands over
+//! what it was given at the start of each function, when it is asked to,
+//! and then every count is worked out again from nothing and compared with
+//! what was counted. A block that nothing reaches is an error too: either a
+//! reference to it was lost, or it is part of a circle. `HAZY_CHECK` asks
+//! for this, at every chance or, given a number, after every so many
+//! allocations. It is also done once at the end, where nothing is held, by
+//! any program.
 
 use std::collections::HashMap;
 
@@ -183,17 +186,13 @@ struct Heap {
     roots: Vec<*mut u64>,
     /// How many bytes are in blocks.
     live: usize,
-    /// How many bytes may be in blocks before a collection is due.
-    threshold: usize,
-    floor: usize,
-    verify: bool,
-    /// Whether a collection is due at every chance, to test the collector.
-    stress: bool,
+    /// After how many allocations every count is checked, if they are.
+    check: Option<u64>,
+    /// How many allocations there have been since the last check.
+    since: u64,
     report: bool,
     allocated: u64,
     counted: u64,
-    traced: u64,
-    collections: u64,
 }
 
 /// How many times a block was built in the place of one just taken apart.
@@ -208,10 +207,10 @@ pub static mut hazy_lent: u64 = 0;
 
 static mut HEAP: Option<Heap> = None;
 
-/// Whether a collection is due. The program reads this at the start of every
-/// function.
+/// Whether a check is due. A program that was compiled to be checked reads
+/// this at the start of every function.
 #[no_mangle]
-pub static mut hazy_gc_pending: u64 = 0;
+pub static mut hazy_check_due: u64 = 0;
 
 fn heap() -> &'static mut Heap {
     // The program has one thread.
@@ -219,9 +218,6 @@ fn heap() -> &'static mut Heap {
         let heap = &mut *std::ptr::addr_of_mut!(HEAP);
         heap.get_or_insert_with(|| {
             let setting = |name: &str| std::env::var(name).ok().filter(|value| !value.is_empty());
-            let floor = setting("HAZY_GC_THRESHOLD")
-                .and_then(|value| value.parse().ok())
-                .unwrap_or(8 << 20);
             Heap {
                 classes: (0..=SMALL)
                     .map(|_| Class {
@@ -233,15 +229,11 @@ fn heap() -> &'static mut Heap {
                 pending: Vec::new(),
                 roots: Vec::new(),
                 live: 0,
-                threshold: floor,
-                floor,
-                verify: setting("HAZY_GC_VERIFY").is_some(),
-                stress: setting("HAZY_GC_STRESS").is_some(),
-                report: setting("HAZY_GC_STATS").is_some(),
+                check: setting("HAZY_CHECK").map(|value| value.parse().unwrap_or(1).max(1)),
+                since: 0,
+                report: setting("HAZY_STATS").is_some(),
                 allocated: 0,
                 counted: 0,
-                traced: 0,
-                collections: 0,
             }
         })
     }
@@ -336,10 +328,11 @@ impl Heap {
         found
     }
 
-    unsafe fn collect(&mut self, given: &[Value]) {
+    /// Check every count, given everything the program holds, and that
+    /// every block there is can be reached from that.
+    unsafe fn examine(&mut self, given: &[Value]) {
         // So that every block there is has its references counted in full.
         self.settle(usize::MAX);
-        self.collections += 1;
 
         let mut stack: Vec<*mut u64> = Vec::new();
         let reach = |value: Value, stack: &mut Vec<*mut u64>| {
@@ -363,36 +356,26 @@ impl Heap {
         }
 
         let blocks = self.blocks();
-        if self.verify {
-            self.check(&blocks, given);
-        }
-
-        // What was not reached is in a circle, or hangs from one. It still
-        // holds references to blocks that were reached, which are given up
-        // before it goes.
+        self.check(&blocks, given);
         for &block in &blocks {
             if *block & MARK == 0 {
-                for &child in children(block) {
-                    if let Some(child) = counted(child) {
-                        if *child & MARK != 0 {
-                            *child -= ONE;
-                        }
-                    }
-                }
+                let code = match *block & KIND {
+                    CLOSURE | THUNK | WORKING => format!(", code at {:#x}", *block.add(1)),
+                    _ => String::new(),
+                };
+                wrong(&format!(
+                    "a block of kind {} and tag {}, counted {} times, is reached by nothing the program holds{}",
+                    *block & KIND,
+                    tag(*block),
+                    references(*block),
+                    code
+                ));
             }
-        }
-        for &block in &blocks {
-            if *block & MARK == 0 {
-                self.give(block);
-                self.traced += 1;
-            } else {
-                *block &= !MARK;
-            }
+            *block &= !MARK;
         }
 
-        // The next one is due when the heap has grown by as much again.
-        self.threshold = self.floor.max(self.live * 2);
-        hazy_gc_pending = 0;
+        self.since = 0;
+        hazy_check_due = 0;
     }
 
     /// Work every count out again and compare it with what was counted.
@@ -457,8 +440,11 @@ pub extern "C" fn hazy_alloc(size: u64, head: u64) -> *mut u64 {
         *block = head | ONE;
         heap.allocated += 1;
         heap.live += size * 8;
-        if heap.live >= heap.threshold || heap.stress {
-            hazy_gc_pending = 1;
+        if let Some(every) = heap.check {
+            heap.since += 1;
+            if heap.since >= every {
+                hazy_check_due = 1;
+            }
         }
         block
     }
@@ -511,33 +497,31 @@ pub extern "C" fn hazy_settle(thunk: Value) {
     }
 }
 
-/// Free what cannot be reached from some values, which are everything the
-/// program holds.
+/// Check every count of references, given some values, which are everything
+/// the program holds.
 #[no_mangle]
-pub extern "C" fn hazy_collect(given: *const Value, length: u64) {
+pub extern "C" fn hazy_check(given: *const Value, length: u64) {
     let given = if length == 0 {
         &[]
     } else {
         unsafe { std::slice::from_raw_parts(given, length as usize) }
     };
-    unsafe { heap().collect(given) }
+    unsafe { heap().examine(given) }
 }
 
 /// The program is over and holds nothing.
 pub fn finish() {
     let heap = heap();
-    if heap.verify {
-        unsafe { heap.collect(&[]) };
+    if heap.check.is_some() {
+        unsafe { heap.examine(&[]) };
     }
     if heap.report {
         eprintln!(
-            "allocated: {}, reused: {}, lent: {}, collections: {}, freed by counting: {}, freed by tracing: {}",
+            "allocated: {}, reused: {}, lent: {}, freed: {}",
             heap.allocated,
             unsafe { hazy_reused },
             unsafe { hazy_lent },
-            heap.collections,
-            heap.counted,
-            heap.traced
+            heap.counted
         );
     }
 }
