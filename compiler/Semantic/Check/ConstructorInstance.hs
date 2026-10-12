@@ -22,7 +22,10 @@ data ConstructorInstance s scope = ConstructorInstance
     -- | The arguments of the type it makes a value of. For most this is
     -- what the type was given. A constructor of a type declared with
     -- @where@ has its own.
-    result :: !(Strict.Vector (Unify.Type s scope))
+    result :: !(Strict.Vector (Unify.Type s scope)),
+    -- | Whether it is one of those, so that matching on it may tell
+    -- something of the type that is matched.
+    indexed :: !Bool
   }
 
 info :: ConstructorInstance s scope -> ConstructorInfo s scope

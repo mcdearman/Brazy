@@ -166,13 +166,22 @@ unify context_ position term1_ term2_ = unifyWith context_ term1_ term2_
               reconstrain context position constraints term
               writeSTRef reference' $ Solved term
             Solved term' -> unify term term'
-        -- Types involving a higher scope must be solved in said scope
-        unify (Logical (Shift logical)) term' = do
-          term' <- unshift context position term'
-          unifyWith (Shift.unshift context) (Logical logical) term'
-        unify term (Logical (Shift logical)) = do
-          term <- unshift context position term
-          unifyWith (Shift.unshift context) term (Logical logical)
+        -- Types involving a higher scope must be solved in said scope.
+        -- One that has been solved already is the type it was found to be,
+        -- and is taken as that here, where more may be known of the type
+        -- variables in it than is known further out.
+        unify (Logical (Shift logical)) term' =
+          solution logical >>= \case
+            Just term -> unify (shiftLogical term) term'
+            Nothing -> do
+              term' <- unshift context position term'
+              unifyWith (Shift.unshift context) (Logical logical) term'
+        unify term (Logical (Shift logical)) =
+          solution logical >>= \case
+            Just term' -> unify term (shiftLogical term')
+            Nothing -> do
+              term <- unshift context position term
+              unifyWith (Shift.unshift context) term (Logical logical)
         unify (Variable index) (Variable index')
           | index == index' = pure ()
         -- A variable that is known here to be some type is that type.
@@ -251,14 +260,18 @@ lowerEquality (Local.Equality index typex) = Local.Equality <$> Shift.partialUns
 -- it is known to be what the constructor says, and that is what is given
 -- back, for the branch to be checked with.
 --
--- If the two cannot be the same at all, no value of that constructor has
--- the type that is taken apart, and the branch is never reached. Nothing is
--- said of that here.
+-- The two have to be the same type to begin with: matching a value of one
+-- type against a constructor of another is an error, as it always was. It
+-- is only in what the type is given that they may differ. If they differ
+-- there in a way that cannot be, no value of that constructor has the type
+-- that is taken apart, and the branch is never reached. Nothing is said of
+-- that here.
 refine :: forall s scope. Context s scope -> Position -> Type s scope -> Type s scope -> ST s [Local.Equality s scope]
-refine context position = go []
+refine context position = go True []
   where
-    go :: [Local.Equality s scope] -> Type s scope -> Type s scope -> ST s [Local.Equality s scope]
-    go found left right = do
+    -- Whether this is the type itself, and not something it is given.
+    go :: Bool -> [Local.Equality s scope] -> Type s scope -> Type s scope -> ST s [Local.Equality s scope]
+    go spine found left right = do
       left <- settled left
       right <- settled right
       let Context {equalities} = context
@@ -266,28 +279,41 @@ refine context position = go []
           plain = found <$ unify here position left right
       case (left, right) of
         (Variable index, Variable index') | index == index' -> pure found
-        (Variable index, _) | Just known <- equated here index -> go found known right
-        (_, Variable index') | Just known <- equated here index' -> go found left known
+        (Variable index, _) | Just known <- equated here index -> go spine found known right
+        (_, Variable index') | Just known <- equated here index' -> go spine found left known
         (Logical _, _) -> plain
         (_, Logical _) -> plain
-        (Variable index, _) -> pure (Local.Equality index right : found)
-        (_, Variable index') -> pure (Local.Equality index' left : found)
+        (Variable index, _) | not spine -> pure (Local.Equality index right : found)
+        (_, Variable index') | not spine -> pure (Local.Equality index' left : found)
         (Call function argument, Call function' argument') -> do
-          found <- go found function function'
-          go found argument argument'
-        (Function argument result, Function argument' result') -> do
-          found <- go found argument argument'
-          go found result result'
-        (Type universe, Type universe') -> go found universe universe'
-        (Constructor index, Constructor index') | index /= index' -> pure found
+          found <- go spine found function function'
+          go False found argument argument'
+        (Function argument result, Function argument' result') | not spine -> do
+          found <- go False found argument argument'
+          go False found result result'
+        (Type universe, Type universe') | not spine -> go False found universe universe'
+        (Constructor index, Constructor index') | index /= index', not spine -> pure found
         _ -> plain
+    -- A type as far as it has been worked out. An unknown from a scope
+    -- further out that has been worked out is the type it was found to
+    -- be: the type of a variable that was bound further out comes this way.
     settled :: Type s scope -> ST s (Type s scope)
     settled = \case
-      Logical (Box reference) ->
-        readSTRef reference >>= \case
-          Solved typex -> settled typex
-          Unsolved {} -> pure (Logical (Box reference))
+      Logical logical ->
+        solution logical >>= \case
+          Just typex -> settled typex
+          Nothing -> pure (Logical logical)
       other -> pure other
+
+-- |
+-- What an unknown was found to be, if it has been.
+solution :: Logical s scope -> ST s (Maybe (Type s scope))
+solution = \case
+  Box reference ->
+    readSTRef reference >>= \case
+      Solved typex -> pure (Just typex)
+      Unsolved {} -> pure Nothing
+  Shift logical -> fmap shiftLogical <$> solution logical
 
 -- todo merge this with Semantic.Check.Temporary.Type checking somehow
 typeCheck :: Context s scope -> Position -> Type s scope -> Type s scope -> ST s ()
