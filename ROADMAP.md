@@ -670,6 +670,47 @@ The rest:
 Goal: Hazy, compiled by Hazy through the native backend, compiles its own
 source and passes `tools/test.sh`.
 
+Where it stands (2026-10-12). Hazy resolves its own compiler's source:
+`hazy -XStableImports --resolve compiler` passes, and is run on every
+change. Checking it, with `--check` in place of `--resolve`, stops at once:
+
+```
+[error UnsupportedFeature]: unsupported feature: GADTs
+```
+
+The checker stops at the first thing it cannot do, so what lies behind that
+is not known from running it. Counting in the source says this much, of 466
+modules and about 42,700 lines:
+
+| | |
+| - | - |
+| Declarations in GADT syntax | 50, in 43 modules |
+| ... that are ordinary types written that way | 3 |
+| ... that hide a type or carry a context | 6 |
+| ... whose constructors say more of the type than its parameters do | 41 |
+| Types with `forall` in them | 46, in 28 modules |
+| Standalone kind signatures (`type T :: ...`) | 108 |
+| `deriving` of `Show`, `Eq`, `Ord`, `Enum`, `Bounded` | about 330 clauses, which work as of the `deriving` clause fix |
+| `deriving` of `Read` | 3 |
+| `deriving` of `Traversable` | 1 |
+
+So GADTs come first and are most of the work. The 41 are not incidental:
+the trees are indexed by the stage of the compiler they belong to and by
+the names in scope, and matching on a constructor is what tells the checker
+which stage or scope it is in. They cannot be written another way without
+writing the compiler another way. What has to be built is constructors
+with result types of their own, and matching that brings the equalities a
+constructor stands for into scope for its branch.
+
+The order to take it in:
+
+- [ ] Declarations in GADT syntax that are ordinary types, and those that
+      hide a type: nine of the fifty, and the part that needs no equalities
+- [ ] Constructors with a result type of their own, and matching on them:
+      the other forty-one
+- [ ] Run the check again and count what stops it next. Each of the items
+      below is a guess until then
+
 `hazy.cabal` gives the working list:
 
 - [ ] Language features Hazy lacks: `GADTs`, `PolymorphicComponents`,
