@@ -183,7 +183,7 @@ check
         let get index = assumeData <$> TypeBinding.content (typeEnvironment Type.! index)
         Builtin.index pure get typeIndex
       DataInstance {constructors} <-
-        Simple.Data.instanciate context constructorPosition datax
+        Simple.Data.instanciate ConstructorInstance.Build context constructorPosition datax
       let instancex = constructors Strict.Vector.! constructorIndex
           base = DataInstance.constructed instancex typeIndex
           entries = ConstructorInstance.types instancex
@@ -285,6 +285,7 @@ check context typex Semantic.Lambda {startPosition, parameter, body} = do
   Unify.unify context startPosition typex (parameterType -#> resultType)
   parameter <- Pattern.check context parameterType parameter
   body <- Lambda.check (Pattern.augment parameter context) (shiftLogical resultType) body
+  Pattern.sealed context parameter [parameterType, resultType]
   pure Lambda {startPosition, parameter, body}
 check context typex Semantic.LambdaCase {startPosition, cases} = do
   parameterType <- Unify.fresh Core.typex

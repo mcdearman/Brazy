@@ -45,6 +45,8 @@ instance Zonk TypeF where
           let fail = error "zonk can't fail"
           box <- unshiftBox (pure fail) (unshift fail fail) reference kind constraints erasure
           pure $ Type.Logical $ box
+        -- A match is checked not to let one out before anything is zonked.
+        Skolem {} -> error "zonk of a type that stands for itself"
     Type.Logical (Shift logical) ->
       pure $ Type.Logical logical
     Type.Variable index -> pure $ Type.Variable index

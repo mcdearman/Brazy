@@ -157,6 +157,7 @@ generalizeBody position context (Generalize run) = do
               fail :: a
               fail = error "unsink can't fail"
           Solved {} -> pure ()
+          Skolem {} -> pure ()
       Reach {} -> pure ()
     selectBox :: Collected s (scope ':+ scopes) -> ST s (Maybe (STRef s (Box s (scope ':+ scopes))))
     selectBox = \case
@@ -166,6 +167,7 @@ generalizeBody position context (Generalize run) = do
             | null constraints -> pure $ Just reference
             | otherwise -> error "select box with unsolved"
           Solved {} -> pure Nothing
+          Skolem {} -> pure Nothing
       Reach {} -> pure Nothing
     parameter :: STRef s (Box s (scope' ':+ scope)) -> ST s (Type s scope)
     parameter reference =
@@ -175,6 +177,7 @@ generalizeBody position context (Generalize run) = do
             fail :: a
             fail = error "parameter can't fail"
         Solved {} -> error "bad kind"
+        Skolem {} -> error "bad kind"
     writeVariable :: Int -> STRef s (Box s (Scope.Local ':+ scopes)) -> ST s ()
     writeVariable variable reference =
       writeSTRef reference $ Solved $ Variable $ Local.Local variable

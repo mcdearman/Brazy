@@ -59,6 +59,9 @@ instance SolveType TypeF where
           Shift0.map category <$> solve position typex
         Type.Unsolved {kind, constraints} ->
           Solve $ defaultFrom position constraints (Core.mapLogical category kind)
+        -- There is no type to say for it, and none is needed: nothing is
+        -- done with types once they are checked. Any type will do.
+        Type.Skolem {} -> pure $ Type.Constructor (Type2.Tuple 0)
     Type.Logical (Type.Shift logical) ->
       solveWith (category Shift0.:. Shift0.Shift) position (Type.Logical logical)
     Type.Variable name -> pure $ Type.Variable name

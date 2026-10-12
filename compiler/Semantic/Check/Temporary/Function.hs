@@ -34,8 +34,10 @@ check context typex = \case
     result <- Unify.fresh Core.typex
     Unify.unify context functionPosition typex (argument -#> result)
     pattern1 <- Pattern.check context argument patternx
+    let outer = context
     context <- pure $ Pattern.augment pattern1 context
     function1 <- check context (shiftLogical result) function
+    Pattern.sealed outer pattern1 [argument, result]
     pure Bound {functionPosition, patternx = pattern1, function = function1}
 
 solve :: Function s scope -> Unify.Solve s (Solved.Function Group Check scope)

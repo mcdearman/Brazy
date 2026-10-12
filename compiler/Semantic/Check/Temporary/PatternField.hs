@@ -13,6 +13,7 @@ import Semantic.Stage (Check, Resolve)
 import qualified Semantic.Tree.PatternField as Semantic
 import qualified Semantic.Tree.PatternField as Solved
 import qualified Semantic.Unify as Unify
+import Syntax.Position (Position)
 
 data Field s scope = Field
   { index :: !Int,
@@ -24,6 +25,9 @@ Field {patternx} ! bound = patternx Pattern.! bound
 
 learnt :: Field s scope -> [Equality s scope]
 learnt Field {patternx} = Pattern.learnt patternx
+
+owned :: Field s scope -> [(Position, Unify.Type s scope)]
+owned Field {patternx} = Pattern.owned patternx
 
 augmentField :: Field s scopes -> Term.Bound (TermBinding s) (scope ':+ scopes)
 augmentField Field {patternx} = Pattern.augmentPattern patternx

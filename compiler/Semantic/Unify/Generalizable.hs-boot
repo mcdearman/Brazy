@@ -20,6 +20,7 @@ data Collected s scopes where
 -- See rational of Zonker in `Zonk` module.
 data Collector s s' where
   Collector :: Mask -> Collector s s
+  Naming :: Mask -> Collector s s
 
 instance Generalizable TypeF
 

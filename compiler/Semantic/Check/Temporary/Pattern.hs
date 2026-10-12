@@ -1,18 +1,20 @@
 module Semantic.Check.Temporary.Pattern where
 
-import Control.Monad (when)
+import Control.Monad (foldM, when)
 import Control.Monad.ST (ST)
 import qualified Core.Builtin as Builtin
 import qualified Core.Tree.Forall as Core (mono)
 import qualified Core.Tree.Type as Core (char, list, typex)
 import Core.Tree.TypeDeclaration (assumeData)
 import Core.Type.Functor (shiftLogical)
+import Data.Foldable (for_, toList, traverse_)
 import Data.Map (Map)
 import qualified Data.Strict.Vector1 as Strict (Vector1)
 import qualified Data.Vector.Strict as Strict (Vector)
 import qualified Data.Vector.Strict as Strict.Vector
 import Error
   ( mismatchedConstructorArguments,
+    refiningBinding,
   )
 import qualified Semantic.Check.ConstructorInstance as ConstructorInstance
 import Semantic.Check.Context (Context (..))
@@ -56,6 +58,8 @@ data Pattern s scope
         -- | What matching on the constructor tells of the type variables
         -- of the type that is matched on.
         equalities :: ![Equality s scope],
+        -- | The types the constructor hides.
+        hidden :: ![Unify.Type s scope],
         constructorPosition :: !Position,
         names :: !(Map Variable Position),
         irrefutable :: !Prelude.Bool,
@@ -69,6 +73,8 @@ data Pattern s scope
         -- | What matching on the constructor tells of the type variables
         -- of the type that is matched on.
         equalities :: ![Equality s scope],
+        -- | The types the constructor hides.
+        hidden :: ![Unify.Type s scope],
         constructorPosition :: !Position,
         names :: !(Map Variable Position),
         irrefutable :: !Prelude.Bool,
@@ -167,19 +173,73 @@ augmentPattern patternx = Term.Bound {at, select}
       String {} -> Strict.Vector.empty
 
 -- |
+-- The types that the constructors of a pattern hide, each with where its
+-- constructor is.
+owned :: Pattern s scope -> [(Position, Unify.Type s scope)]
+owned = \case
+  Wildcard {} -> []
+  Constructor {constructorPosition, hidden, patterns} ->
+    [(constructorPosition, typex) | typex <- hidden] ++ foldMap owned patterns
+  Record {constructorPosition, hidden, fields} ->
+    [(constructorPosition, typex) | typex <- hidden] ++ foldMap Field.owned fields
+  List {items} -> foldMap owned items
+  Integer {} -> []
+  Float {} -> []
+  Character {} -> []
+  String {} -> []
+
+-- |
+-- Check that what a pattern's constructors hide is no part of some types.
+-- These are the types that are seen from outside what the pattern is
+-- matched for: the type of what is matched, and the type of what is made
+-- of it.
+sealed :: Context s scope -> Pattern s scope -> [Unify.Type s scope] -> ST s ()
+sealed context patternx types = case owned patternx of
+  [] -> pure ()
+  own@((position, _) : _) -> traverse_ (Unify.sealed context position (snd <$> own)) types
+
+-- |
+-- Check that a pattern may be matched late, as the pattern of a binding is:
+-- only when one of its variables is asked for. That cannot be for a pattern
+-- that hides a type or tells something of one, because what is hidden or
+-- told would have to be known wherever the variables are.
+bindable :: Position -> Pattern s scope -> ST s ()
+bindable position patternx = case (owned patternx, learnt patternx) of
+  ([], []) -> pure ()
+  _ -> refiningBinding position
+
+-- |
 -- Set the type of what is matched against the type a constructor makes.
 -- For a constructor that says what type it makes, this may tell something
 -- of the type's variables. For any other the two are simply the same.
 matched ::
   Context s scope ->
   Position ->
+  DataInstance s scope ->
+  Type2.Index scope ->
   ConstructorInstance.ConstructorInstance s scope ->
   Unify.Type s scope ->
-  Unify.Type s scope ->
   ST s [Equality s scope]
-matched context position instancex typex base
-  | ConstructorInstance.indexed instancex = Unify.refine context position typex base
-  | otherwise = [] <$ Unify.unify context position typex base
+matched context position datax typeIndex instancex typex
+  | ConstructorInstance.indexed instancex = do
+      -- It is a value of the type to begin with, given something.
+      Unify.unify context position typex (DataInstance.baseType datax typeIndex)
+      let places =
+            zip3
+              (toList (ConstructorInstance.refined instancex))
+              (toList (DataInstance.given datax))
+              (toList (ConstructorInstance.result instancex))
+      -- Where the constructor gives the type a variable of its own, that
+      -- variable is what the type has there.
+      for_ [(given, made) | (Prelude.False, given, made) <- places] $ \(given, made) ->
+        Unify.unify context position given made
+      -- Anywhere else, what the type has there is known to be what the
+      -- constructor gives it.
+      let refine found (given, made) = do
+            more <- Unify.refine (knowing found context) position given made
+            pure (more ++ found)
+      foldM refine [] [(given, made) | (Prelude.True, given, made) <- places]
+  | otherwise = [] <$ Unify.unify context position typex (DataInstance.constructed instancex typeIndex)
 
 -- |
 -- A context in which more is known of type variables.
@@ -202,20 +262,21 @@ check context@Context {typeEnvironment} typex = \case
         datax <- do
           let get index = assumeData <$> TypeBinding.content (typeEnvironment Type.! index)
           Builtin.index pure get typeIndex
-        DataInstance {constructors} <-
-          Simple.Data.instanciate context constructorPosition datax
+        datax@DataInstance {constructors} <-
+          Simple.Data.instanciate ConstructorInstance.Match context constructorPosition datax
         let instancex = constructors Strict.Vector.! constructorIndex
-            base = DataInstance.constructed instancex typeIndex
             entries = ConstructorInstance.types instancex
             constructorInfo = ConstructorInstance.info instancex
+            hidden = ConstructorInstance.hidden instancex
         ConstructorInstance.mark context instancex
-        equalities <- matched context constructorPosition instancex typex base
+        equalities <- matched context constructorPosition datax typeIndex instancex typex
         when (length entries /= length patterns) $ mismatchedConstructorArguments constructorPosition
         patterns <- sequence $ Strict.Vector.zipWith (check (knowing equalities context)) entries patterns
         pure $
           Constructor
             { typex,
               equalities,
+              hidden,
               constructorPosition,
               names,
               irrefutable,
@@ -236,20 +297,21 @@ check context@Context {typeEnvironment} typex = \case
       datax <- do
         let get index = assumeData <$> TypeBinding.content (typeEnvironment Type.! index)
         Builtin.index pure get typeIndex
-      DataInstance {constructors} <-
-        Simple.Data.instanciate context constructorPosition datax
+      datax@DataInstance {constructors} <-
+        Simple.Data.instanciate ConstructorInstance.Match context constructorPosition datax
       let instancex = constructors Strict.Vector.! constructorIndex
-          base = DataInstance.constructed instancex typeIndex
           entries = ConstructorInstance.types instancex
           constructorInfo = ConstructorInstance.info instancex
+          hidden = ConstructorInstance.hidden instancex
           lookup index = entries Strict.Vector.! index
       ConstructorInstance.mark context instancex
-      equalities <- matched context constructorPosition instancex typex base
+      equalities <- matched context constructorPosition datax typeIndex instancex typex
       fields <- traverse (Field.check (knowing equalities context) lookup) fields
       pure $
         Record
           { typex,
             equalities,
+            hidden,
             names,
             constructorPosition,
             irrefutable,

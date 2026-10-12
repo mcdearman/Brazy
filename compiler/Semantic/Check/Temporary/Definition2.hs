@@ -55,6 +55,7 @@ checkManual context@Context {termEnvironment} typex declaration = case declarati
         Wobbly typex -> Unify.instanciate context position typex
         Rigid scheme -> instanciate context position scheme
     patternx <- Pattern.check context full (shift patternx)
+    Pattern.bindable position patternx
     let typex' = patternx Pattern.! bound
     Unify.unify context position typex typex'
     pure $ Piece Choice {index = shift index, instanciation, patternx, bound}
@@ -78,6 +79,7 @@ checkAuto context@Context {termEnvironment} typex declaration = case declaration
         Wobbly typex -> Unify.instanciate context position typex
         Rigid scheme -> instanciate context position scheme
     patternx <- Pattern.check context full patternx
+    Pattern.bindable position patternx
     let typex' = patternx Pattern.! bound
     Unify.unify context position typex typex'
     pure $ Piece Choice {index, instanciation, patternx, bound}

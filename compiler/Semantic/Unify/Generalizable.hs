@@ -27,12 +27,20 @@ instance Eq (Collected s scopes) where
 -- See rational of Zonker in `Zonk` module.
 data Collector s s' where
   Collector :: Mask -> Collector s s
+  -- | Collect as well the types that stand for themselves alone: they are
+  -- not made into variables, but an error that shows them has to name them.
+  Naming :: Mask -> Collector s s
 
 class (Zonk typef, Core.Functor typef) => Generalizable typef where
   collect :: Collector s s' -> typef (Logical s scopes) scopes -> ST s [Collected s' scopes]
 
 instance Generalizable TypeF where
-  collect (Collector mask) = collect
+  collect = \case
+    Collector mask -> collecting mask False
+    Naming mask -> collecting mask True
+
+collecting :: Mask -> Bool -> TypeF (Logical s scopes) scopes -> ST s [Collected s scopes]
+collecting mask naming = collect
     where
       collect :: TypeF (Logical s scope) scope -> ST s [Collected s scope]
       collect = \case
@@ -41,6 +49,9 @@ instance Generalizable TypeF where
             Solved typex -> collect typex
             Unsolved {erasure}
               | Mask.valid mask erasure -> pure [Collect reference]
+              | otherwise -> pure []
+            Skolem {}
+              | naming -> pure [Collect reference]
               | otherwise -> pure []
         Type.Logical (Shift logical) -> fmap Reach <$> collect (Type.Logical logical)
         Type.Variable {} -> pure []

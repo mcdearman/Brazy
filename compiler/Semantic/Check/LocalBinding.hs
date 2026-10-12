@@ -13,7 +13,7 @@ import qualified Semantic.Label.Binding.Local as Label
 import qualified Semantic.Index.Local as Local (Index)
 import Semantic.Scope (Environment (..))
 import qualified Semantic.Shift0 as Shift0
-import qualified Semantic.Unify as Unify (Type)
+import qualified Semantic.Unify as Unify (Logical, Type)
 
 type LocalBinding :: Data.Kind.Type -> Environment -> Data.Kind.Type
 data LocalBinding s scope
@@ -56,10 +56,17 @@ instance Shift0.Functor (LocalBinding s) where
 -- > eval (Number n) = n
 --
 -- where @Number :: Int -> Expr Int@, so that @a@ is @Int@ on that line.
-data Equality s scope = Equality !(Local.Index scope) !(Unify.Type s scope)
+--
+-- The same may be known of a type that a constructor hides, which is not a
+-- variable anyone wrote and has no name.
+data Equality s scope
+  = Equality !(Local.Index scope) !(Unify.Type s scope)
+  | Hidden !(Unify.Logical s scope) !(Unify.Type s scope)
 
 shiftEquality :: Equality s scope -> Equality s (scope' ':+ scope)
-shiftEquality (Equality index typex) = Equality (Shift0.map Shift0.Shift index) (Core.shiftLogical typex)
+shiftEquality = \case
+  Equality index typex -> Equality (Shift0.map Shift0.Shift index) (Core.shiftLogical typex)
+  Hidden logical typex -> Hidden (Shift0.map Shift0.Shift logical) (Core.shiftLogical typex)
 
 data Constraint scope = Constraint
   { arguments :: !(Strict.Vector (Simple.Type scope)),
