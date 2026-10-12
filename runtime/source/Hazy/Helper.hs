@@ -135,6 +135,17 @@ instance (Semigroup b) => Semigroup (HelperArrow a b) where
 instance (Monoid b) => Monoid (HelperArrow a b) where
   mempty = Arrow (\_ -> mempty)
 
+-- Functions from one type are a monad: each is given the same thing.
+instance Functor (HelperArrow a) where
+  fmap f (Arrow g) = Arrow (\x -> f (g x))
+
+instance Applicative (HelperArrow a) where
+  pure b = Arrow (\_ -> b)
+  Arrow f <*> Arrow g = Arrow (\x -> f x (g x))
+
+instance Monad (HelperArrow a) where
+  Arrow g >>= f = Arrow (\x -> case f (g x) of Arrow h -> h x)
+
 newtype HelperBool = Bool Bool
 
 instance Eq HelperBool where

@@ -163,6 +163,9 @@ generate context = \case
             Direct Functor ST -> functorST
             Direct Applicative ST -> applicativeST
             Direct Monad ST -> monadST
+            Direct Functor Arrow -> functorArrow
+            Direct Applicative Arrow -> applicativeArrow
+            Direct Monad Arrow -> monadArrow
             Direct Semigroup Arrow -> semigroupArrow
             Direct Semigroup List -> semigroupList
             Direct Semigroup NonEmpty -> semigroupNonEmpty
@@ -236,6 +239,9 @@ generate context = \case
               functorST,
               applicativeST,
               monadST,
+              functorArrow,
+              applicativeArrow,
+              monadArrow,
               semigroupArrow,
               semigroupList,
               semigroupNonEmpty,

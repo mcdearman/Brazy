@@ -823,8 +823,13 @@ The order to take it in:
       as the types are: enough to check against, and nothing to run. So
       do lazy text and its builder, and the integers of a fixed width.
       `Data.Void`, `Data.Ord`, `Control.Category` and `Control.Arrow` for
-      functions, and `Control.Applicative.Const` have real ones. The check
-      now stops for want of `MonadFix IO`
+      functions, and `Control.Applicative.Const` have real ones, and so
+      does `Control.Monad.Fix` for `Identity` and `Maybe`; for `IO` and `ST`
+      it needs the runtime's help and is a placeholder. Functions from one
+      type are a functor and a monad by instances that are built in, as the
+      one that makes them a semigroup is, since both the classes and the
+      type are (test `function-monad`). The check now stops at the one
+      `deriving (Functor, Foldable, Traversable)` in the compiler's source
 - [x] The type variables of an instance, in its methods. A type written
       after an expression in a method meant the wrong variable, or none:
       the method's own type variables were put outside the instance's where
