@@ -1,7 +1,7 @@
 module Core.Tree.Instance where
 
 import qualified Core.Substitute as Substitute
-import Core.Tree.Constraints (Constraints)
+import Core.Tree.Constraints (Constraints, Prerequisites (..))
 import Core.Tree.EvidenceSet (EvidenceSet)
 import Core.Tree.MethodConcrete (MethodConcrete)
 import qualified Core.Tree.MethodConcrete as MethodConcrete
@@ -41,7 +41,7 @@ simplify :: Semantic.Instance Identity Identity Normal Check scope -> Instance s
 simplify
   Semantic.Instance
     { definition = _ ::: Identity definition,
-      prerequisites = Identity (Solved prerequisites)
+      prerequisites = Identity (Solved Prerequisites {required = prerequisites})
     } = case definition of
     Identity InstanceDefinition {evidence = Solved evidence, members} ->
       Instance

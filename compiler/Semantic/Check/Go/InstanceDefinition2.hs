@@ -30,9 +30,10 @@ import qualified Data.Vector as Vector
 import qualified Data.Vector.Strict as Strict
 import qualified Data.Vector.Strict as Strict.Vector
 import Data.Void (Void)
-import Error (cannotDerive, cyclicalTypeChecking)
+import Error (cannotDerive, cyclicalTypeChecking, unsupportedFeatureEqualityConstraints)
 import qualified Graph.Topological as Topological
 import Semantic.Check.Context (Context (..))
+import Semantic.Check.LocalBinding (Equality (Equality))
 import qualified Semantic.Check.Context as Context
 import qualified Semantic.Check.Derive.Bounded as Bounded
 import qualified Semantic.Check.Derive.Enum as Enum
@@ -46,6 +47,7 @@ import qualified Semantic.Check.Simple.Scheme as Core.Scheme
 import qualified Semantic.Check.Temporary.Constraints as Unsolved.Constraints (check, solve)
 import qualified Semantic.Check.Temporary.Definition as Definition
 import qualified Semantic.Check.Temporary.Scheme as Unsolved (augment)
+import qualified Semantic.Check.Temporary.Type as Unsolved.Type (check, solve)
 import qualified Semantic.Check.Temporary.TypePattern as Unsolved (TypePattern (..), solve)
 import qualified Semantic.Check.TypeBinding as TypeBinding
 import qualified Semantic.Index.Evidence as Evidence
@@ -97,6 +99,19 @@ keyHead = \case
   Data {head1} -> Type2.Index head1
   Class {head2} -> head2
 
+-- |
+-- A parameter that an instance requires to be a type, by its place, with
+-- the type. The parameter may be on either side.
+equality ::
+  Type.Type Position Resolve (Local ':+ scope) ->
+  Type.Type Position Resolve (Local ':+ scope) ->
+  Position ->
+  (Int, Type.Type Position Resolve (Local ':+ scope))
+equality left right startPosition = case (left, right) of
+  (Type.Variable {variable = Local.Local index}, typex) -> (index, typex)
+  (typex, Type.Variable {variable = Local.Local index}) -> (index, typex)
+  _ -> unsupportedFeatureEqualityConstraints startPosition
+
 checkHeader ::
   Position ->
   Key scope ->
@@ -144,10 +159,28 @@ checkHeader position key information Header {parameters, prerequisites, lenient}
               [] -> None
               _ -> Constraints (Strict.Vector.fromList kept)
           _ -> pure prerequisites
-        prerequisites <- Unsolved.Constraints.check context prerequisites
+        -- A parameter that is required to be a type is taken out of what
+        -- is required: it needs no evidence. It has to be a parameter that
+        -- is said to be a type, on either side.
+        let (classes, equalities) = case prerequisites of
+              None -> (None, [])
+              Constraints wanted ->
+                ( case [constraint | constraint@Semantic.Constraint {} <- toList wanted] of
+                    [] -> None
+                    classes -> Constraints (Strict.Vector.fromList classes),
+                  [equality left right startPosition | Semantic.Equality {startPosition, left, right} <- toList wanted]
+                )
+        prerequisites <- Unsolved.Constraints.check context classes
+        equated <- for equalities $ \(index, typex) -> do
+          let kind = shiftLogical (Unsolved.typex (parameters Strict.Vector.! index))
+          typex <- Unsolved.Type.check context kind typex
+          pure (index, typex)
         parameters <- Unify.runSolve $ traverse Unsolved.solve parameters
         prerequisites <- Unify.runSolve $ Unsolved.Constraints.solve context prerequisites
-        pure Header {parameters, prerequisites, lenient}
+        equated <- Unify.runSolve $ for equated $ \(index, typex) -> do
+          typex <- Unsolved.Type.solve context typex
+          pure (index, typex)
+        pure Header {parameters, prerequisites, equated = Strict.Vector.fromList equated, lenient}
     }
 
 data Source origin scope where
@@ -269,7 +302,7 @@ checkBody position key Solve {solve} reflection information lookup members =
         let context@Context {typeEnvironment} = information declarations
             index = keyIndex key
             head = keyHead key
-        Header {parameters, prerequisites} <- case reflection declarations of
+        Header {parameters, prerequisites, equated} <- case reflection declarations of
           Standard header ::: _ -> header
           DerivedInstance header ::: _ -> header
         Core.Class.Class {constraints, methods} <- do
@@ -299,6 +332,12 @@ checkBody position key Solve {solve} reflection information lookup members =
                           instanciation = Core.Instanciation.Mono
                         }
         context <- Scheme.augment position parameters prerequisites Mask.Runtime context
+        -- Inside the instance, a parameter that is required to be a type
+        -- is known to be it.
+        context <- pure $ case context of
+          Context {equalities} ->
+            let known (index, typex) = Equality (Local.Local index) (logicalType (Core.Type.simplify typex))
+             in context {equalities = fmap known (toList equated) ++ equalities}
         {-
           instances where the constraints contain the variable in the non head part
           should not kind check, so we should be able to safely ignore them

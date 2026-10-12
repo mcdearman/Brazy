@@ -2,6 +2,7 @@ module Semantic.Check.Go.Instance (check, solve, Key (..)) where
 
 import Control.Monad.ST (ST)
 import qualified Core.Tree.Constraints as Core.Constraints
+import qualified Core.Tree.Type as Core.Type (simplify)
 import Data.Functor.Identity (Identity (..))
 import Error (cyclicalTypeChecking)
 import qualified Graph.Topological as Topological
@@ -40,10 +41,15 @@ check key solve reflection information Instance {startPosition, definition} =
               let Instance {definition} = reflection declarations
               case definition of
                 annotation ::: _ -> do
-                  Header {prerequisites} <- case annotation of
+                  Header {prerequisites, equated} <- case annotation of
                     Standard header -> header
                     DerivedInstance header -> header
-                  pure $ Solved $ Core.Constraints.simplify prerequisites
+                  pure $
+                    Solved
+                      Core.Constraints.Prerequisites
+                        { required = Core.Constraints.simplify prerequisites,
+                          equated = fmap (\(index, typex) -> (index, Core.Type.simplify typex)) equated
+                        }
           }
     }
 

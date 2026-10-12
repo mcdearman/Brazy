@@ -807,8 +807,21 @@ The order to take it in:
         can be matched against such a thing, a binding cannot name one, a
         constructor declared with its whole type cannot hold one by name,
         and no instance is derived for a type that holds one
-- [ ] Instances the library lacks. The check now stops at
-      `compiler/Data/Traversable2.hs`, for want of `Applicative Identity`
+- [x] An instance that requires a parameter to be a particular type,
+      `instance (logical ~ Void) => Functor (TypeF logical)`. Eight
+      instances in the compiler's source are written this way. Such a
+      requirement needs no evidence, so it is kept apart from what the
+      instance requires with evidence (`Prerequisites`, in
+      `Core.Tree.Constraints`): where the instance is used, what the type
+      is given is made that type, and inside the instance the parameter is
+      known to be it. Types required to be the same anywhere else, in the
+      type of a function or of a class, are still not read (test
+      `instance-equality`)
+- [ ] Instances the library lacks. `Data.Functor.Identity` and
+      `Data.Functor.Compose` have theirs now, and work. `Data.Map`,
+      `Data.Set` and `Data.Vector` have instances that are placeholders,
+      as the types are: enough to check against, and nothing to run. The
+      check now stops for want of `Show Void`
 - [ ] Run the check again after each of these and count what stops it next.
       Each of the items below is a guess until then
 

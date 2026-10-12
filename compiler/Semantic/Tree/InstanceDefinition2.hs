@@ -9,13 +9,14 @@ import qualified Data.Vector.Strict as Strict (Vector)
 import Semantic.Connect (Connect (..))
 import Semantic.Functor2 (Traversable2 (..))
 import Semantic.Layout (Layout)
-import Semantic.Scope (Environment)
+import Semantic.Scope (Environment ((:+)), Local)
 import qualified Semantic.Shift as Shift
 import qualified Semantic.Shift0 as Shift0
 import Semantic.Stage (Stage)
 import Semantic.Tree.Constraints (Constraints)
 import Semantic.Tree.InstanceDefinition (InstanceDefinition)
 import Semantic.Tree.MethodConcrete (Auto, Manual, Origin)
+import qualified Semantic.Tree.Type as Semantic (Type)
 import Semantic.Tree.TypePattern (TypePattern)
 import Syntax.Position (Position)
 
@@ -83,6 +84,10 @@ instance Traversable2 (Annotation origin) where
 data Header stage scope = Header
   { parameters :: !(Strict.Vector (TypePattern Position stage scope)),
     prerequisites :: !(Constraints Position stage scope),
+    -- | The parameters that are required to be particular types, once the
+    -- instance is checked: see 'Core.Prerequisites'. Before that they are
+    -- among what is required.
+    equated :: !(Strict.Vector (Int, Semantic.Type Position stage (Local ':+ scope))),
     -- | Whether what is required was not written, but is the class of each
     -- parameter it can be asked of: an instance from a @deriving@ clause.
     lenient :: !Bool
@@ -93,9 +98,10 @@ instance Shift0.Functor (Header stage) where
   map = Shift.mapDefault
 
 instance Shift.Functor (Header stage) where
-  map category Header {parameters, prerequisites, lenient} =
+  map category Header {parameters, prerequisites, equated, lenient} =
     Header
       { parameters = Shift.map category <$> parameters,
         prerequisites = Shift.map category prerequisites,
+        equated = fmap (\(index, typex) -> (index, Shift.map (Shift.Over category) typex)) equated,
         lenient
       }

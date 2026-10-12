@@ -75,6 +75,18 @@ import Hazy.Prelude (placeholder)
 
 data Set a
 
+instance Foldable Set
+
+instance (Eq a) => Eq (Set a)
+
+instance (Ord a) => Ord (Set a)
+
+instance (Show a) => Show (Set a)
+
+instance (Ord a) => Semigroup (Set a)
+
+instance (Ord a) => Monoid (Set a)
+
 empty :: Set a
 empty = placeholder
 

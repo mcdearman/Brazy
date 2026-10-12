@@ -3,9 +3,11 @@ module Core.Tree.Constraints where
 import qualified Core.Substitute as Substitute
 import Core.Tree.Constraint (ConstraintF)
 import qualified Core.Tree.Constraint as Constraint
+import Core.Tree.Type (Type)
 import qualified Core.Type.Functor as Core
 import qualified Data.Vector.Strict as Strict
 import Data.Void (Void)
+import Semantic.Scope (Environment ((:+)), Local)
 import qualified Semantic.Scope as Scope
 import qualified Semantic.Shift as Shift
 import qualified Semantic.Shift0 as Shift0
@@ -21,6 +23,34 @@ data ConstraintsF logical scope
 
 instance (Show logical) => Scope.Show (ConstraintsF logical) where
   showsPrec = showsPrec
+
+-- |
+-- What an instance requires. That something holds of its parameters is
+-- required with evidence. That a parameter is a particular type,
+--
+-- > instance (a ~ Int) => C (T a)
+--
+-- needs none: the instance is one for the type whatever it is given, and
+-- where it is used what the type is given is made that type. Each such
+-- parameter is here by its place, with the type it is to be.
+data Prerequisites scope = Prerequisites
+  { required :: !(Constraints scope),
+    equated :: !(Strict.Vector (Int, Type (Local ':+ scope)))
+  }
+  deriving (Show)
+
+instance Scope.Show Prerequisites where
+  showsPrec = showsPrec
+
+instance Shift0.Functor Prerequisites where
+  map = Shift.mapDefault
+
+instance Shift.Functor Prerequisites where
+  map category Prerequisites {required, equated} =
+    Prerequisites
+      { required = Shift.map category required,
+        equated = fmap (\(index, typex) -> (index, Shift.map (Shift.Over category) typex)) equated
+      }
 
 instance Shift0.Functor (ConstraintsF logical) where
   map = Shift.mapDefault
