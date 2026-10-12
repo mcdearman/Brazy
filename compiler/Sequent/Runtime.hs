@@ -267,6 +267,9 @@ definitions =
             ("primTextEqual", wrap TextEqual),
             ("primTextCompare", wrap TextCompare),
             ("primTextLength", wrap TextLength),
+            ("primTextTake", wrap TextTake),
+            ("primTextDrop", wrap TextDrop),
+            ("primTextIsPrefixOf", wrap TextIsPrefixOf),
             ("primSTPure", primSTPure),
             ("primSTBind", primSTBind)
           ]

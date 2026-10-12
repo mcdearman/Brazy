@@ -40,6 +40,12 @@ primTextEqual :: Text -> Text -> Bool
 -- or above it.
 primTextCompare :: Text -> Text -> Int
 primTextLength :: Text -> Int
+
+-- So many characters from the start of a text, and what is left without
+-- them.
+primTextTake :: Int -> Text -> Text
+primTextDrop :: Int -> Text -> Text
+primTextIsPrefixOf :: Text -> Text -> Bool
 primSTPure :: a -> ST s a
 primSTBind :: ST s a -> (a -> ST s b) -> ST s b
 

@@ -232,6 +232,9 @@ apply primitive arguments = case (primitive, arguments) of
     EQ -> 0
     GT -> 1
   (TextLength, [Text text]) -> pure $ Int $ fromIntegral $ Text.length text
+  (TextTake, [Int count, Text text]) -> pure $ Text $ Text.take (fromIntegral count) text
+  (TextDrop, [Int count, Text text]) -> pure $ Text $ Text.drop (fromIntegral count) text
+  (TextIsPrefixOf, [Text prefix, Text text]) -> pure $ bool $ Text.isPrefixOf prefix text
   (GeneralCategory, [Int character]) ->
     pure $ Data (fromEnum $ generalCategory $ chr $ fromIntegral character) []
   (IntEqual, [Int left, Int right]) -> pure $ bool $ left == right

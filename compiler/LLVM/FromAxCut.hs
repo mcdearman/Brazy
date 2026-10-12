@@ -1565,6 +1565,9 @@ primitiveName = \case
   TextEqual -> "hazy_prim_text_equal"
   TextCompare -> "hazy_prim_text_compare"
   TextLength -> "hazy_prim_text_length"
+  TextTake -> "hazy_prim_text_take"
+  TextDrop -> "hazy_prim_text_drop"
+  TextIsPrefixOf -> "hazy_prim_text_is_prefix_of"
   GeneralCategory -> "hazy_prim_general_category"
   IntEqual -> "hazy_prim_int_equal"
   IntLessThenEqual -> "hazy_prim_int_less_then_equal"
@@ -1634,6 +1637,9 @@ runtime =
   declare i64 @hazy_prim_text_equal(i64, i64)
   declare i64 @hazy_prim_text_compare(i64, i64)
   declare i64 @hazy_prim_text_length(i64)
+  declare i64 @hazy_prim_text_take(i64, i64)
+  declare i64 @hazy_prim_text_drop(i64, i64)
+  declare i64 @hazy_prim_text_is_prefix_of(i64, i64)
   declare i64 @hazy_prim_general_category(i64)
   declare i64 @hazy_prim_int_equal(i64, i64)
   declare i64 @hazy_prim_int_less_then_equal(i64, i64)

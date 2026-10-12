@@ -170,6 +170,34 @@ pub extern "C" fn hazy_prim_text_length(value: Value) -> Value {
     from_int(text(value).chars().count() as i32)
 }
 
+/// Where in a text so many characters end, in bytes.
+fn after(string: &str, count: i32) -> usize {
+    if count <= 0 {
+        return 0;
+    }
+    match string.char_indices().nth(count as usize) {
+        Some((index, _)) => index,
+        None => string.len(),
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn hazy_prim_text_take(count: Value, value: Value) -> Value {
+    let string = text(value);
+    from_text(&string[..after(string, int(count))])
+}
+
+#[no_mangle]
+pub extern "C" fn hazy_prim_text_drop(count: Value, value: Value) -> Value {
+    let string = text(value);
+    from_text(&string[after(string, int(count))..])
+}
+
+#[no_mangle]
+pub extern "C" fn hazy_prim_text_is_prefix_of(prefix: Value, value: Value) -> Value {
+    boolean(text(value).starts_with(text(prefix)))
+}
+
 /// The general category of a character, as a constructor of
 /// `GeneralCategory`, whose constructors are in the order of the Haskell
 /// report.

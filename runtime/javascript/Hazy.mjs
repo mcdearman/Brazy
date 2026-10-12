@@ -702,6 +702,37 @@ export const primTextLength = {
   },
 };
 
+// Where in a string so many characters end.
+function after(string, count) {
+  let index = 0;
+  while (count > 0 && index < string.length) {
+    index += string.codePointAt(index) > 0xffff ? 2 : 1;
+    count--;
+  }
+  return index;
+}
+
+export const primTextTake = {
+  a: 0,
+  b: (count) => (text) => {
+    const string = force(text);
+    return string.slice(0, after(string, force(count)));
+  },
+};
+
+export const primTextDrop = {
+  a: 0,
+  b: (count) => (text) => {
+    const string = force(text);
+    return string.slice(after(string, force(count)));
+  },
+};
+
+export const primTextIsPrefixOf = {
+  a: 0,
+  b: (prefix) => (text) => ({ a: +force(text).startsWith(force(prefix)) }),
+};
+
 export const putStrLnText = {
   a: 0,
   b: (thunk) => () => {
@@ -713,7 +744,7 @@ export const putStrLnText = {
 export const traceText = {
   a: 0,
   b: (text) => (thunk) => {
-    write(2, force(text) + "\n");
+    write(1, force(text) + "\n");
     return force(thunk);
   },
 };

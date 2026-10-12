@@ -19,6 +19,9 @@ data Primitive
   | TextEqual
   | TextCompare
   | TextLength
+  | TextTake
+  | TextDrop
+  | TextIsPrefixOf
   | GeneralCategory
   | IntEqual
   | IntLessThenEqual
@@ -58,6 +61,9 @@ arity = \case
   TextEqual -> 2
   TextCompare -> 2
   TextLength -> 1
+  TextTake -> 2
+  TextDrop -> 2
+  TextIsPrefixOf -> 2
   GeneralCategory -> 1
   IntEqual -> 2
   IntLessThenEqual -> 2

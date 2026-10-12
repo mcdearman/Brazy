@@ -108,7 +108,8 @@ import qualified Data.List as List
   ( dropWhileEnd, groupBy, inits, intercalate, intersperse, isInfixOf, isPrefixOf, isSuffixOf,
     stripPrefix, tails, transpose )
 import Hazy
-  ( primTextAppend, primTextHead, primTextLength, primTextNull, primTextSnoc, primTextTail )
+  ( primTextAppend, primTextDrop, primTextHead, primTextIsPrefixOf, primTextLength, primTextNull,
+    primTextSnoc, primTextTail, primTextTake )
 import qualified Hazy.Prelude as Hazy (unpack)
 import Prelude hiding (all, any, break, concat, concatMap, drop, dropWhile, elem, filter, foldl, foldl1, foldr, foldr1, head, init, last, length, lines, map, maximum, minimum, null, replicate, reverse, scanl, scanl1, scanr, scanr1, span, splitAt, tail, take, takeWhile, unlines, unwords, words, zip, zipWith)
 import qualified Prelude
@@ -317,25 +318,25 @@ unfoldrN count f seed = pack (go (measure count) seed)
           Nothing -> []
 
 take :: Int -> Text -> Text
-take count = lift (Prelude.take (measure count))
+take = primTextTake
 
 takeEnd :: Int -> Text -> Text
-takeEnd count = lift (\characters -> Prelude.drop (Prelude.length characters - measure count) characters)
+takeEnd count text = primTextDrop (primTextLength text - count) text
 
 drop :: Int -> Text -> Text
-drop count = lift (Prelude.drop (measure count))
+drop = primTextDrop
 
 dropEnd :: Int -> Text -> Text
-dropEnd count = lift (\characters -> Prelude.take (Prelude.length characters - measure count) characters)
+dropEnd count text = primTextTake (primTextLength text - count) text
 
 takeWhile :: (Char -> Bool) -> Text -> Text
-takeWhile p = lift (Prelude.takeWhile p)
+takeWhile p text = primTextTake (run p text) text
 
 takeWhileEnd :: (Char -> Bool) -> Text -> Text
 takeWhileEnd p = lift (Prelude.reverse . Prelude.takeWhile p . Prelude.reverse)
 
 dropWhile :: (Char -> Bool) -> Text -> Text
-dropWhile p = lift (Prelude.dropWhile p)
+dropWhile p text = primTextDrop (run p text) text
 
 dropWhileEnd :: (Char -> Bool) -> Text -> Text
 dropWhileEnd p = lift (List.dropWhileEnd p)
@@ -353,8 +354,7 @@ stripEnd :: Text -> Text
 stripEnd = dropWhileEnd Char.isSpace
 
 splitAt :: Int -> Text -> (Text, Text)
-splitAt count text = case Prelude.splitAt (measure count) (unpack text) of
-  (before, after) -> (pack before, pack after)
+splitAt count text = (primTextTake count text, primTextDrop count text)
 
 breakOn :: Text -> Text -> (Text, Text)
 breakOn needle text = case found (unpack needle) (unpack text) of
@@ -364,12 +364,12 @@ breakOnEnd :: Text -> Text -> (Text, Text)
 breakOnEnd = placeholder
 
 break :: (Char -> Bool) -> Text -> (Text, Text)
-break p text = case Prelude.break p (unpack text) of
-  (before, after) -> (pack before, pack after)
+break p = span (not . p)
 
 span :: (Char -> Bool) -> Text -> (Text, Text)
-span p text = case Prelude.span p (unpack text) of
-  (before, after) -> (pack before, pack after)
+span p text = (primTextTake count text, primTextDrop count text)
+  where
+    count = run p text
 
 spanM :: (Monad m) => (Char -> m Bool) -> Text -> m (Text, Text)
 spanM = placeholder
@@ -429,7 +429,7 @@ unwords :: [Text] -> Text
 unwords texts = pack (Prelude.unwords (Prelude.map unpack texts))
 
 isPrefixOf :: Text -> Text -> Bool
-isPrefixOf a b = List.isPrefixOf (unpack a) (unpack b)
+isPrefixOf = primTextIsPrefixOf
 
 isSuffixOf :: Text -> Text -> Bool
 isSuffixOf a b = List.isSuffixOf (unpack a) (unpack b)
@@ -438,9 +438,9 @@ isInfixOf :: Text -> Text -> Bool
 isInfixOf a b = List.isInfixOf (unpack a) (unpack b)
 
 stripPrefix :: Text -> Text -> Maybe Text
-stripPrefix prefix text = case List.stripPrefix (unpack prefix) (unpack text) of
-  Just rest -> Just (pack rest)
-  Nothing -> Nothing
+stripPrefix prefix text
+  | primTextIsPrefixOf prefix text = Just (primTextDrop (primTextLength prefix) text)
+  | otherwise = Nothing
 
 stripSuffix :: Text -> Text -> Maybe Text
 stripSuffix suffix text = case List.stripPrefix (Prelude.reverse (unpack suffix)) (Prelude.reverse (unpack text)) of
@@ -487,6 +487,11 @@ copy text = text
 
 measureOff :: Int -> Text -> Int
 measureOff = placeholder
+
+-- How many characters at the start of a text are as asked. No more of the
+-- text is looked at than those and one more.
+run :: (Char -> Bool) -> Text -> Int
+run p text = Prelude.length (Prelude.takeWhile p (unpack text))
 
 lift :: ([Char] -> [Char]) -> Text -> Text
 lift f text = pack (f (unpack text))
