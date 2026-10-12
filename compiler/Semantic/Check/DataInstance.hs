@@ -52,7 +52,18 @@ constructed ConstructorInstance {result} typeIndex = foldl (#) (Core.constructor
 
 selectorFunction :: DataInstance s scope -> Selector.Index scope -> Unify.Type s scope
 selectorFunction instancex (Selector.Index typeIndex selectorIndex) =
-  baseType instancex typeIndex -#> selectorType instancex selectorIndex
+  selected instancex typeIndex selectorIndex -#> selectorType instancex selectorIndex
+
+-- |
+-- The type of what a selector selects from. It is what the first
+-- constructor that holds the thing makes: for a constructor that says what
+-- type it makes, that type is what the type of what it holds is said in
+-- terms of.
+selected :: DataInstance s scope -> Type2.Index scope -> Int -> Unify.Type s scope
+selected DataInstance {constructors, selectors} typeIndex selectorIndex =
+  constructed (constructors Strict.Vector.! first) typeIndex
+  where
+    Selector {first} = selectors Strict.Vector.! selectorIndex
 
 selectorType :: DataInstance s scope -> Int -> Unify.Type s scope
 selectorType DataInstance {constructors, selectors} selectorIndex = entry

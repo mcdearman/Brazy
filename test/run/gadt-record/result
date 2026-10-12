@@ -1,0 +1,15 @@
+('x',2)
+'x'
+('y',3)
+(5,'z')
+("c","s",7,9)
+Circle {name = "round", radius = 3}
+3
+(4,True,9)
+'x'
+(Box 'x',True)
+('x',True)
+Just 'x'
+(Number 1,True,False)
+(Fork (Leaf 1) (Leaf 2),False)
+One 1

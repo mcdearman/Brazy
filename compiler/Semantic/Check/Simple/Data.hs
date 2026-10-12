@@ -24,6 +24,14 @@ instanciate use _ position Data {parameters, constructors, selectors, brand} = d
           }
   pure datax
 
+-- |
+-- A type as it is where a value of it is taken apart.
+instanciateApart :: Context s scope -> Position -> Data scope -> ST s (DataInstance s scope)
+instanciateApart context position datax = do
+  datax <- instanciate Match context position datax
+  DataInstance.mark context datax
+  pure datax
+
 instanciateMark :: Context s scope -> Position -> Data scope -> ST s (DataInstance s scope)
 instanciateMark context position datax = do
   datax <- instanciate Build context position datax

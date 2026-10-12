@@ -153,9 +153,10 @@ merge entries@(entry :| _) =
                                 },
                         kind = Identity Inferred
                       }
-        | Just (_, More.GADT {brand, parameters, gadtConstructors}) <- gadt,
+        | Just (_, More.GADT {brand, parameters, gadtConstructors, selectors}) <- gadt,
           constructorNames <- GADTConstructor.name <$> gadtConstructors,
-          gadtConstructors <- fmap GADTConstructor.shrink gadtConstructors ->
+          gadtConstructors <- fmap GADTConstructor.shrink gadtConstructors,
+          selectors <- fmap Selector.shrink selectors ->
             Verbose.resolving (Variable.print' name) $
               case annotation of
                 Strict.Nothing ->
@@ -171,6 +172,7 @@ merge entries@(entry :| _) =
                                 parameters,
                                 brand,
                                 gadtConstructors,
+                                selectors,
                                 unsupported = Refl
                               },
                       kind = Identity Inferred
@@ -188,6 +190,7 @@ merge entries@(entry :| _) =
                                 parameters,
                                 brand,
                                 gadtConstructors,
+                                selectors,
                                 unsupported = Refl
                               },
                       kind = Identity Inferred
@@ -272,7 +275,7 @@ merge entries@(entry :| _) =
     name = Partial.name entry
     fields
       | Just (_, More.ADT {selectors}) <- adt = Selectors selectors
-      | Just (_, More.GADT {}) <- gadt = Selectors Strict.Vector.empty
+      | Just (_, More.GADT {selectors}) <- gadt = Selectors selectors
       | Just (_, More.Class {methods}) <- classx = Methods methods
       | otherwise = NoFields
     constructors

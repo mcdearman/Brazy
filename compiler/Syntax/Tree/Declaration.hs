@@ -5,10 +5,14 @@
 module Syntax.Tree.Declaration where
 
 import Data.Foldable (toList)
+import Data.List.NonEmpty (NonEmpty ((:|)))
+import qualified Data.Strict.Maybe as Strict (Maybe (..))
+import qualified Data.Text as Text (pack)
 import qualified Data.Strict.Vector1 as Strict (Vector1, fromNonEmpty)
 import qualified Data.Vector.Strict as Strict (Vector)
 import qualified Data.Vector.Strict as Strict.Vector
 import Syntax.FreeVariables (TermBindingVariables (..))
+import qualified Syntax.Lexer as Lexer (variableIdentifier)
 import Syntax.Parser
   ( Parser,
     asum,
@@ -82,6 +86,11 @@ data Declaration position
         typePosition :: !position,
         typeName :: !ConstructorIdentifier,
         parameters :: !(Strict.Vector (TypePattern Position)),
+        -- | How many of the parameters are written. The rest stand for what
+        -- the kind that is said for the type takes: the two parameters of
+        --
+        -- > data T :: Type -> Type -> Type where
+        named :: !Int,
         dataDefinition :: !(Data position)
       }
   | -- |
@@ -243,34 +252,50 @@ toImport = \case
 -- is not a type of values at all, such as a stage or a scope. It is still
 -- required of a parameter that is the type of nothing the value holds,
 -- which Haskell would not require.
+--
+-- A type whose kind is said where it is declared asks as well for that to
+-- be the kind it is checked against, as if it were said on a line of its
+-- own. This is only so when the type has no parameters that are written:
+-- the kind that is said is then the whole kind.
 derived :: Declaration Position -> [Declaration Position]
 derived = \case
-  Data {startPosition, typeName, parameters, dataDefinition = Data.ADT {derivingx}} -> do
-    className <- toList derivingx
-    let requires pattern =
-          Constraint.Constraint
+  Data {startPosition, typeName, parameters, named, dataDefinition} -> kinded ++ instances
+    where
+      kinded = case dataDefinition of
+        Data.GADT {kind = Strict.Just kindAnnotation}
+          | named == 0 ->
+              [ KindAnnotation
+                  { typeNames = Strict.fromNonEmpty ((startPosition :@ typeName) :| []),
+                    kindAnnotation
+                  }
+              ]
+        _ -> []
+      instances = do
+        className <- toList (Data.derivingx dataDefinition)
+        let requires pattern =
+              Constraint.Constraint
+                { startPosition,
+                  classVariable = startPosition :@ className,
+                  typeVariable = startPosition :@ TypePattern.name pattern,
+                  arguments = Strict.Vector.empty
+                }
+        pure
+          Instance
             { startPosition,
-              classVariable = startPosition :@ className,
-              typeVariable = startPosition :@ TypePattern.name pattern,
-              arguments = Strict.Vector.empty
+              prerequisites =
+                if null parameters
+                  then Constraints.None
+                  else Constraints.Constraints (fmap requires parameters),
+              classPosition = startPosition,
+              className,
+              instanceHead =
+                InstanceHead.Head
+                  { startPosition,
+                    typeName = Variable.Local Variable.:=. typeName,
+                    parameters
+                  },
+              instanceDefinition = InstanceDeclarations._derivingClause
             }
-    pure
-      Instance
-        { startPosition,
-          prerequisites =
-            if null parameters
-              then Constraints.None
-              else Constraints.Constraints (fmap requires parameters),
-          classPosition = startPosition,
-          className,
-          instanceHead =
-            InstanceHead.Head
-              { startPosition,
-                typeName = Variable.Local Variable.:=. typeName,
-                parameters
-              },
-          instanceDefinition = InstanceDeclarations._derivingClause
-        }
   _ -> []
 
 parse :: Parser (Declaration Position)
@@ -328,9 +353,28 @@ parse =
           brand,
           typePosition,
           typeName,
-          parameters,
+          parameters = parameters <> Strict.Vector.fromList (unnamed <$> [1 .. taken]),
+          named = length parameters,
           dataDefinition
         }
+      where
+        -- What the kind that is said for the type takes.
+        taken :: Int
+        taken = case dataDefinition of
+          Data.GADT {kind = Strict.Just kind} -> arrows kind
+          _ -> 0
+        arrows :: Type Position -> Int
+        arrows = \case
+          Type.Function {result} -> 1 + arrows result
+          _ -> 0
+        -- A parameter nobody wrote. No constructor can mean it: the
+        -- constructors of such a type have variables of their own.
+        unnamed :: Int -> TypePattern Position
+        unnamed index =
+          TypePattern.TypePattern
+            { position = typePosition,
+              name = Lexer.variableIdentifier (Text.pack ("t" ++ show index))
+            }
     parseClass :: Parser (Position -> Declaration Position)
     parseClass =
       asum

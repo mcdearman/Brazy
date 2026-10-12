@@ -188,10 +188,47 @@ resolve context entry = case entry of
                         More.GADT
                           { brand,
                             parameters,
-                            gadtConstructors
+                            gadtConstructors,
+                            selectors
                           }
                     }
                   where
+                    -- A name that constructors hold something under selects
+                    -- it from each of them. Nothing is checked here of the
+                    -- types of what is selected: each constructor says its
+                    -- own, in variables of its own.
+                    selectors = orderWith' const $ foldMap entries (zip [0 ..] $ toList gadtConstructors)
+                      where
+                        entries (first, constructor) = do
+                          (index, GADTConstructor.Field {field = name, at = position, strict}) <-
+                            zip [0 ..] $ toList $ GADTConstructor.fields constructor
+                          let places = Strict.Vector.fromList $ do
+                                constructor <- toList gadtConstructors
+                                let check (_, GADTConstructor.Field {field = name'}) = name == name'
+                                    found = find check $ zip [0 ..] $ toList $ GADTConstructor.fields constructor
+                                pure $ case found of
+                                  Nothing -> Strict.Nothing
+                                  Just (index, GADTConstructor.Field {strict}) -> Strict.Just (index, strict)
+                              uniform
+                                | Boxed <- brand = all (== Strict.Just (index, strict)) places
+                                | otherwise = False
+                              item =
+                                Complete.Selector
+                                  { position,
+                                    name,
+                                    real =
+                                      Selector.Selector
+                                        { name,
+                                          position,
+                                          first,
+                                          index,
+                                          uniform =
+                                            if uniform
+                                              then Selector.Uniform {}
+                                              else Selector.Disjoint {indexes = fmap fst <$> places}
+                                        }
+                                  }
+                          pure (name, item)
                     gadtConstructors = orderList' duplicate $ (=<<) entries $ toList constructors
                       where
                         duplicate [constructor] = constructor
@@ -200,7 +237,8 @@ resolve context entry = case entry of
                             [GADTConstructor.position constructor | constructor <- constructors]
                         entries constructor = [(GADTConstructor.name entry, entry) | entry <- entries]
                           where
-                            entries = GADTConstructor.resolve context constructor
+                            entries = GADTConstructor.resolve context names constructor
+                            names = fmap Complete.Selector.name selectors
            in [(name, item)]
   Syntax.Class
     { startPosition,

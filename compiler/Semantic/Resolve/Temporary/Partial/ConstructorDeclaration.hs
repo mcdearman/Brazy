@@ -4,7 +4,6 @@ module Semantic.Resolve.Temporary.Partial.ConstructorDeclaration where
 
 import Data.Foldable (toList)
 import qualified Data.Map as Map
-import qualified Data.Vector.Strict as Strict.Vector
 import qualified Semantic.Resolve.Temporary.Complete.Constructor as Complete (Constructor (Constructor))
 import qualified Semantic.Resolve.Temporary.Complete.Constructor as Complete.Constructor
 import Semantic.Resolve.Temporary.Complete.Field (Field (Field))
@@ -85,12 +84,15 @@ resolve lookup entry = case entry of
               constructorIndex
               Complete.GADTConstructor
                 { name,
-                  position
+                  position,
+                  fields = held,
+                  selections
                 } =
                 (name, Declaration {position, name, constructor})
                 where
-                  selections = Strict.Vector.empty
-                  fields = Map.empty
+                  fields =
+                    Map.fromList
+                      [(field, i) | (i, Complete.GADTConstructor.Field {field}) <- zip [0 ..] $ toList held]
                   constructor =
                     More.Constructor
                       { typeIndex,
