@@ -16,14 +16,24 @@ module Control.Applicative
 where
 
 import Data.Foldable (asum)
-import Hazy.Prelude (placeholder)
 
 class (Applicative f) => Alternative f where
   empty :: f a
   infixl 3 <|>
   (<|>) :: f a -> f a -> f a
   some :: f a -> f [a]
+  some v = (:) <$> v <*> many v
   many :: f a -> f [a]
+  many v = some v <|> pure []
+
+instance Alternative Maybe where
+  empty = Nothing
+  Nothing <|> other = other
+  found <|> _ = found
+
+instance Alternative [] where
+  empty = []
+  (<|>) = (++)
 
 newtype Const a b = Const
   { getConst :: a
@@ -51,13 +61,13 @@ newtype ZipList a = ZipList
 infixl 4 <**>
 
 (<**>) :: (Applicative f) => f a -> f (a -> b) -> f b
-(<**>) = placeholder
+a <**> f = (\x g -> g x) <$> a <*> f
 
 liftA :: (Applicative f) => (a -> b) -> f a -> f b
-liftA = placeholder
+liftA f a = pure f <*> a
 
 liftA3 :: (Applicative f) => (a -> b -> c -> d) -> f a -> f b -> f c -> f d
-liftA3 = placeholder
+liftA3 f a b c = f <$> a <*> b <*> c
 
 optional :: (Alternative f) => f a -> f (Maybe a)
-optional = placeholder
+optional v = Just <$> v <|> pure Nothing

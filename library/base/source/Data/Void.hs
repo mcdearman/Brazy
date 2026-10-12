@@ -5,7 +5,6 @@ module Data.Void
   )
 where
 
-import Hazy.Prelude (placeholder)
 
 data Void
 
@@ -19,7 +18,7 @@ instance Show Void where
   showsPrec _ = absurd
 
 absurd :: Void -> a
-absurd = placeholder
+absurd = \case {}
 
 vacuous :: (Functor f) => f Void -> f a
-vacuous = placeholder
+vacuous = fmap absurd

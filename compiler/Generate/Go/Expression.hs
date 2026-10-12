@@ -13,6 +13,7 @@ import Core.Tree.MethodInfo (MethodInfo (..))
 import Core.Tree.TypeLambda (TypeLambda, TypeLambdaOver (..))
 import Data.Char (ord)
 import Data.Foldable (toList)
+import qualified Data.Text as Text (pack)
 import qualified Data.Vector as Vector
 import qualified Data.Vector.Strict as Strict
 import qualified Generate.Binding.Term as Term
@@ -143,6 +144,45 @@ generateConstructor context Constructor.Index {constructorIndex} arguments Const
       object = Javascript.Object {fields}
   pure (concat extra, object)
 
+-- |
+-- The characters of a list of characters that is written out in full, if
+-- an expression is one and is long. Such a list is one object inside
+-- another as deep as it is long, and a long one is deeper than what reads
+-- the program will go.
+written :: Expression scope -> Maybe [Char]
+written expression = case characters expression of
+  Just found | length (take 33 found) > 32, all plain found -> Just found
+  _ -> Nothing
+  where
+    characters :: Expression scope -> Maybe [Char]
+    characters = \case
+      Constructor {constructor, arguments}
+        | constructor == Constructor.nil, null arguments -> Just []
+        | constructor == Constructor.cons,
+          [Character {character}, rest] <- toList arguments ->
+            (character :) <$> characters rest
+      _ -> Nothing
+    -- Half of a pair that stands for one character cannot be kept in a
+    -- string by itself.
+    plain character = ord character < 0xd800 || ord character > 0xdfff
+
+-- |
+-- A list of characters, made as the program runs from a string that holds
+-- them.
+generateString :: Context s scope -> [Char] -> ST s Javascript.Expression
+generateString context characters = do
+  let Mangle.Builtin {unpackText} = Context.builtin context
+  unpack <- unpackText
+  pure
+    Javascript.Call
+      { function =
+          Javascript.Member
+            { object = Javascript.Variable {name = unpack},
+              field = Mangle.value
+            },
+        arguments = [strict Javascript.String {string = Text.pack characters}]
+      }
+
 generateLambda :: Context s scope -> Expression (SimpleDeclaration 'Scope.:+ scope) -> ST s Javascript.Expression
 generateLambda context body = do
   name <- fresh context
@@ -172,6 +212,7 @@ thunk context Done Variable {variable, instanciation = Instanciation.Mono}
       name <- symbol context name
       pure Javascript.Variable {name}
 thunk context binder expression = case expression of
+  _ | Just characters <- written expression -> strict <$> generateString context characters
   Constructor {constructor, arguments, constructorInfo} -> do
     (extra, value) <- generateConstructor context constructor arguments constructorInfo
     if not (null extra)
@@ -260,6 +301,9 @@ generateImpure context expression = case expression of
       pure ([], value)
   _ -> generatePure context expression
 generatePure context expression = case expression of
+  _ | Just characters <- written expression -> do
+    value <- generateString context characters
+    pure ([], value)
   Constructor {constructor, arguments, constructorInfo} -> do
     generateConstructor context constructor arguments constructorInfo
   Character {character} -> pure ([], generateCharacter character)

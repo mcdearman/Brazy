@@ -88,7 +88,8 @@ data Builtin a = Builtin
     readTuple,
     readList,
     readNonEmpty,
-    readRatio ::
+    readRatio,
+    unpackText ::
       a
   }
 
@@ -121,7 +122,7 @@ every
       semigroupTuple, monoidArrow, monoidList, monoidOrdering, monoidST, monoidTuple, showBool,
       showOrdering, showChar, showInt, showInteger, showTuple, showList, showNonEmpty, showRatio,
       readBool, readOrdering, readChar, readInt, readInteger, readTuple, readList, readNonEmpty,
-      readRatio
+      readRatio, unpackText
     } =
     [ abort, numInt, numInteger, numRatio, enumBool, enumChar, enumInt, enumInteger, enumOrdering,
       enumUnit, enumRatio, boundedBool, boundedChar, boundedInt, boundedOrdering, boundedTuple,
@@ -134,7 +135,7 @@ every
       semigroupTuple, monoidArrow, monoidList, monoidOrdering, monoidST, monoidTuple, showBool,
       showOrdering, showChar, showInt, showInteger, showTuple, showList, showNonEmpty, showRatio,
       readBool, readOrdering, readChar, readInt, readInteger, readTuple, readList, readNonEmpty,
-      readRatio
+      readRatio, unpackText
     ]
 
 -- |
@@ -151,7 +152,7 @@ build
     semigroupList, semigroupNonEmpty, semigroupOrdering, semigroupST, semigroupTuple, monoidArrow,
     monoidList, monoidOrdering, monoidST, monoidTuple, showBool, showOrdering, showChar, showInt,
     showInteger, showTuple, showList, showNonEmpty, showRatio, readBool, readOrdering, readChar,
-    readInt, readInteger, readTuple, readList, readNonEmpty, readRatio
+    readInt, readInteger, readTuple, readList, readNonEmpty, readRatio, unpackText
     ] =
     Builtin
       { abort, numInt, numInteger, numRatio, enumBool, enumChar, enumInt, enumInteger, enumOrdering,
@@ -165,7 +166,7 @@ build
         semigroupST, semigroupTuple, monoidArrow, monoidList, monoidOrdering, monoidST, monoidTuple,
         showBool, showOrdering, showChar, showInt, showInteger, showTuple, showList, showNonEmpty,
         showRatio, readBool, readOrdering, readChar, readInt, readInteger, readTuple, readList,
-        readNonEmpty, readRatio
+        readNonEmpty, readRatio, unpackText
       }
 build _ = error "not every builtin name"
 
@@ -276,5 +277,6 @@ canonical =
       readTuple = pack "readTuple",
       readList = pack "readList",
       readNonEmpty = pack "readNonEmpty",
-      readRatio = pack "readRatio"
+      readRatio = pack "readRatio",
+      unpackText = pack "unpack"
     }

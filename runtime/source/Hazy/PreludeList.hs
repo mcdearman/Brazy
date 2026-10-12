@@ -66,13 +66,13 @@ scanl1 _ [] = []
 
 class Foldable t where
   fold :: (Monoid m) => t m -> m
-  fold = placeholder
+  fold = foldMap id
 
   foldMap :: (Monoid m) => (a -> m) -> t a -> m
-  foldMap = placeholder
+  foldMap f = foldr (\a rest -> f a <> rest) mempty
 
   foldMap' :: (Monoid m) => (a -> m) -> t a -> m
-  foldMap' = placeholder
+  foldMap' = foldMap
 
   foldr :: (a -> b -> b) -> b -> t a -> b
   foldr = placeholder
@@ -84,7 +84,10 @@ class Foldable t where
       foldl f z [] = z
       foldl f z (x : xs) = foldl f (f z x) xs
   foldl' :: (b -> a -> b) -> b -> t a -> b
-  foldl' = placeholder
+  foldl' f z = strictly z . toList
+    where
+      strictly z [] = z
+      strictly z (x : xs) = let next = f z x in next `seq` strictly next xs
 
   foldr1 :: (a -> a -> a) -> t a -> a
   foldr1 f = foldr1 f . toList

@@ -23,45 +23,45 @@ module Data.Foldable
   )
 where
 
-import Control.Applicative (Alternative)
+import Control.Applicative (Alternative (empty, (<|>)))
 import Control.Monad (MonadPlus)
 import Hazy.Prelude (Foldable (..), placeholder)
 
 foldrM :: (Foldable t, Monad m) => (a -> b -> m b) -> b -> t a -> m b
-foldrM = placeholder
+foldrM f z0 xs = foldl (\k x z -> f x z >>= k) pure xs z0
 
 foldlM :: (Foldable t, Monad m) => (b -> a -> m b) -> b -> t a -> m b
-foldlM = placeholder
+foldlM f z0 xs = foldr (\x k z -> f z x >>= k) pure xs z0
 
 traverse_ :: (Foldable t, Applicative f) => (a -> f b) -> t a -> f ()
-traverse_ = placeholder
+traverse_ f = foldr (\x rest -> f x *> rest) (pure ())
 
 for_ :: (Foldable t, Applicative f) => t a -> (a -> f b) -> f ()
-for_ = placeholder
+for_ xs f = traverse_ f xs
 
 sequenceA_ :: (Foldable t, Applicative f) => t (f a) -> f ()
-sequenceA_ = placeholder
+sequenceA_ = foldr (\x rest -> x *> rest) (pure ())
 
 asum :: (Foldable t, Alternative f) => t (f a) -> f a
-asum = placeholder
+asum = foldr (<|>) empty
 
 forM_ :: (Foldable t, Monad m) => t a -> (a -> m b) -> m ()
-forM_ = placeholder
+forM_ xs f = traverse_ f xs
 
 sequence_ :: (Foldable t, Monad m) => t (m a) -> m ()
-sequence_ = placeholder
+sequence_ = foldr (\x rest -> x >> rest) (pure ())
 
 msum :: (Foldable t, MonadPlus m) => t (m a) -> m a
 msum = placeholder
 
 maximumBy :: (Foldable t) => (a -> a -> Ordering) -> t a -> a
-maximumBy = placeholder
+maximumBy order = foldr1 (\a b -> if order a b == LT then b else a)
 
 minimumBy :: (Foldable t) => (a -> a -> Ordering) -> t a -> a
-minimumBy = placeholder
+minimumBy order = foldr1 (\a b -> if order a b == GT then b else a)
 
 notElem :: (Foldable t, Eq a) => a -> t a -> Bool
-notElem = placeholder
+notElem x = not . elem x
 
 find :: (Foldable t) => (a -> Bool) -> t a -> Maybe a
-find = placeholder
+find p = foldr (\x rest -> if p x then Just x else rest) Nothing
