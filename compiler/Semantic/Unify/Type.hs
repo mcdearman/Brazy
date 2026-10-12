@@ -570,6 +570,11 @@ sameAll = comparedAll False
 alikeAll :: [Type s scope] -> [Type s scope] -> ST s Bool
 alikeAll = comparedAll True
 
+-- |
+-- Whether two types could be the same, with nothing made to be anything.
+alike :: Type s scope -> Type s scope -> ST s Bool
+alike = compared True
+
 comparedAll :: Bool -> [Type s scope] -> [Type s scope] -> ST s Bool
 comparedAll open left right
   | length left /= length right = pure False
@@ -589,10 +594,16 @@ compared open = go
           Solved right -> go left right
           Unsolved {} -> pure open
       (Logical (Shift left), Logical (Shift right)) -> go (Logical left) (Logical right)
-      -- One is from a scope further out and the other is not: it is not
-      -- looked into.
-      (Logical (Shift _), _) -> pure open
-      (_, Logical (Shift _)) -> pure open
+      -- One is from a scope further out and the other is not: if it is
+      -- worked out, it is looked at as it is here.
+      (Logical (Shift logical), _) ->
+        known logical >>= \case
+          Just left -> go (shiftLogical left) right
+          Nothing -> pure open
+      (_, Logical (Shift logical)) ->
+        known logical >>= \case
+          Just right -> go left (shiftLogical right)
+          Nothing -> pure open
       (Variable left, Variable right) -> pure (left == right)
       (Constructor left, Constructor right) -> pure (left == right)
       (Call function argument, Call function' argument') -> both (go function function') (go argument argument')
@@ -607,6 +618,14 @@ compared open = go
     both left right = do
       left <- left
       if left then right else pure False
+    -- What an unknown is, if it has been worked out.
+    known :: forall scope'. Logical s scope' -> ST s (Maybe (Type s scope'))
+    known = \case
+      Box reference ->
+        readSTRef reference >>= \case
+          Solved typex -> pure (Just typex)
+          Unsolved {} -> pure Nothing
+      Shift logical -> fmap shiftLogical <$> known logical
     -- An unknown on the left: the same as itself, and otherwise only what
     -- an unknown could be.
     unknown :: forall scope'. STRef s (Box s scope') -> Type s scope' -> ST s Bool

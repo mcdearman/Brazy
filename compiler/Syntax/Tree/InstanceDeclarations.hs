@@ -19,6 +19,14 @@ data InstanceDeclarations position
     -- > deriving instance C A
     --                         ^
     DerivingInstance
+  | -- |
+    -- > data A = A deriving (C)
+    --              ^^^^^^^^^^^^
+    --
+    -- The instance that a clause on a type asks for. What it requires was
+    -- not written: it is the class, of each parameter of the type that the
+    -- class can be asked of.
+    DerivingClause
   deriving (Show)
 
 parse :: Parser (InstanceDeclarations Position)
@@ -36,3 +44,6 @@ parse =
 
 _derivingInstance :: InstanceDeclarations position
 _derivingInstance = DerivingInstance
+
+_derivingClause :: InstanceDeclarations position
+_derivingClause = DerivingClause

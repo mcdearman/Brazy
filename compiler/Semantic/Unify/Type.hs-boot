@@ -34,4 +34,5 @@ mark :: Context s scope -> Position -> Mask.Erasure -> Type s scope -> ST s ()
 unify :: Context s scope -> Position -> Type s scope -> Type s scope -> ST s ()
 refine :: Context s scope -> Position -> Type s scope -> Type s scope -> ST s [Equality s scope]
 lowerEquality :: Equality s (scope' ':+ scope) -> Maybe (Equality s scope)
+alike :: Type s scope -> Type s scope -> ST s Bool
 constrain :: Context s scope -> Position -> Type2.Index scope -> Type s scope -> ST s (Evidence s scope)

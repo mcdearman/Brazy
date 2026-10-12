@@ -1,5 +1,6 @@
 module Semantic.Check.Go.InstanceDefinition2 where
 
+import Control.Monad (filterM)
 import Control.Monad.ST (ST)
 import qualified Core.Builtin as Builtin
 import Core.Substitute (Category (Substitute), logicalType)
@@ -63,6 +64,7 @@ import Semantic.Stage (Check, Resolve)
 import Semantic.Tree.Combinators.Implicit (Implicit (Resolve))
 import qualified Semantic.Tree.Combinators.Implicit as Implicit
 import Semantic.Tree.Combinators.Inferred (Inferred (Solved))
+import qualified Semantic.Tree.Constraint as Semantic (Constraint (..))
 import Semantic.Tree.Constraints (Constraints (Constraints, None))
 import Semantic.Tree.InstanceDefinition (InstanceDefinition (..))
 import Semantic.Tree.InstanceDefinition2 (Annotation (..), Header (..), InstanceDefinition2 (..))
@@ -101,7 +103,7 @@ checkHeader ::
   (f (ST s) -> Context s scope) ->
   Header Resolve scope ->
   Topological.Formula f s (Header Check scope)
-checkHeader position key information Header {parameters, prerequisites} =
+checkHeader position key information Header {parameters, prerequisites, lenient} =
   Topological.Formula
     { cycle = cyclicalTypeChecking position,
       run = \declarations -> do
@@ -126,10 +128,26 @@ checkHeader position key information Header {parameters, prerequisites} =
         Unify.unify context position headKind' headKind
         Unify.unify context position (target -#> Core.Type.Constraint) indexKind
 
+        -- An instance from a deriving clause requires the class of each
+        -- parameter, but only of those it can be asked of: the ones whose
+        -- kind can be the kind the class takes. A parameter that stands
+        -- for a stage or a scope, or for a type that takes arguments, is
+        -- left out.
+        prerequisites <- case prerequisites of
+          Constraints wanted | lenient -> do
+            let fits = \case
+                  Semantic.Constraint {head} ->
+                    Unify.alike (shiftLogical (Unsolved.typex (parameters Strict.Vector.! head))) target
+                  Semantic.Equality {} -> pure True
+            kept <- filterM fits (toList wanted)
+            pure $ case kept of
+              [] -> None
+              _ -> Constraints (Strict.Vector.fromList kept)
+          _ -> pure prerequisites
         prerequisites <- Unsolved.Constraints.check context prerequisites
         parameters <- Unify.runSolve $ traverse Unsolved.solve parameters
         prerequisites <- Unify.runSolve $ Unsolved.Constraints.solve context prerequisites
-        pure Header {parameters, prerequisites}
+        pure Header {parameters, prerequisites, lenient}
     }
 
 data Source origin scope where

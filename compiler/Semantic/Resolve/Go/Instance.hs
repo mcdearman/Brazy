@@ -75,7 +75,10 @@ resolve
               Identity
                 Header
                   { parameters,
-                    prerequisites
+                    prerequisites,
+                    lenient = case declarations of
+                      Syntax.DerivingClause -> True
+                      _ -> False
                   }
             definition = case declarations of
               Syntax.InstanceDeclarations {declarations} ->
@@ -85,13 +88,15 @@ resolve
                       { evidence = Inferred,
                         members = members (toList declarations)
                       }
-              Syntax.DerivingInstance ->
-                DerivedInstance header
-                  ::: (Identity . Identity)
-                    InstanceDefinition
-                      { evidence = Inferred,
-                        members = Strict.Vector.replicate (length memberMethods) $ Generated Inferred
-                      }
+              Syntax.DerivingInstance -> derived
+              Syntax.DerivingClause -> derived
+            derived =
+              DerivedInstance header
+                ::: (Identity . Identity)
+                  InstanceDefinition
+                    { evidence = Inferred,
+                      members = Strict.Vector.replicate (length memberMethods) $ Generated Inferred
+                    }
          in Instance
               { startPosition,
                 definition,

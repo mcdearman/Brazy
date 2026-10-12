@@ -82,7 +82,10 @@ instance Traversable2 (Annotation origin) where
 
 data Header stage scope = Header
   { parameters :: !(Strict.Vector (TypePattern Position stage scope)),
-    prerequisites :: !(Constraints Position stage scope)
+    prerequisites :: !(Constraints Position stage scope),
+    -- | Whether what is required was not written, but is the class of each
+    -- parameter it can be asked of: an instance from a @deriving@ clause.
+    lenient :: !Bool
   }
   deriving (Show)
 
@@ -90,8 +93,9 @@ instance Shift0.Functor (Header stage) where
   map = Shift.mapDefault
 
 instance Shift.Functor (Header stage) where
-  map category Header {parameters, prerequisites} =
+  map category Header {parameters, prerequisites, lenient} =
     Header
       { parameters = Shift.map category <$> parameters,
-        prerequisites = Shift.map category prerequisites
+        prerequisites = Shift.map category prerequisites,
+        lenient
       }
