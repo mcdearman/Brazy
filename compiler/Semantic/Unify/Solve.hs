@@ -126,6 +126,12 @@ instance SolveEvidence EvidenceF where
       base <- solveEvidenceWith category position base
       pure $ Evidence.Super {base, index}
     Evidence.Held term -> pure Evidence.Held {term}
+    Evidence.Applied function arguments -> do
+      function <- solveEvidenceWith category position function
+      arguments <- traverse (solveEvidenceWith category position) arguments
+      pure Evidence.Applied {function, arguments}
+    -- It is only made of evidence that is worked out already.
+    Evidence.Abstract {} -> error "solving evidence that is a function"
     Evidence.Logical (Evidence.Shift evidence) ->
       solveEvidenceWith (category Shift0.:. Shift0.Shift) position (Evidence.Logical evidence)
     Evidence.Logical (Evidence.Box reference) ->

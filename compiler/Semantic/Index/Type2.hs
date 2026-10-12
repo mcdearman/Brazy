@@ -37,6 +37,7 @@ data Index scope
   | Read
   | Lazy
   | Strict
+  | Every
   deriving (Show, Eq, Ord)
 
 data Split scope
@@ -77,6 +78,7 @@ split = \case
   Read -> Builtin Read
   Lazy -> Builtin Lazy
   Strict -> Builtin Strict
+  Every -> Builtin Every
 
 unlocal :: Index (Local ':+ scope) -> Index scope
 unlocal index = case split index of

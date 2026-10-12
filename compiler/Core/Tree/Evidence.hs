@@ -33,6 +33,18 @@ data EvidenceF logical scope
     Held
       { term :: !(Term.Index scope)
       }
+  | -- | Evidence for something that holds given every type: a function of
+    -- the evidence that is required of the type, which is so many things.
+    -- The body has that evidence as what its innermost scope assumes.
+    Abstract
+      { count :: !Int,
+        body :: !(EvidenceF logical (Scope.Local 'Scope.:+ scope))
+      }
+  | -- | Such evidence, given what it requires.
+    Applied
+      { function :: !(EvidenceF logical scope),
+        arguments :: ![EvidenceF logical scope]
+      }
 
 instance (Show logical) => Show (EvidenceF logical scope) where
   showsPrec d = \case
@@ -50,6 +62,10 @@ instance (Show logical) => Show (EvidenceF logical scope) where
         . showsPrec 11 index
         . showString " }"
     Held {term} -> showParen (d > 10) $ showString "Held " . showsPrec 11 term
+    Abstract {count, body} ->
+      showParen (d > 10) $ showString "Abstract " . showsPrec 11 count . showString " " . showsPrec 11 body
+    Applied {function, arguments} ->
+      showParen (d > 10) $ showString "Applied " . showsPrec 11 function . showString " " . showsPrec 11 arguments
 
 instance (Show logical) => Scope.Show (EvidenceF logical) where
   showsPrec = showsPrec
@@ -71,6 +87,9 @@ instance Shift.Functor (EvidenceF logical) where
           index
         }
     Held {term} -> Held {term = Shift.map category term}
+    Abstract {count, body} -> Abstract {count, body = Shift.map (Shift.Over category) body}
+    Applied {function, arguments} ->
+      Applied {function = Shift.map category function, arguments = Shift.map category <$> arguments}
 
 instance (logical ~ Void) => Substitute.Functor (EvidenceF logical) where
   map category = Substitute.mapEvidence (Substitute.anyType category)
@@ -109,6 +128,12 @@ instance Substitute.EvidenceFunctor EvidenceF where
           index
         }
     Held {term} -> Held {term = Shift.map (Substitute.general category) term}
+    Abstract {count, body} -> Abstract {count, body = Substitute.mapEvidence (Substitute.Over category) body}
+    Applied {function, arguments} ->
+      Applied
+        { function = Substitute.mapEvidence category function,
+          arguments = Substitute.mapEvidence category <$> arguments
+        }
 
 instance Core.Functor EvidenceF where
   map f = \case
@@ -124,3 +149,5 @@ instance Core.Functor EvidenceF where
           index
         }
     Held {term} -> Held {term}
+    Abstract {count, body} -> Abstract {count, body = Core.map f body}
+    Applied {function, arguments} -> Applied {function = Core.map f function, arguments = Core.map f <$> arguments}

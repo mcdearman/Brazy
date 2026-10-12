@@ -124,6 +124,7 @@ builtin =
                 builtinType "Int" $ Type3.Index Type2.Int,
                 builtinType "Lazy" $ Type3.Index Type2.Lazy,
                 builtinType "Strict" $ Type3.Index Type2.Strict,
+                builtinType "Every" $ Type3.Index Type2.Every,
                 builtinType "Levity" Type3.Levity
               ],
           stability = ()

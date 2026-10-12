@@ -1,8 +1,11 @@
 module Data.Functor.Classes where
 
 import Data.Functor.Identity (Identity (..))
+import Hazy.Prelude (Every)
 
-class Show1 f where
+-- Something of the type can be shown whenever what it holds can: that is
+-- required of the type given every type.
+class (Show (f Every)) => Show1 f where
   liftShowsPrec :: (Int -> a -> ShowS) -> ([a] -> ShowS) -> Int -> f a -> ShowS
   liftShowList :: (Int -> a -> ShowS) -> ([a] -> ShowS) -> [f a] -> ShowS
   liftShowList showsValue showValues = \case

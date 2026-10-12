@@ -115,6 +115,7 @@ label context = \case
     Type2.Ordering -> builtin "Ordering"
     Type2.Lazy -> builtin "Lazy"
     Type2.Strict -> builtin "Strict"
+    Type2.Every -> builtin "Every"
     where
       builtin name =
         Syntax.Constructor

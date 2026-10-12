@@ -47,8 +47,8 @@ jobs:
           cabal update
           make
 
-      - name: Check that Hazy resolves its own source
-        run: .dist/bin/hazy -XStableImports --resolve compiler
+      - name: Check that Hazy resolves and type checks its own source
+        run: .dist/bin/hazy -XStableImports --check compiler
 
       - name: Test
         run: make test
@@ -99,8 +99,8 @@ jobs:
           cabal update
           make
 
-      - name: Check that Hazy resolves its own source
-        run: .dist/bin/hazy -XStableImports --resolve compiler
+      - name: Check that Hazy resolves and type checks its own source
+        run: .dist/bin/hazy -XStableImports --check compiler
 
       - name: Test
         run: make test

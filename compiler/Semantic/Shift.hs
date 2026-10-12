@@ -193,17 +193,19 @@ shiftTypeIndex = map
     map UngroupType {} (Type.Shift index) = index
     map UngroupTerm {} (Type.Shift index) = index
     map Builtin {} _ = error "builtin free variable"
-    map category index = map general index
-      where
-        general = case category of
-          ReplaceWildcard {} -> generalReplaceWildcard
-          SimplifyPattern {} -> generalSimplifyPattern
-          RenamePattern {} -> generalRenamePattern
-          SimplifyList {} -> generalSimplifyList
-          LetPattern {} -> generalLetPattern
-          FinishPattern {} -> generalFinishPattern
-          FinishNewtype {} -> generalFinishNewtype
-          ReplaceIrrefutable {} -> generalReplaceIrrefutable
+    -- Each of these shifts is the same as one made of the shifts above, and
+    -- is taken for that where it is used: which one is known only once
+    -- the shift is looked at, and a definition of its own would have to
+    -- have its type before that.
+    map category index = case category of
+      ReplaceWildcard {} -> map generalReplaceWildcard index
+      SimplifyPattern {} -> map generalSimplifyPattern index
+      RenamePattern {} -> map generalRenamePattern index
+      SimplifyList {} -> map generalSimplifyList index
+      LetPattern {} -> map generalLetPattern index
+      FinishPattern {} -> map generalFinishPattern index
+      FinishNewtype {} -> map generalFinishNewtype index
+      ReplaceIrrefutable {} -> map generalReplaceIrrefutable index
 
 instance Functor Type2.Index where
   map (Builtin index) (Type2.Index (Type.Global 0 0)) = index
@@ -236,18 +238,20 @@ instance Functor Evidence0.Index where
   map GroupType {} index = Evidence0.Shift index
   map UngroupTerm {} (Evidence0.Shift index) = index
   map UngroupType {} (Evidence0.Shift index) = index
-  map category index = map general index
-    where
-      general = case category of
-        ReplaceWildcard {} -> generalReplaceWildcard
-        SimplifyPattern {} -> generalSimplifyPattern
-        RenamePattern {} -> generalRenamePattern
-        SimplifyList {} -> generalSimplifyList
-        LetPattern {} -> generalLetPattern
-        FinishPattern {} -> generalFinishPattern
-        FinishNewtype {} -> generalFinishNewtype
-        ReplaceIrrefutable {} -> generalReplaceIrrefutable
-        Builtin {} -> error "unreachable"
+  -- Each of these shifts is the same as one made of the shifts above, and
+  -- is taken for that where it is used: which one is known only once
+  -- the shift is looked at, and a definition of its own would have to
+  -- have its type before that.
+  map category index = case category of
+    ReplaceWildcard {} -> map generalReplaceWildcard index
+    SimplifyPattern {} -> map generalSimplifyPattern index
+    RenamePattern {} -> map generalRenamePattern index
+    SimplifyList {} -> map generalSimplifyList index
+    LetPattern {} -> map generalLetPattern index
+    FinishPattern {} -> map generalFinishPattern index
+    FinishNewtype {} -> map generalFinishNewtype index
+    ReplaceIrrefutable {} -> map generalReplaceIrrefutable index
+    Builtin {} -> error "unreachable"
 
 instance PartialUnshift Evidence0.Index where
   partialUnshift abort (Evidence0.Assumed _) = vacuous abort
@@ -265,18 +269,20 @@ instance Functor Local.Index where
   map (GroupType _) index = Local.Shift index
   map UngroupTerm {} (Local.Shift index) = index
   map UngroupType {} (Local.Shift index) = index
-  map category index = map general index
-    where
-      general = case category of
-        ReplaceWildcard {} -> generalReplaceWildcard
-        SimplifyPattern {} -> generalSimplifyPattern
-        RenamePattern {} -> generalRenamePattern
-        SimplifyList {} -> generalSimplifyList
-        LetPattern {} -> generalLetPattern
-        FinishPattern {} -> generalFinishPattern
-        FinishNewtype {} -> generalFinishNewtype
-        ReplaceIrrefutable {} -> generalReplaceIrrefutable
-        Builtin {} -> error "unreachable"
+  -- Each of these shifts is the same as one made of the shifts above, and
+  -- is taken for that where it is used: which one is known only once
+  -- the shift is looked at, and a definition of its own would have to
+  -- have its type before that.
+  map category index = case category of
+    ReplaceWildcard {} -> map generalReplaceWildcard index
+    SimplifyPattern {} -> map generalSimplifyPattern index
+    RenamePattern {} -> map generalRenamePattern index
+    SimplifyList {} -> map generalSimplifyList index
+    LetPattern {} -> map generalLetPattern index
+    FinishPattern {} -> map generalFinishPattern index
+    FinishNewtype {} -> map generalFinishNewtype index
+    ReplaceIrrefutable {} -> map generalReplaceIrrefutable index
+    Builtin {} -> error "unreachable"
 
 instance PartialUnshift Local.Index where
   partialUnshift _ (Local.Shift index) = pure index

@@ -2,6 +2,7 @@ module Semantic.Unify.Evidence where
 
 import Control.Monad.ST (ST)
 import Core.Tree.Evidence (EvidenceF (..))
+import qualified Data.Kind
 import Data.STRef (STRef, newSTRef, readSTRef, writeSTRef)
 import qualified Semantic.Index.Type2 as Type2
 import Semantic.Scope (Environment (..))
@@ -11,6 +12,9 @@ import qualified Semantic.Unify.Instanciation as Instanciation
 
 type Evidence s scope = EvidenceF (Logical s scope) scope
 
+-- The kinds of these two are written out: see the same in the module of
+-- types.
+type Logical :: Data.Kind.Type -> Environment -> Data.Kind.Type
 data Logical s scope where
   Box :: !(STRef s (Box s scope)) -> Logical s scope
   Shift :: !(Logical s scopes) -> Logical s (scope ':+ scopes)
@@ -21,6 +25,7 @@ instance Shift0.Functor (Logical s) where
     Shift0.Shift -> Shift index
     after Shift0.:. before -> Shift0.map after (Shift0.map before index)
 
+type Box :: Data.Kind.Type -> Environment -> Data.Kind.Type
 data Box s scope
   = Solved !(Evidence s scope)
   | -- | Evidence that is not known yet, because the type it is for is not.
@@ -117,6 +122,9 @@ unify evidence (Logical (Shift logical')) = do
   unify evidence (Logical logical')
 unify (Held term) (Held term')
   | term == term' = pure ()
+unify (Applied function arguments) (Applied function' arguments') = do
+  unify function function'
+  sequence_ (zipWith unify arguments arguments')
 unify _ _ = error "unify evidence can't fail"
 
 unshift :: Evidence s (scope ':+ scopes) -> ST s (Evidence s scopes)
@@ -139,3 +147,9 @@ unshift = \case
   Held term -> do
     let fail = error "unshift can't fail"
     pure $ Held (Shift.map (Shift.Unshift fail) term)
+  Applied function arguments -> do
+    function <- unshift function
+    arguments <- traverse unshift arguments
+    pure $ Applied function arguments
+  -- It is only made of evidence that is worked out already.
+  Abstract {} -> error "unshift of evidence that is a function"

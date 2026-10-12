@@ -331,7 +331,10 @@ matched context position datax typeIndex instancex typex
       -- constructor gives it.
       let refine found (given, made) = do
             more <- Unify.refine (knowing found context) position given made
-            pure (more ++ found)
+            -- What it tells of the types this constructor hides is so
+            -- wherever they are, and is not kept as something known here.
+            taken <- traverse (Unify.absorb (ConstructorInstance.hidden instancex)) more
+            pure ([equality | (equality, Prelude.False) <- zip more taken] ++ found)
       -- And the types the constructor says are the same, are.
       foldM refine [] ([(given, made) | (Prelude.True, given, made) <- places] ++ ConstructorInstance.equated instancex)
   | otherwise = [] <$ Unify.unify context position typex (DataInstance.constructed instancex typeIndex)
@@ -357,7 +360,8 @@ within context position datax typeIndex instancex
 -- |
 -- A context in which more is known of type variables.
 knowing :: [Equality s scope] -> Context s scope -> Context s scope
-knowing found context@Context {equalities} = context {equalities = found ++ equalities}
+knowing found Context {termEnvironment, localEnvironment, typeEnvironment, equalities} =
+  Context {termEnvironment, localEnvironment, typeEnvironment, equalities = found ++ equalities}
 
 -- |
 -- Check the pattern for something a constructor holds.
@@ -365,6 +369,22 @@ held :: Context s scope -> EntryInstance s scope -> Semantic.Pattern Resolve sco
 held context EntryInstance {quantified = Prelude.False, entry} patternx = check context entry patternx
 held _ EntryInstance {position, scheme} Semantic.Wildcard {names} = pure Polymorphic {position, scheme, names}
 held _ EntryInstance {position} _ = unsupportedFeaturePolymorphicComponents position
+
+-- |
+-- Check the patterns for the things a constructor holds, first to last.
+-- What one tells of types is known for the ones after it: two of them may
+-- each tell something of the same type, and the second is then read by
+-- what the first said.
+inOrder ::
+  Context s scope ->
+  [(EntryInstance s scope, Semantic.Pattern Resolve scope)] ->
+  ST s [Pattern s scope]
+inOrder context = \case
+  [] -> pure []
+  (entry, patternx) : rest -> do
+    patternx <- held context entry patternx
+    rest <- inOrder (knowing (learnt patternx) context) rest
+    pure (patternx : rest)
 
 check :: Context s scope -> Unify.Type s scope -> Semantic.Pattern Resolve scope -> ST s (Pattern s scope)
 check context@Context {typeEnvironment} typex = \case
@@ -393,7 +413,9 @@ check context@Context {typeEnvironment} typex = \case
         equalities <- matched context constructorPosition datax typeIndex instancex typex
         required <- requirements context (ConstructorInstance.asked instancex)
         when (length entries /= length patterns) $ mismatchedConstructorArguments constructorPosition
-        patterns <- sequence $ Strict.Vector.zipWith (held (knowing equalities context)) entries patterns
+        patterns <-
+          fmap Strict.Vector.fromList $
+            inOrder (knowing equalities context) (zip (toList entries) (toList patterns))
         pure $
           Constructor
             { typex,

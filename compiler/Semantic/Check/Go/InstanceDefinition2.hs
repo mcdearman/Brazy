@@ -522,10 +522,26 @@ checkBody position key Solve {solve} reflection information lookup members =
                     }
              in substitute <$> methods
         evidence <- for constraints $
-          \Core.Constraint {classx, arguments} -> do
-            let parameter = foldl (#) base arguments
-            evidence <- Unify.constrain context position (shift classx) (logicalType parameter)
-            Unify.runSolve $ Unify.solveEvidence position evidence
+          \Core.Constraint {classx, arguments} -> case reverse (toList arguments) of
+            -- What the class requires of the type given every type that
+            -- has the same class. The evidence is a function of the
+            -- evidence for that type: it is found for a type nothing is
+            -- known of but that it has the class.
+            Core.Type.Constructor Type2.Every : before -> do
+              let given =
+                    Core.Constraints.Constraints $
+                      Strict.Vector.singleton
+                        Core.Constraint {classx = shift classx, head = 0, arguments = Strict.Vector.empty}
+                  kind = Core.Type.Type Core.Type.Small
+              inner <- Core.Scheme.augment position (Strict.Vector.singleton kind) given Mask.Runtime context
+              let parameter = foldl (#) (shift base) (shift <$> reverse before) # Core.Type.Variable (Local.Local 0)
+              evidence <- Unify.constrain inner position (shift (shift classx)) (logicalType parameter)
+              body <- Unify.runSolve $ Unify.solveEvidence position evidence
+              pure Core.Evidence.Abstract {count = 1, body}
+            _ -> do
+              let parameter = foldl (#) base arguments
+              evidence <- Unify.constrain context position (shift classx) (logicalType parameter)
+              Unify.runSolve $ Unify.solveEvidence position evidence
         let arguments =
               Method
                 { position,

@@ -72,6 +72,7 @@ kind pure typex constructor = \case
     Type2.Read -> classKind
     Type2.Lazy -> Type.Levity
     Type2.Strict -> Type.Levity
+    Type2.Every -> Type.Type Type.Small
     where
       dataKind = Data.kind $ index id (error "bad index") real
       classKind = Class.kind $ index id (error "bad index") real
