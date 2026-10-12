@@ -1,0 +1,9 @@
+[Red,Green,Blue]
+(True,Green,True)
+(Point 1 2,True,True)
+(Pair 'a' 'b',True)
+Node Leaf 1 (Node Leaf 2 Leaf)
+(True,True)
+Wrapper (Just 3)
+(Record {name = "one", size = 1},False)
+(Box 4,False)

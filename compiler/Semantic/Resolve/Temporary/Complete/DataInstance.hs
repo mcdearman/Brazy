@@ -4,12 +4,18 @@ import Data.Functor.Identity (Identity (..))
 import qualified Data.List.NonEmpty as NonEmpty
 import Data.Map (Map)
 import qualified Data.Map as Map
+import qualified Data.Set as Set
 import Error (illegalInstanceClass)
 import qualified Semantic.Index.Type2 as Type2
 import qualified Semantic.Index.Type3 as Type3
 import Semantic.Layout (Normal)
 import qualified Semantic.Resolve.Binding.Type as Type
-import Semantic.Resolve.Context (Context, (!=.))
+import qualified Semantic.Index.Method as Method (Index (..))
+import qualified Semantic.Index.Term2 as Term2 (Index (..))
+import qualified Semantic.Resolve.Binding.Term as Term
+import qualified Semantic.Resolve.Bindings as Bindings (BindingsF (..))
+import Semantic.Resolve.Context (Context, core, (!=.))
+import qualified Semantic.Resolve.Core as Core (CoreF (..))
 import qualified Semantic.Resolve.Go.Instance as Real (resolve)
 import qualified Semantic.Stage as Semantic
 import qualified Semantic.Tree.Instance as Real (Instance)
@@ -54,8 +60,18 @@ resolve context lookup = \case
     }
       | Just dataIndex <- lookup datax,
         valid ->
-          let _ Type.:@ Identity Type.Binding {index, methods} = context !=. classPosition :@ className
+          let Type.Header {fields} Type.:@ Identity Type.Binding {index, methods} =
+                context !=. classPosition :@ className
               classIndex = Type3.toType2 (illegalInstanceClass classPosition) index
+              -- A method can be given a definition if it can be seen: it
+              -- came with the class, or it is in scope by its own name,
+              -- with any qualifiers or with none.
+              visible name = Set.member name fields || any (named name) (locals : Map.elems globals)
+              Core.Core {globals, locals} = core context
+              named name bindings = case Map.lookup name (Bindings.terms bindings) of
+                Just (_ Term.:@ Identity Term.Binding {index = Term2.Method Method.Index {typeIndex}}) ->
+                  typeIndex == classIndex
+                _ -> False
               entry =
                 DataInstance
                   { classPosition,
@@ -68,6 +84,7 @@ resolve context lookup = \case
                         prerequisites
                         parameters
                         methods
+                        visible
                         instanceDefinition
                   }
            in [entry]
