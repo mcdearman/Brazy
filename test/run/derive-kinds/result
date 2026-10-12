@@ -1,0 +1,5 @@
+Call (Variable (Index 1)) (Variable (Index 2))
+True
+Tagged (Index 3) 'x'
+True
+Wrap 5

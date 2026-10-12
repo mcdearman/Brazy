@@ -603,18 +603,20 @@ Multiline strings are supported.
 
 Standard alone deriving is supported. A `deriving` clause on a type is taken
 as the standalone declaration for each class it names, requiring that class
-of every parameter of the type.
+of each parameter of the type that it can be asked of.
 
 # Deviations:
 ## Bugs
 These are deviations that will are planned to get fixed at some point.
 
-### Deriving clauses require the class of every parameter
+### Deriving clauses require the class of every parameter that is a type of values
 
 A `deriving` clause is taken as `deriving instance` with the class required
-of each of the type's parameters. That asks for more than is needed of a
-parameter that is the type of nothing the value holds, and it is wrong for a
-parameter that stands for a type that takes arguments. For those, write the
+of each of the type's parameters whose kind is the kind the class takes. So
+nothing is required of a parameter that stands for a type that takes
+arguments, or for something that is not a type of values at all. But the
+class is required of a parameter that is the type of nothing the value
+holds, which Haskell would not require. For that, write the
 `deriving instance` out with what it requires.
 
 ### Derive `Read` and `Ix` are unsupported

@@ -236,12 +236,13 @@ toImport = \case
 --
 -- > deriving instance (Eq a) => Eq (T a)
 --
--- The instance requires the class of every parameter of the type. That is
--- what is wanted when each parameter is the type of something the value
--- holds. It asks for more than is needed of a parameter that is not, and it
--- is wrong for a parameter that stands for a type that takes arguments: for
--- those the instance has to be asked for by itself, with what it requires
--- written out.
+-- The instance is written here as requiring the class of every parameter
+-- of the type, and is marked as coming from a clause. Where it is checked,
+-- the class is only required of the parameters it can be asked of: not of
+-- one that stands for a type that takes arguments, or for something that
+-- is not a type of values at all, such as a stage or a scope. It is still
+-- required of a parameter that is the type of nothing the value holds,
+-- which Haskell would not require.
 derived :: Declaration Position -> [Declaration Position]
 derived = \case
   Data {startPosition, typeName, parameters, dataDefinition = Data.ADT {derivingx}} -> do
@@ -268,7 +269,7 @@ derived = \case
                 typeName = Variable.Local Variable.:=. typeName,
                 parameters
               },
-          instanceDefinition = InstanceDeclarations._derivingInstance
+          instanceDefinition = InstanceDeclarations._derivingClause
         }
   _ -> []
 

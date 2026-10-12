@@ -729,11 +729,27 @@ The order to take it in:
       (a hidden type that gets out, a branch that cannot be reached). None
       of the 156 constructors of this kind in the compiler's own source
       requires anything of its types, so none of this is in the way
-- [ ] Types that are defined by each other across modules. The check now
-      stops at `compiler/Core/Tree/Expression.hs` with "cyclical type
-      checking": `Expression` and `Statements` are in two modules that
-      import each other, by way of an `hs-boot` file as far as GHC is
-      concerned
+- [x] The kind of `Core.Tree.Expression`. The check stopped there with
+      "cyclical type checking". Types defined by each other across modules
+      that import each other are checked without trouble in the small
+      cases that were tried, with and without deriving. In this one the kind
+      of `Expression` could not be worked out, and what it is about this
+      circle that the small ones lack was not found. GHC has the kind from
+      the `hs-boot` file. It is now written in the module as well, and with
+      that the check goes on. Hazy does not read `hs-boot` files, so a kind
+      it cannot work out round such a circle has to be written where the
+      type is
+- [x] `deriving` clauses on types with parameters that are not types of
+      values. The fix for clauses required the class of every parameter,
+      which is not even well formed for a parameter that stands for a
+      stage or a scope, and nearly every tree in the compiler has one. An
+      instance from a clause is now marked, and when it is checked the class
+      is only required of the parameters whose kind fits (test
+      `derive-kinds`)
+- [ ] Polymorphic components: a constructor that holds something whose
+      type has a `forall` in it. This is what stops the check now, at
+      `compiler/Data/NaturalTransformation.hs`. About twenty fields in the
+      compiler's source are like this
 - [ ] Run the check again after each of these and count what stops it next.
       Each of the items below is a guess until then
 
