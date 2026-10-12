@@ -107,6 +107,8 @@ import qualified Data.Char as Char (isAlpha, isAscii, isSpace, toLower, toUpper)
 import qualified Data.List as List
   ( dropWhileEnd, groupBy, inits, intercalate, intersperse, isInfixOf, isPrefixOf, isSuffixOf,
     stripPrefix, tails, transpose )
+import Hazy
+  ( primTextAppend, primTextHead, primTextLength, primTextNull, primTextSnoc, primTextTail )
 import qualified Hazy.Prelude as Hazy (unpack)
 import Prelude hiding (all, any, break, concat, concatMap, drop, dropWhile, elem, filter, foldl, foldl1, foldr, foldr1, head, init, last, length, lines, map, maximum, minimum, null, replicate, reverse, scanl, scanl1, scanr, scanr1, span, splitAt, tail, take, takeWhile, unlines, unwords, words, zip, zipWith)
 import qualified Prelude
@@ -116,7 +118,7 @@ unpack :: Text -> String
 unpack = Hazy.unpack
 
 singleton :: Char -> Text
-singleton c = pack [c]
+singleton c = primTextSnoc (pack []) c
 
 empty :: Text
 empty = pack []
@@ -124,18 +126,18 @@ empty = pack []
 infixr 5 `cons`
 
 cons :: Char -> Text -> Text
-cons c text = pack (c : unpack text)
+cons c text = primTextAppend (singleton c) text
 
 snoc :: Text -> Char -> Text
-snoc text c = pack (unpack text ++ [c])
+snoc = primTextSnoc
 
 append :: Text -> Text -> Text
-append a b = pack (unpack a ++ unpack b)
+append = primTextAppend
 
 uncons :: Text -> Maybe (Char, Text)
-uncons text = case unpack text of
-  c : rest -> Just (c, pack rest)
-  [] -> Nothing
+uncons text
+  | primTextNull text = Nothing
+  | otherwise = Just (primTextHead text, primTextTail text)
 
 unsnoc :: Text -> Maybe (Text, Char)
 unsnoc text = case unpack text of
@@ -143,22 +145,26 @@ unsnoc text = case unpack text of
   characters -> Just (pack (Prelude.init characters), Prelude.last characters)
 
 head :: Text -> Char
-head text = Prelude.head (unpack text)
+head text
+  | primTextNull text = error "Data.Text.head: empty text"
+  | otherwise = primTextHead text
 
 last :: Text -> Char
 last text = Prelude.last (unpack text)
 
 tail :: Text -> Text
-tail = lift Prelude.tail
+tail text
+  | primTextNull text = error "Data.Text.tail: empty text"
+  | otherwise = primTextTail text
 
 init :: Text -> Text
 init = lift Prelude.init
 
 null :: Text -> Bool
-null text = Prelude.null (unpack text)
+null = primTextNull
 
 length :: Text -> Int
-length text = tally (Prelude.length (unpack text))
+length = primTextLength
 
 compareLength :: Text -> Int -> Ordering
 compareLength text count = compare (length text) count

@@ -259,6 +259,14 @@ definitions =
             ("primIntegerSignum", wrap IntegerSignum),
             ("primIntegerQuot", wrap IntegerQuot),
             ("primIntegerRem", wrap IntegerRem),
+            ("primTextNull", wrap TextNull),
+            ("primTextHead", wrap TextHead),
+            ("primTextTail", wrap TextTail),
+            ("primTextSnoc", wrap TextSnoc),
+            ("primTextAppend", wrap TextAppend),
+            ("primTextEqual", wrap TextEqual),
+            ("primTextCompare", wrap TextCompare),
+            ("primTextLength", wrap TextLength),
             ("primSTPure", primSTPure),
             ("primSTBind", primSTBind)
           ]

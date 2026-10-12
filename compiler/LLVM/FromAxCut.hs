@@ -1536,6 +1536,8 @@ bytes state@State {extra} string = do
 primitiveWord :: Primitive -> Bool
 primitiveWord = \case
   TextHead -> True
+  TextCompare -> True
+  TextLength -> True
   IntAdd -> True
   IntMinus -> True
   IntMultiply -> True
@@ -1559,6 +1561,10 @@ primitiveName = \case
   TextNull -> "hazy_prim_text_null"
   TextHead -> "hazy_prim_text_head"
   TextTail -> "hazy_prim_text_tail"
+  TextAppend -> "hazy_prim_text_append"
+  TextEqual -> "hazy_prim_text_equal"
+  TextCompare -> "hazy_prim_text_compare"
+  TextLength -> "hazy_prim_text_length"
   GeneralCategory -> "hazy_prim_general_category"
   IntEqual -> "hazy_prim_int_equal"
   IntLessThenEqual -> "hazy_prim_int_less_then_equal"
@@ -1624,6 +1630,10 @@ runtime =
   declare i64 @hazy_prim_text_null(i64)
   declare i64 @hazy_prim_text_head(i64)
   declare i64 @hazy_prim_text_tail(i64)
+  declare i64 @hazy_prim_text_append(i64, i64)
+  declare i64 @hazy_prim_text_equal(i64, i64)
+  declare i64 @hazy_prim_text_compare(i64, i64)
+  declare i64 @hazy_prim_text_length(i64)
   declare i64 @hazy_prim_general_category(i64)
   declare i64 @hazy_prim_int_equal(i64, i64)
   declare i64 @hazy_prim_int_less_then_equal(i64, i64)

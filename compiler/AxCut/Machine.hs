@@ -225,6 +225,13 @@ apply primitive arguments = case (primitive, arguments) of
   (TextNull, [Text text]) -> pure $ bool $ Text.null text
   (TextHead, [Text text]) -> pure $ Int $ fromIntegral $ ord $ Text.head text
   (TextTail, [Text text]) -> pure $ Text $ Text.tail text
+  (TextAppend, [Text left, Text right]) -> pure $ Text $ left <> right
+  (TextEqual, [Text left, Text right]) -> pure $ bool $ left == right
+  (TextCompare, [Text left, Text right]) -> pure $ Int $ case compare left right of
+    LT -> -1
+    EQ -> 0
+    GT -> 1
+  (TextLength, [Text text]) -> pure $ Int $ fromIntegral $ Text.length text
   (GeneralCategory, [Int character]) ->
     pure $ Data (fromEnum $ generalCategory $ chr $ fromIntegral character) []
   (IntEqual, [Int left, Int right]) -> pure $ bool $ left == right

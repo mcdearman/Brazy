@@ -618,6 +618,90 @@ function write(descriptor, text) {
   }
 }
 
+export const primTextNull = {
+  a: 0,
+  b: (text) => ({ a: +(force(text).length === 0) }),
+};
+
+export const primTextHead = {
+  a: 0,
+  b: (text) => force(text).codePointAt(0),
+};
+
+export const primTextTail = {
+  a: 0,
+  b: (text) => {
+    const string = force(text);
+    return string.slice(string.codePointAt(0) > 0xffff ? 2 : 1);
+  },
+};
+
+export const primTextSnoc = {
+  a: 0,
+  b: (text) => (character) => {
+    const code = force(character);
+    return (
+      force(text) +
+      (code >= 0xd800 && code <= 0xdfff ? "\ufffd" : String.fromCodePoint(code))
+    );
+  },
+};
+
+export const primTextAppend = {
+  a: 0,
+  b: (left) => (right) => force(left) + force(right),
+};
+
+export const primTextEqual = {
+  a: 0,
+  b: (left) => (right) => ({ a: +(force(left) === force(right)) }),
+};
+
+// A unit of UTF-16 as it is ordered among characters: half of a pair stands
+// for a character above every one that is a unit by itself.
+function rank(unit) {
+  return unit >= 0xd800 && unit <= 0xdfff
+    ? unit + 0x2000
+    : unit >= 0xe000
+      ? unit - 0x800
+      : unit;
+}
+
+export const primTextCompare = {
+  a: 0,
+  b: (left) => (right) => {
+    const a = force(left);
+    const b = force(right);
+    if (a === b) {
+      return 0;
+    }
+    const shorter = Math.min(a.length, b.length);
+    for (let index = 0; index < shorter; index++) {
+      const x = a.charCodeAt(index);
+      const y = b.charCodeAt(index);
+      if (x !== y) {
+        return rank(x) < rank(y) ? -1 : 1;
+      }
+    }
+    return a.length < b.length ? -1 : 1;
+  },
+};
+
+export const primTextLength = {
+  a: 0,
+  b: (text) => {
+    const string = force(text);
+    let count = 0;
+    for (let index = 0; index < string.length; index++) {
+      const unit = string.charCodeAt(index);
+      if (!(unit >= 0xdc00 && unit <= 0xdfff)) {
+        count++;
+      }
+    }
+    return count;
+  },
+};
+
 export const putStrLnText = {
   a: 0,
   b: (thunk) => () => {

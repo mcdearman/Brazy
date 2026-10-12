@@ -29,6 +29,17 @@ primIntegerAdd, primIntegerMinus, primIntegerMultiply :: Integer -> Integer -> I
 primIntegerNegate :: Integer -> Integer
 primIntegerAbs, primIntegerSignum :: Integer -> Integer
 primIntegerQuot, primIntegerRem :: Integer -> Integer -> Integer
+primTextNull :: Text -> Bool
+primTextHead :: Text -> Char
+primTextTail :: Text -> Text
+primTextSnoc :: Text -> Char -> Text
+primTextAppend :: Text -> Text -> Text
+primTextEqual :: Text -> Text -> Bool
+
+-- Which of two texts comes first, character by character: below zero, zero
+-- or above it.
+primTextCompare :: Text -> Text -> Int
+primTextLength :: Text -> Int
 primSTPure :: a -> ST s a
 primSTBind :: ST s a -> (a -> ST s b) -> ST s b
 

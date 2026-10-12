@@ -1,17 +1,18 @@
 module Hazy.PreludeString where
 
+import Hazy
 import Hazy.Prelude
 
 data Text
 
 instance Eq Text where
-  a == b = unpack a == unpack b
+  a == b = primTextEqual a b
 
 instance Ord Text where
-  compare a b = compare (unpack a) (unpack b)
+  compare a b = compare (primTextCompare a b) 0
 
 instance Semigroup Text where
-  a <> b = pack $ unpack a ++ unpack b
+  a <> b = primTextAppend a b
 
 instance Monoid Text where
   mempty = pack ""

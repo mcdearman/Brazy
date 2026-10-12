@@ -213,9 +213,9 @@ parse1 =
           tail
         }
 
-    integer integer startPosition = Integer {startPosition, integer}
+    integer integer startPosition = NegativeInteger {startPosition, integer}
 
-    float float startPosition = Float {startPosition, float}
+    float float startPosition = NegativeFloat {startPosition, float}
 
 -- apat
 parse2 :: Parser (Pattern Position)

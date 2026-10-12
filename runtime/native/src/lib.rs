@@ -141,6 +141,35 @@ pub extern "C" fn hazy_prim_text_tail(value: Value) -> Value {
     }
 }
 
+#[no_mangle]
+pub extern "C" fn hazy_prim_text_append(left: Value, right: Value) -> Value {
+    let mut longer = String::with_capacity(text(left).len() + text(right).len());
+    longer.push_str(text(left));
+    longer.push_str(text(right));
+    from_text(&longer)
+}
+
+#[no_mangle]
+pub extern "C" fn hazy_prim_text_equal(left: Value, right: Value) -> Value {
+    boolean(text(left) == text(right))
+}
+
+/// Which of two texts comes first. The bytes of UTF-8 are in the order of
+/// the characters they stand for.
+#[no_mangle]
+pub extern "C" fn hazy_prim_text_compare(left: Value, right: Value) -> Value {
+    from_int(match text(left).cmp(text(right)) {
+        std::cmp::Ordering::Less => -1,
+        std::cmp::Ordering::Equal => 0,
+        std::cmp::Ordering::Greater => 1,
+    })
+}
+
+#[no_mangle]
+pub extern "C" fn hazy_prim_text_length(value: Value) -> Value {
+    from_int(text(value).chars().count() as i32)
+}
+
 /// The general category of a character, as a constructor of
 /// `GeneralCategory`, whose constructors are in the order of the Haskell
 /// report.

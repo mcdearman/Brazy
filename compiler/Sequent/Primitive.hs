@@ -15,6 +15,10 @@ data Primitive
   | TextNull
   | TextHead
   | TextTail
+  | TextAppend
+  | TextEqual
+  | TextCompare
+  | TextLength
   | GeneralCategory
   | IntEqual
   | IntLessThenEqual
@@ -50,6 +54,10 @@ arity = \case
   TextNull -> 1
   TextHead -> 1
   TextTail -> 1
+  TextAppend -> 2
+  TextEqual -> 2
+  TextCompare -> 2
+  TextLength -> 1
   GeneralCategory -> 1
   IntEqual -> 2
   IntLessThenEqual -> 2
