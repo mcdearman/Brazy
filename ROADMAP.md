@@ -760,7 +760,10 @@ The order to take it in:
         made means (test `gadt-context`)
   - [ ] What is not done. An instance is not derived for a type with a
         constructor that requires a class. A branch that cannot be reached
-        is taken without a word, where GHC warns. Types required to be the
+        is taken without a word, where GHC warns. What a constructor
+        requires is known in the branch its pattern leads to, but not in the
+        patterns beside it inside the same pattern, so a number matched
+        there cannot use it. Types required to be the
         same in the type of a function, a class or an instance are not
         read: that is its own feature, and needs a type with a `forall` to
         carry what is required to be the same
@@ -781,17 +784,38 @@ The order to take it in:
       instance from a clause is now marked, and when it is checked the class
       is only required of the parameters whose kind fits (test
       `derive-kinds`)
-- [ ] Polymorphic components: a constructor that holds something whose
-      type has a `forall` in it. This is what stops the check now, at
-      `compiler/Data/NaturalTransformation.hs`. About twenty fields in the
-      compiler's source are like this
+- [x] Polymorphic components: a constructor that holds something whose
+      type has a `forall` in it. About twenty fields in the compiler's
+      source are like this. What a constructor holds now has a type that
+      may have a `forall` of its own (`Core.Tree.Entry`). A constructor
+      that holds such a thing is not a function that can be given anything,
+      so where it is given something it is checked together with what it is
+      given (`holding`, in `Semantic.Check.Temporary.Expression`), and what
+      it is given there is checked the way an expression with a type
+      written after it is: against the type with its variables standing
+      for any types. A pattern can only name such a thing, and the name has
+      the type with its `forall`, to be used at any types. If the type
+      requires something, what is held is a function of the evidence, held
+      evaluated so that it can be given the evidence wherever it is taken
+      out (`Generalized`, in `Core.Tree.Expression`). The compiler's source
+      mostly writes `C $ x` for these, so the last thing a constructor is
+      given may be given through a function whose type says it can only
+      apply (test `polymorphic-components`)
+  - [ ] What is not done. Such a constructor cannot be used without what it
+        holds there, as a function. A selector cannot take out something
+        whose type requires something: a pattern has to. Nothing but a name
+        can be matched against such a thing, a binding cannot name one, a
+        constructor declared with its whole type cannot hold one by name,
+        and no instance is derived for a type that holds one
+- [ ] Instances the library lacks. The check now stops at
+      `compiler/Data/Traversable2.hs`, for want of `Applicative Identity`
 - [ ] Run the check again after each of these and count what stops it next.
       Each of the items below is a guess until then
 
 `hazy.cabal` gives the working list:
 
-- [ ] Language features Hazy lacks: `PolymorphicComponents`,
-      `DeriveFunctor`, `DeriveFoldable`, `DeriveTraversable`,
+- [ ] Language features Hazy lacks: `DeriveFunctor`, `DeriveFoldable`,
+      `DeriveTraversable`,
       `StandaloneKindSignatures`, `RoleAnnotations`, `MonoLocalBinds`,
       `DisambiguateRecordFields`, and full `TypeOperators`
 - [ ] Enough of `base` to build the compiler
@@ -880,7 +904,7 @@ Missing:
       declarations and classes of a program's own. When it is done, the
       `Fallback` in `Semantic.Unify.Evidence` goes. Not now
 - [x] GADTs: see M6
-- [ ] Polymorphic components
+- [x] Polymorphic components: see M6
 - [ ] Strict functions
 - [ ] Remaining builtin instances
 - [ ] Pattern type signatures for `ScopedTypeVariables`

@@ -2,6 +2,7 @@ module Semantic.Check.Temporary.PatternField where
 
 import Control.Monad.ST (ST)
 import Semantic.Check.Context (Context)
+import Semantic.Check.EntryInstance (EntryInstance)
 import Semantic.Check.LocalBinding (Equality)
 import {-# SOURCE #-} Semantic.Check.Temporary.Pattern (Pattern)
 import {-# SOURCE #-} qualified Semantic.Check.Temporary.Pattern as Pattern
@@ -36,9 +37,9 @@ given path Field {patternx} = Pattern.given path patternx
 augmentField :: Field s scopes -> Term.Bound (TermBinding s) (scope ':+ scopes)
 augmentField Field {patternx} = Pattern.augmentPattern patternx
 
-check :: Context s scope -> (Int -> Unify.Type s scope) -> Semantic.Field Resolve scope -> ST s (Field s scope)
+check :: Context s scope -> (Int -> EntryInstance s scope) -> Semantic.Field Resolve scope -> ST s (Field s scope)
 check context lookup Semantic.Field {index, patternx} = do
-  patternx <- Pattern.check context (lookup index) patternx
+  patternx <- Pattern.held context (lookup index) patternx
   pure
     Field
       { index,

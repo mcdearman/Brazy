@@ -66,11 +66,17 @@ selected DataInstance {constructors, selectors} typeIndex selectorIndex =
     Selector {first} = selectors Strict.Vector.! selectorIndex
 
 selectorType :: DataInstance s scope -> Int -> Unify.Type s scope
-selectorType DataInstance {constructors, selectors} selectorIndex = entry
+selectorType instancex selectorIndex = entry
+  where
+    EntryInstance {entry} = selectorEntry instancex selectorIndex
+
+-- |
+-- What a selector selects, as its first constructor holds it.
+selectorEntry :: DataInstance s scope -> Int -> EntryInstance s scope
+selectorEntry DataInstance {constructors, selectors} selectorIndex = entries Strict.Vector.! index
   where
     Selector {first, index} = selectors Strict.Vector.! selectorIndex
     ConstructorInstance {entries} = constructors Strict.Vector.! first
-    EntryInstance {entry} = entries Strict.Vector.! index
 
 selectorInfo :: DataInstance s scope -> Int -> SelectorInfo s scope
 selectorInfo DataInstance {position, constructors, selectors} index = case selectors Strict.Vector.! index of

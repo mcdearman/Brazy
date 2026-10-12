@@ -1,0 +1,12 @@
+"x"
+("y","z")
+"label"!
+("x",[True],0)
+"x"
+((1,1),(True,True))
+(1,'a',"first")
+(2,"second")
+(2,2)
+'x'True1<'x'><True><1>
+(Just "1",["1","2"])
+(Nothing,Just 3)

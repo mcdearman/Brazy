@@ -130,6 +130,12 @@ data Expression layout stage scope
         annotation :: !(Scheme Position stage scope),
         instanciation :: !(Inferred Simple.Instanciation stage scope)
       }
+  | -- | An expression of a type with a @forall@ of its own, for a
+    -- constructor to hold. The checker makes these, where it finds an
+    -- expression in the place of something a constructor holds this way.
+    Generalized
+      { expression :: !(Explicit layout stage scope)
+      }
   | RunST
       { startPosition :: !Position,
         imperative :: !(Expression layout stage scope),
@@ -247,6 +253,7 @@ instance Shift.Functor (Expression layout stage) where
           left = Shift.map category left,
           right = Shift.map category right
         }
+    Generalized {expression} -> Generalized {expression = Shift.map category expression}
     Annotation {expression, operatorPosition, annotation, instanciation} ->
       Annotation
         { expression = Shift.map category expression,
@@ -308,6 +315,8 @@ instance FreeTermVariables Expression where
           freeTermVariables target right
         ]
     Annotation {expression} ->
+      freeTermVariables target expression
+    Generalized {expression} ->
       freeTermVariables target expression
     RunST {imperative} -> freeTermVariables target imperative
     Negate {negative} -> freeTermVariables target negative
@@ -419,6 +428,7 @@ instance Connect Expression where
           left = connect left,
           right = connect right
         }
+    Generalized {expression} -> Generalized {expression = connect expression}
     Annotation {expression, operatorPosition, annotation} ->
       Annotation
         { expression = connect expression,
@@ -526,6 +536,7 @@ instance Connect Expression where
           left = seperate left,
           right = seperate right
         }
+    Generalized {expression} -> Generalized {expression = seperate expression}
     Annotation {expression, operatorPosition, annotation, instanciation} ->
       Annotation
         { expression = seperate expression,

@@ -2,6 +2,7 @@ module Semantic.Check.Temporary.CallHead where
 
 import Control.Monad.ST (ST)
 import qualified Core.Builtin as Builtin
+import Core.Tree.Type ((-#>))
 import Core.Tree.TypeDeclaration (assumeClass, assumeData)
 import qualified Data.Vector.Strict as Strict.Vector
 import qualified Semantic.Check.ClassInstance as ClassInstance
@@ -9,6 +10,7 @@ import qualified Semantic.Check.ConstructorInstance as ConstructorInstance
 import Semantic.Check.Context (Context (..))
 import Semantic.Check.DataInstance (DataInstance (..))
 import qualified Semantic.Check.DataInstance as DataInstance
+import qualified Semantic.Check.EntryInstance as EntryInstance (taken)
 import qualified Semantic.Check.Simple.Class as Simple.Class
 import qualified Semantic.Check.Simple.Data as Simple.Data
 import Semantic.Check.Simple.MethodInfo (MethodInfo)
@@ -93,7 +95,8 @@ check
       Builtin.index pure get typeIndex
     instancex <- Simple.Data.instanciateMark context selectorPosition datax
     let selectorInfo = DataInstance.selectorInfo instancex selectorIndex
-        typex' = DataInstance.selectorFunction instancex selector
+    selected <- EntryInstance.taken context selectorPosition (DataInstance.selectorEntry instancex selectorIndex)
+    let typex' = DataInstance.selected instancex typeIndex selectorIndex -#> selected
     Unify.unify context selectorPosition typex typex'
     pure Selector {selectorPosition, selector, selectorInfo}
 check
