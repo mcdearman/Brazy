@@ -95,6 +95,9 @@ constrain fallthough constrain classx head = table classx head
     table Type2.Functor Type2.ST [_] = single
     table Type2.Applicative Type2.ST [_] = single
     table Type2.Monad Type2.ST [_] = single
+    table Type2.Functor Type2.Arrow [_] = single
+    table Type2.Applicative Type2.Arrow [_] = single
+    table Type2.Monad Type2.Arrow [_] = single
     table Type2.Semigroup Type2.Arrow [_, result] = do
       result <- constrain Type2.Semigroup result
       call [result]

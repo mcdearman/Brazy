@@ -10,17 +10,15 @@ module Data.Function
   )
 where
 
-import Hazy.Prelude (placeholder)
-
 infixl 1 &
 
 (&) :: a -> (a -> b) -> b
-(&) = placeholder
+a & f = f a
 
 fix :: (a -> a) -> a
-fix = placeholder
+fix f = let a = f a in a
 
 infixl 0 `on`
 
 on :: (b -> b -> c) -> (a -> b) -> a -> a -> c
-on = placeholder
+on combine f a b = combine (f a) (f b)
