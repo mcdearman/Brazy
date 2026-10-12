@@ -128,7 +128,7 @@ compiler can still compile itself one day. Rust is the runtime only.
    layout, calling convention) is kept in one per-target layer.
 5. **Rust runtime.** A static library the generated code links against: the
    heap (size classes, counts, lazy bounded freeing), thunk evaluation and
-   update, a cycle collector, and the primitives that
+   update, and the primitives that
    `runtime/javascript/Hazy.mjs` provides today.
 
 Lessons already paid for in Meadow and Powder that apply here:
@@ -335,7 +335,8 @@ How it works:
   out from nothing and compared. A lost reference or one given up twice is
   reported at the first collection after it happens.
 
-The collector is not meant to stay. Freddy never planned one: his plan is
+The collector did not stay: see the end of this section. Freddy never
+planned one: his plan is
 to have no cycles to collect, by lambda lifting the bindings that refer to
 themselves, with a low-level linear system that rules cycles out before the
 program runs. Chris decided on 2026-10-10 to keep the collector for now and
@@ -378,11 +379,45 @@ references in the first place is that Hazy should follow C++'s "you pay for
 what you use", with no garbage collection. He would like a warning where the
 rewrite loses sharing. So:
 
-- [ ] Rewrite the recursion of local values so that it does not share, as
-      above, and then take the cycle collector out
-- [ ] Warn where that is done to a value, since it may then be worked out
-      many times. The compiler has no warnings yet, only errors, so this
-      needs somewhere for a warning to go
+- [x] Rewrite the recursion of local values so that it does not share, as
+      above (`compiler/Sequent/Hoist.hs`). A thunk in a `let` or a `where`
+      that refers to itself, by itself or by way of the others it is defined
+      with, is no longer an object that holds itself. If it uses nothing of
+      where it is, it goes to the top of the program, where it is worked out
+      once and kept: `fibs` in a `where` is still as quick as it was. If it
+      does use a variable of where it is, it becomes a function of those
+      variables that works the value out, and each place it refers to itself
+      is a new thunk that calls the function again. Everything else that
+      uses it still sees one thunk, worked out once
+- [x] Warn where that is done to a value. The compiler says, in yellow and
+      even when it is asked to be quiet, which value in which definition is
+      worked out again each time it refers to itself, and that at the top of
+      the module it would be worked out once. It has no place in the source
+      to point at: the sequent calculus does not carry one
+- [x] Take the cycle collector out. The runtime counts references and does
+      nothing else. `HAZY_GC_THRESHOLD` and `HAZY_GC_STRESS` are gone, and a
+      compiled function no longer starts by asking whether a collection is
+      due
+- [x] Keep the checking, and make it say that there are no cycles. A
+      program compiled with `--checked` hands over what it holds at the
+      start of each function when `HAZY_CHECK` is set, every count is worked
+      out again, and now a block that nothing reaches is an error as well.
+      `tools/test.sh` compiles every native test that way, so each of them
+      shows that it makes no value that holds itself and loses no reference
+
+What this leaves:
+
+- Functions written in the sequent calculus by hand (`Sequent.Runtime`) are
+  dealt with the same way, since they go through the same pass. The
+  instances for tuples refer to themselves to reach their default methods,
+  and are made again where they do.
+- A value that goes to the top is never freed. That is the bargain of any
+  definition at the top, but it is now made for the program without being
+  asked.
+- The warning names the definition and the value, not the line.
+- The packages are not compiled to be checked, only the test programs and
+  one test that is compiled whole. What a package's function gets wrong
+  is still found, at the start of the next function that is checked.
 
 What it left, all three dealt with in M5:
 

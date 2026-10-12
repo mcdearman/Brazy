@@ -22,6 +22,7 @@ module LLVM.FromAxCut
     windows,
     withoutReuse,
     lending,
+    checking,
     generate,
     generateBody,
     generateDefinitions,
@@ -73,20 +74,29 @@ data Target = Target
     -- | For a definition that is a function, which of its parameters it
     -- only reads, if any. Such a function has a second entry that takes
     -- those lent.
-    lends :: Global -> Maybe [Bool]
+    lends :: Global -> Maybe [Bool],
+    -- | Whether a function hands over what it holds when it is asked to,
+    -- so that every count of references can be checked. It costs a test at
+    -- the start of every function, so it is only for testing.
+    checked :: !Bool
   }
 
 -- |
 -- What code is generated for where nothing says otherwise. It was first
 -- written for arm64, and is as right for x86-64 on Linux.
 arm64 :: Target
-arm64 = Target {registers = 8, reuse = True, lends = const Nothing}
+arm64 = Target {registers = 8, reuse = True, lends = const Nothing, checked = False}
 
 -- |
 -- Windows on x86-64. A call there passes four arguments in registers, and
 -- LLVM cannot guarantee a tail call that passes any on the stack.
 windows :: Target
 windows = arm64 {registers = 4}
+
+-- |
+-- A target whose programs can have their counts of references checked.
+checking :: Target -> Target
+checking target = target {checked = True}
 
 -- |
 -- A target whose functions take lent the parameters they only read.
@@ -187,7 +197,9 @@ generate' shape target defined shared start = do
   counter <- newSTRef 0
   extra <- newSTRef mempty
   mentioned <- newSTRef Set.empty
-  taken <- newSTRef Set.empty
+  -- A definition's own name is not free for the code of an object inside
+  -- another, which is called by the path to it and may come to the same.
+  taken <- newSTRef $ Set.fromList [toLazyText (symbol name) | name <- Map.keys defined ++ Map.keys shared]
   holders <- newSTRef Set.empty
   captures <- newSTRef Map.empty
   standing <- newSTRef Map.empty
@@ -310,7 +322,7 @@ codeAt = 1
 capturesAt = 2
 
 -- |
--- How many values a function can hand over when a collection is due.
+-- How many values a function can hand over when a check is due.
 rootLimit :: Int
 rootLimit = 1024
 
@@ -593,11 +605,13 @@ invoke state object arguments = do
       ]
 
 -- |
--- If a collection is due, hand over everything the function holds. This is
--- at the start of a function, where that is what it was given: nothing else
--- in the program is alive but definitions at the top.
+-- If a check is due, hand over everything the function holds. This is at
+-- the start of a function, where that is what it was given: nothing else in
+-- the program is alive but definitions at the top. It is only done by a
+-- program that was compiled to be checked.
 safepoint :: State s -> [Builder] -> ST s Builder
 safepoint state roots
+  | not (checked (target state)) = pure mempty
   | null roots = pure mempty
   | length roots > rootLimit = error "a function holds too many values"
   | otherwise = do
@@ -607,7 +621,7 @@ safepoint state roots
       go <- label state
       pure $
         mconcat
-          [ line [due, fromString " = load i64, ptr @hazy_gc_pending"],
+          [ line [due, fromString " = load i64, ptr @hazy_check_due"],
             line [test, fromString " = icmp ne i64 ", due, fromString ", 0"],
             line [fromString "br i1 ", test, fromString ", label %", collect, fromString ", label %", go],
             collect <> fromString ":\n",
@@ -622,7 +636,7 @@ safepoint state roots
                     fromString ")"
                   ],
             line
-              [ fromString "call void @hazy_collect(ptr @hazy_roots, i64 ",
+              [ fromString "call void @hazy_check(ptr @hazy_roots, i64 ",
                 fromString (show (length roots)),
                 fromString ")"
               ],
@@ -1587,7 +1601,7 @@ prelude = \case
 runtime :: String
 runtime =
   """
-  @hazy_gc_pending = external global i64
+  @hazy_check_due = external global i64
   @hazy_reused = external global i64
   @hazy_lent = external global i64
   @hazy_nullary = external global [8192 x i64]
@@ -1596,7 +1610,7 @@ runtime =
   declare void @hazy_give(i64)
   declare void @hazy_split(i64)
   declare void @hazy_settle(i64)
-  declare void @hazy_collect(ptr, i64)
+  declare void @hazy_check(ptr, i64)
   declare void @hazy_abort() noreturn
   declare void @hazy_loop() noreturn
   declare void @hazy_finish()
@@ -1707,7 +1721,7 @@ runtime =
 -- |
 -- The fixed areas of memory a program uses, given how they are seen from
 -- other units: where the arguments that do not fit in registers are passed,
--- and where a function puts what it holds when a collection is due.
+-- and where a function puts what it holds when a check is due.
 areas :: String -> String
 areas linkage =
   concat

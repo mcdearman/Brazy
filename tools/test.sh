@@ -70,29 +70,31 @@ for run_dir in test/run/*/; do
     diff "test/run/$run/result" ".test/$run/axcut"
 done
 
-# Run the execution tests natively. Collections are made often, and at each
-# one every count of references is worked out again and compared, so that a
-# reference that is lost or given up twice is found where it happens.
+# Run the execution tests natively. They are compiled to be checked: at the
+# start of every function every count of references is worked out again and
+# compared, so that a reference that is lost or given up twice is found
+# where it happens. A block that nothing reaches is found as well, so no
+# program here makes values that hold themselves.
 echo "=== Execution (native) ==="
-export HAZY_GC_VERIFY=1
-export HAZY_GC_STRESS=1
+export HAZY_CHECK=1
 for run_dir in test/run/*/; do
     run=$(basename "$run_dir")
     mkdir -p ".test/native"
     echo "Running $run"
-    $HAZY -q "test/run/$run/source" --native ".test/native/$run"
+    $HAZY -q "test/run/$run/source" --native ".test/native/$run" --checked
     ".test/native/$run" > ".test/native/$run.result"
     diff "test/run/$run/result" ".test/native/$run.result"
 done
 
-# Values that refer to themselves are freed by tracing, not by counting
-echo "Checking that cycles are collected"
-HAZY_GC_STATS=1 ".test/native/cycles" 2>&1 > /dev/null | grep -q "freed by tracing: [1-9]"
+# A value that refers to itself and cannot go to the top is warned of
+echo "Checking that a value that is no longer shared with itself is warned of"
+$HAZY -q "test/run/cycles/source" --native ".test/native/cycles" --checked 2> ".test/native/cycles.warnings"
+grep -q "refers to itself" ".test/native/cycles.warnings"
 
 # Run one test natively as a whole program, with the packages compiled again
 echo "=== Execution (native, whole program) ==="
 echo "Running hello"
-$HAZY -q "test/run/hello/source" --native ".test/native/hello-whole" --whole
+$HAZY -q "test/run/hello/source" --native ".test/native/hello-whole" --whole --checked
 ".test/native/hello-whole" > ".test/native/hello-whole.result"
 diff "test/run/hello/result" ".test/native/hello-whole.result"
 
@@ -108,7 +110,7 @@ for package_dir in test/package/*/; do
     $HAZY -q "test/package/$package/source" --package "./$out/library" -o "$out/javascript"
     bun "$out/javascript/index.mjs" > "$out/javascript.result"
     diff "test/package/$package/result" "$out/javascript.result"
-    $HAZY -q "test/package/$package/source" --package "./$out/library" --native "$out/native"
+    $HAZY -q "test/package/$package/source" --package "./$out/library" --native "$out/native" --checked
     "$out/native" > "$out/native.result"
     diff "test/package/$package/result" "$out/native.result"
 done

@@ -19,7 +19,24 @@
 --
 -- A thunk is left where it is. At the top it would be worked out once and
 -- then kept for as long as the program runs.
-module Sequent.Hoist (hoist) where
+--
+-- The exception is a thunk that refers to itself, by itself or by way of
+-- the others it is defined with. As an object it would hold itself, and
+-- nothing in a compiled program frees that. There are two cases.
+--
+-- One that uses nothing of where it is goes to the top after all. A
+-- definition at the top may refer to itself, since it is never freed, and
+-- it is still worked out once.
+--
+-- One that does use variables of where it is cannot go there as a value.
+-- It goes as a function of those variables that works the value out, and
+-- each place it refers to itself becomes a new thunk that calls the
+-- function again. So nothing refers back to itself, but the value is worked
+-- out afresh each time it looks at itself: it is no longer shared with
+-- itself. This is @fix f = f (fix f)@ where the program had
+-- @fix f = let x = f x in x@. Each one is told of, so that it can be warned
+-- about.
+module Sequent.Hoist (hoist, Unshared (..)) where
 
 import Control.Monad.ST (ST, runST)
 import Data.Map (Map)
@@ -42,14 +59,21 @@ import Sequent.Tree
   )
 
 -- |
--- A definition without the functions that could be taken out of it, and
--- those functions, each a definition.
-hoist :: Global.Global -> Producer -> (Producer, Map Global.Global Producer)
+-- A value that is no longer shared with itself: the definition it is in,
+-- by its whole path, and what it is called there.
+data Unshared = Unshared !Global.Global !Text
+
+-- |
+-- A definition without what could be taken out of it, what was taken out,
+-- each a definition, and the values that are no longer shared with
+-- themselves.
+hoist :: Global.Global -> Producer -> (Producer, Map Global.Global Producer, [Unshared])
 hoist global producer = runST (hoist' global producer)
 
-hoist' :: Global.Global -> Producer -> ST s (Producer, Map Global.Global Producer)
+hoist' :: Global.Global -> Producer -> ST s (Producer, Map Global.Global Producer, [Unshared])
 hoist' Global.Global {path, name} producer = do
   out <- newSTRef Map.empty
+  unshared <- newSTRef []
   let -- The path so far is the name of the definition and of every binding
       -- that has been gone into.
       producerx prefix = \case
@@ -79,13 +103,21 @@ hoist' Global.Global {path, name} producer = do
           body <- statement prefix body
           let global local = Global.Global {path, name = Text.snoc prefix separator <> local}
               names = Set.fromList (map fst bindings)
-              moved = closed bindings
-              -- Of the rest, the functions that can be given what they use.
+              -- The thunks that refer to themselves.
+              circular = Set.fromList [local | (local, Thunk {}) <- bindings, Set.member local (reached bindings local)]
+              moved = closed circular bindings
+              -- Of the rest, the functions that can be given what they use,
+              -- and the thunks that refer to themselves, which are made
+              -- functions of what they use.
               lifting = Set.fromList $ do
-                (local, value@Function {}) <- bindings
-                if Set.notMember local moved && Set.null (continuations value)
+                (local, value) <- bindings
+                let liftable = case value of
+                      Function {} -> Set.null (continuations value)
+                      _ -> Set.member local circular
+                if Set.notMember local moved && liftable
                   then [local]
                   else []
+              again = Set.intersection lifting circular
               -- What they use of where they are: the same for all of them,
               -- since they may call each other.
               given =
@@ -97,32 +129,62 @@ hoist' Global.Global {path, name} producer = do
                 if Set.member local moved
                   then [(local, Top (global local))]
                   else
-                    if Set.member local lifting
-                      then [(local, Lifted (global local) given)]
-                      else []
+                    if Set.member local again
+                      then [(local, Again (global local) given)]
+                      else
+                        if Set.member local lifting
+                          then [(local, Lifted (global local) given)]
+                          else []
+              -- Outside what is taken out, a thunk that was made a function
+              -- is still one thunk with its own name, so that it is worked
+              -- out once for everything that is not itself.
+              outside = Map.filter (not . isAgain) renamed
+              parameters = [Binder {name = variable, strategy = ByNeed} | variable <- given]
               (out', kept) = foldr part ([], []) bindings
               part (local, value) (out', kept) = case Map.lookup local renamed of
                 Just (Top name') -> ((name', rename renamed value) : out', kept)
                 Just (Lifted name' _) ->
                   let result = local <> Text.pack "%to"
-                      parameters = [Binder {name = variable, strategy = ByNeed} | variable <- given]
                       lifted = Function parameters result (Cut (rename renamed value) (Covariable result))
                    in ((name', lifted) : out', kept)
-                Nothing -> (out', (local, rename renamed value) : kept)
+                Just (Again name' _) ->
+                  let result = local <> Text.pack "%to"
+                      -- The function works out what the thunk would have.
+                      lifted = Function parameters result $ case rename renamed value of
+                        Thunk inner evaluate -> Cut (Mu inner evaluate) (Covariable result)
+                        other -> Cut other (Force (Covariable result))
+                   in ((name', lifted) : out', (local, rename renamed (Variable local)) : kept)
+                Nothing -> (out', (local, rename outside value) : kept)
           modifySTRef' out (Map.union (Map.fromList out'))
+          modifySTRef' unshared ([Unshared Global.Global {path, name = prefix} local | local <- Set.toList again] ++)
           pure $ case kept of
-            [] -> rename renamed body
-            _ -> LetRec kept (rename renamed body)
+            [] -> rename outside body
+            _ -> LetRec kept (rename outside body)
         Abort -> pure Abort
         Halt -> pure Halt
   producer <- producerx name producer
   found <- readSTRef out
-  pure (producer, found)
+  unshared <- readSTRef unshared
+  pure (producer, found, unshared)
 
 -- |
--- The bindings that are functions and use nothing but each other.
-closed :: [(Text, Producer)] -> Set.Set Text
-closed bindings = go (Set.fromList [local | (local, Function {}) <- bindings])
+-- The bindings that one refers to, by itself or by way of the others.
+reached :: [(Text, Producer)] -> Text -> Set.Set Text
+reached bindings start = go Set.empty (uses start)
+  where
+    names = Set.fromList (map fst bindings)
+    uses local = Set.toList (Set.intersection names (foldMap free (lookup local bindings)))
+    go seen = \case
+      [] -> seen
+      local : rest
+        | Set.member local seen -> go seen rest
+        | otherwise -> go (Set.insert local seen) (uses local ++ rest)
+
+-- |
+-- The bindings that use nothing but each other, of the functions and of
+-- the thunks that refer to themselves, which are given.
+closed :: Set.Set Text -> [(Text, Producer)] -> Set.Set Text
+closed circular bindings = go (Set.fromList [local | (local, Function {}) <- bindings] <> circular)
   where
     go candidates
       | candidates == still = candidates
@@ -180,6 +242,14 @@ data Moved
     Top Global.Global
   | -- | A definition at the top that is first given some variables.
     Lifted Global.Global [Text]
+  | -- | A value that is worked out again, by a definition at the top that
+    -- is given some variables.
+    Again Global.Global [Text]
+
+isAgain :: Moved -> Bool
+isAgain = \case
+  Again _ _ -> True
+  _ -> False
 
 -- |
 -- Put what some variables have become in their place.
@@ -200,6 +270,10 @@ instance Rename Producer where
       Just (Lifted global given) ->
         let result = local <> Text.pack "%as"
          in Mu result (Cut (Global global) (Apply (map Variable given) (Covariable result)))
+      -- A new thunk, that works the value out when it is wanted.
+      Just (Again global given) ->
+        let result = local <> Text.pack "%again"
+         in Thunk result (Cut (Global global) (Apply (map Variable given) (Covariable result)))
       Nothing -> Variable local
     Global global -> Global global
     Literal literal -> Literal literal
@@ -229,6 +303,10 @@ instance Rename Statement where
                 Force inner -> inner
                 other -> other
            in Cut (Global global) (Apply (map Variable given) (rename renamed unforced))
+    -- Forced where it is used: it is worked out there, with no thunk.
+    Cut (Variable local) (Force inner)
+      | Just (Again global given) <- Map.lookup local renamed ->
+          Cut (Global global) (Apply (map Variable given) (rename renamed inner))
     Cut left right -> Cut (rename renamed left) (rename renamed right)
     Primitive primitive arguments result -> Primitive primitive (rename renamed arguments) (rename renamed result)
     LetRec bindings body ->

@@ -22,7 +22,7 @@ for bench_dir in bench/*/; do
         "$OUT/$variant" > /dev/null
         # The time the program itself took, as the shell measures it
         TIMEFORMAT=%R
-        seconds=$({ time HAZY_GC_STATS=1 "$OUT/$variant" > "$OUT/$variant.result" 2> "$OUT/$variant.stats"; } 2>&1)
+        seconds=$({ time HAZY_STATS=1 "$OUT/$variant" > "$OUT/$variant.result" 2> "$OUT/$variant.stats"; } 2>&1)
         printf '%-20s %6ss  result %s\n    %s\n' "$variant" "$seconds" "$(cat "$OUT/$variant.result")" "$(cat "$OUT/$variant.stats")"
     done
 done

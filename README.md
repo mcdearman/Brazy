@@ -99,19 +99,24 @@ Only the program's own modules are compiled. The packages it loads were
 compiled when they were made, and are linked in. `--whole` compiles everything
 together instead.
 
-Memory is freed by counting references, and values that refer to themselves
-are found by a tracing collector. Three environment variables are read by a
-compiled program:
+Memory is freed by counting references, and by nothing else: there is no
+garbage collector. Counting cannot free a value that holds itself, so the
+compiler makes none. A value in a `let` or a `where` that refers to itself
+goes to the top of the program if it uses nothing of where it is. If it does,
+it is worked out again each time it refers to itself, and the compiler warns
+of it: the value is no longer shared with itself, which can cost a great deal
+of time. Defining it at the top of the module keeps it shared.
 
-* `HAZY_GC_THRESHOLD`: how many bytes the heap may hold before the first
-  collection is due. The default is 8 MB. After that one is due when the heap
-  is twice what was alive after the last.
-* `HAZY_GC_VERIFY`: at each collection and at exit, work every count out again
-  and stop if one is wrong.
-* `HAZY_GC_STRESS`: make a collection due at every chance.
-* `HAZY_GC_STATS`: at exit, print how many blocks were allocated, how many
-  were built in the place of another, and how many were freed by counting and
-  by tracing.
+Two environment variables are read by a compiled program:
+
+* `HAZY_STATS`: at exit, print how many blocks were allocated, how many were
+  built in the place of another, how many calls lent what they passed, and
+  how many blocks were freed.
+* `HAZY_CHECK`: at exit, work every count of references out again, and stop
+  if one is wrong or if a block is left that nothing reaches. A program
+  compiled with `--checked` does this at the start of every function as well,
+  or, given a number, after every so many allocations. That costs a test at
+  the start of every function, so it is for testing the compiler.
 
 A value is built in the place of one that was just taken apart, when that was
 the last reference to it. `--no-reuse` turns this off, and `tools/bench.sh`

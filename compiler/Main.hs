@@ -12,7 +12,7 @@ import Data.Foldable (for_, toList, traverse_)
 import Data.Functor.Identity (Identity (..))
 import Data.List.Reverse (List (..))
 import qualified Data.Map as Map
-import Data.Text (Text, intercalate, pack)
+import Data.Text (Text, intercalate, pack, unpack)
 import qualified Data.Text.IO as Text.IO
 import qualified Data.Text.Lazy as Lazy.Text
 import qualified Data.Text.Lazy.Builder as Builder
@@ -26,7 +26,16 @@ import qualified Generate.Go.Module as Stage5
 import qualified Generate.Mangle as Mangle
 import qualified Javascript.Printer.Lexer as Javascript (print, run)
 import qualified AxCut.Lower as AxCut (lowerDefinitions)
-import qualified LLVM.FromAxCut as LLVM (Unit (..), arm64, generate, generateUnit, lending, windows, withoutReuse)
+import qualified LLVM.FromAxCut as LLVM
+  ( Unit (..),
+    arm64,
+    checking,
+    generate,
+    generateUnit,
+    lending,
+    windows,
+    withoutReuse,
+  )
 import qualified Javascript.Tree.Module as Module (print)
 import Package as X (Module (Module), Package (Package))
 import qualified Package
@@ -39,11 +48,11 @@ import qualified Semantic.Scope as Scope
 import qualified Semantic.Stage as Stage
 import qualified Semantic.Tree.Module as Module (connect, seperate)
 import qualified Semantic.Tree.Module as Semantic (Module, name)
-import qualified Sequent.FromCore as Sequent (Unit (..), complete, start, unit)
+import qualified Sequent.FromCore as Sequent (Unit (..), Unshared (..), complete, start, unit)
 import qualified Sequent.Printer as Sequent (print)
 import qualified Sequent.Tree as Sequent (Program (..))
 import qualified AxCut.Tree as AxCut (Program (..))
-import qualified Sequent.Runtime as Runtime (main)
+import qualified Sequent.Runtime as Runtime (main, showGlobal)
 import Syntax.Extensions (Extensions, hazy)
 import Syntax.Lexer
   ( FullQualifiers (..),
@@ -88,7 +97,7 @@ import System.Info (os)
 import System.Process (callProcess)
 import System.IO.Unsafe (unsafeInterleaveIO, unsafePerformIO)
 import Status (Status)
-import qualified Status (finished, progress, start, status)
+import qualified Status (finished, progress, start, status, warning)
 import Verbose (runVerbose)
 import Prelude hiding (Show (show))
 import qualified Prelude
@@ -277,6 +286,7 @@ data Execute = Execute
   { linking :: !Linking,
     reusing :: !Bool,
     lending :: !Bool,
+    checking :: !Bool,
     include :: List String,
     modules :: List String,
     packages :: List String,
@@ -296,6 +306,7 @@ defaultx =
     { linking = Separate,
       reusing = True,
       lending = True,
+      checking = False,
       include = Nil,
       modules = Nil,
       packages = Nil,
@@ -340,6 +351,7 @@ options =
     Option [] ["whole"] (NoArg whole') "Compile packages again with the program, instead of linking them",
     Option [] ["no-reuse"] (NoArg noReuse) "Never build a value in the place of one just taken apart",
     Option [] ["no-lend"] (NoArg noLend) "Never lend a function what it only reads",
+    Option [] ["checked"] (NoArg checkedx) "Make a program whose counts of references can be checked as it runs",
     Option [] ["repl"] (NoArg interactive) "Start an interactive session",
     Option [] ["debug-message"] (NoArg debug) "Show debug messages",
     Option [] ["debug-show"] (NoArg show) "Show internal AST",
@@ -362,6 +374,7 @@ options =
     whole' execute = execute {linking = Whole}
     noReuse execute = execute {reusing = False}
     noLend execute = execute {lending = False}
+    checkedx execute = execute {checking = True}
     generate path execute = execute {mode = Generate path}
     debug execute = execute {debug = Debug}
     fail error execute = execute {failure = Expect error}
@@ -396,6 +409,7 @@ main'' args = case getOpt order options args of
           { linking,
             reusing,
             lending,
+            checking,
             include,
             modules,
             packages,
@@ -495,7 +509,8 @@ main'' args = case getOpt order options args of
                     ++ strip
                     ++ ["-o", executable target]
               Separate -> do
-                Sequent.Unit {own, shared, lends} <- unit all
+                Sequent.Unit {own, shared, lends, unshared} <- unit all
+                warn unshared
                 emit (target ++ ".ll") $
                   LLVM.generateUnit
                     (machine lends)
@@ -519,7 +534,8 @@ main'' args = case getOpt order options args of
             createDirectoryIfMissing True (dropFileName target)
             let label = packageName (takeDirectory target) ++ " to native code"
             Status.status progress "Compiling" label
-            Sequent.Unit {own, shared, lends} <- unit all
+            Sequent.Unit {own, shared, lends, unshared} <- unit all
+            warn unshared
             let source = dropExtension target ++ ".ll"
             emit source $
               LLVM.generateUnit
@@ -614,8 +630,11 @@ main'' args = case getOpt order options args of
           pure $ Sequent.unit [length system .. length all - 1] all
         -- What native code is generated for.
         -- It is given which parameters each definition only reads.
-        machine lends = lent (reused base)
+        machine lends = examined (lent (reused base))
           where
+            examined
+              | checking = LLVM.checking
+              | otherwise = id
             base
               | os == "mingw32" = LLVM.windows
               | otherwise = LLVM.arm64
@@ -647,6 +666,18 @@ main'' args = case getOpt order options args of
         library
           | os == "mingw32" = "hazy_runtime.lib"
           | otherwise = "libhazy_runtime.a"
+        -- Tell of each value that is no longer shared with itself.
+        warn unshared = for_ unshared $ \(Sequent.Unshared global local) ->
+          Status.warning progress $
+            concat
+              [ "in ",
+                dropWhile (== '@') (Runtime.showGlobal global),
+                ", `",
+                takeWhile (/= '%') (unpack local),
+                "` refers to itself and uses variables of where it is defined. ",
+                "So that nothing holds itself, it is worked out again each time it refers to itself. ",
+                "Defined at the top of the module it would be worked out once."
+              ]
         -- Where a program starts, lowered by itself.
         startProgram =
           Sequent.Program {definitions = Map.empty, entry = Sequent.start Runtime.main}
