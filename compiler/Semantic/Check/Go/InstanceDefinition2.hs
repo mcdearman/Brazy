@@ -387,6 +387,8 @@ checkMethod Method {context, position} (Derive Type2.Enum typeIndex datax) index
 checkMethod Method {context, position} (Derive Type2.Enum typeIndex datax) index _ _
   | Method.ToEnum <- toEnum index = Enum.toEnum context position typeIndex datax
 checkMethod Method {context, position, self} (Derive Type2.Enum typeIndex datax) index _ _
+  | Method.EnumFrom <- toEnum index = Enum.enumFrom context position self typeIndex datax
+checkMethod Method {context, position, self} (Derive Type2.Enum typeIndex datax) index _ _
   | Method.EnumFromThen <- toEnum index = Enum.enumFromThen context position self typeIndex datax
 checkMethod Method {context, position} (Derive Type2.Bounded typeIndex datax) index _ _ =
   case toEnum index of

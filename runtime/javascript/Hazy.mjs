@@ -180,22 +180,6 @@ export const unpack = {
   b: (thunk) => stream(force(thunk)[Symbol.iterator]()),
 };
 
-export const putStrLnText = {
-  a: 0,
-  b: (thunk) => () => {
-    console.log(force(thunk));
-    return { a: 0, b: { a: 0 } };
-  },
-};
-
-export const traceText = {
-  a: 0,
-  b: (text) => (thunk) => {
-    console.log(force(text));
-    return force(thunk);
-  },
-};
-
 export const generalCategory = {
   a: 0,
   b: (code) => ({ a: category(force(code)) }),
@@ -595,6 +579,268 @@ export function readTuple(pack, ...evidences) {
   };
   return result;
 }
+
+// What follows is the world outside the program: files, arguments, the
+// clock. It is there under Node and Bun, and absent in a browser, where a
+// program that asks for it fails.
+let fs = null;
+let child = null;
+let tty = null;
+try {
+  fs = await import("node:fs");
+  child = await import("node:child_process");
+  tty = await import("node:tty");
+} catch {}
+
+const unit = { a: 0, b: { a: 0 } };
+
+function done(value) {
+  return { a: 0, b: value };
+}
+
+// Text written to a descriptor, all of it, however little the system takes
+// at a time.
+function write(descriptor, text) {
+  if (fs === null) {
+    console.log(text.endsWith("\n") ? text.slice(0, -1) : text);
+    return;
+  }
+  const bytes = Buffer.from(text, "utf8");
+  let written = 0;
+  while (written < bytes.length) {
+    try {
+      written += fs.writeSync(descriptor, bytes, written);
+    } catch (error) {
+      if (error.code !== "EAGAIN") {
+        throw error;
+      }
+    }
+  }
+}
+
+export const putStrLnText = {
+  a: 0,
+  b: (thunk) => () => {
+    write(1, force(thunk) + "\n");
+    return unit;
+  },
+};
+
+export const traceText = {
+  a: 0,
+  b: (text) => (thunk) => {
+    write(2, force(text) + "\n");
+    return force(thunk);
+  },
+};
+
+export const primUnsafeCoerce = {
+  a: 0,
+  b: (value) => force(value),
+};
+
+export const primNewRef = {
+  a: 0,
+  b: (value) => () => done({ ref: value }),
+};
+
+export const primReadRef = {
+  a: 0,
+  b: (reference) => () => force(reference).ref,
+};
+
+export const primWriteRef = {
+  a: 0,
+  b: (reference) => (value) => () => {
+    force(reference).ref = value;
+    return unit;
+  },
+};
+
+export const primSameRef = {
+  a: 0,
+  b: (left) => (right) => ({ a: +(force(left) === force(right)) }),
+};
+
+export const primArgCount = {
+  a: 0,
+  b: () => done(process.argv.length - 2),
+};
+
+export const primArg = {
+  a: 0,
+  b: (index) => () => done(process.argv[force(index) + 2]),
+};
+
+// The value of an environment variable after a 1, or a 0 alone if it is
+// not set.
+export const primGetEnv = {
+  a: 0,
+  b: (name) => () => {
+    const value = process.env[force(name)];
+    return done(value === undefined ? "0" : "1" + value);
+  },
+};
+
+export const primExecutablePath = {
+  a: 0,
+  b: () => done(fs.realpathSync(process.argv[1])),
+};
+
+export const primExit = {
+  a: 0,
+  b: (code) => () => process.exit(force(code)),
+};
+
+// A file opened to read, to write or to add to, as the mode is 0, 1 or 2.
+export const primOpen = {
+  a: 0,
+  b: (path) => (mode) => () =>
+    done(fs.openSync(force(path), ["r", "w", "a"][force(mode)])),
+};
+
+export const primClose = {
+  a: 0,
+  b: (descriptor) => () => {
+    fs.closeSync(force(descriptor));
+    return unit;
+  },
+};
+
+export const primWrite = {
+  a: 0,
+  b: (descriptor) => (text) => () => {
+    write(force(descriptor), force(text));
+    return unit;
+  },
+};
+
+export const primReadAll = {
+  a: 0,
+  b: (descriptor) => () => done(fs.readFileSync(force(descriptor), "utf8")),
+};
+
+// A line read from a descriptor after a 1, without its end, or a 0 alone
+// if there is nothing left to read.
+export const primReadLine = {
+  a: 0,
+  b: (descriptor) => () => {
+    const byte = Buffer.alloc(1);
+    const bytes = [];
+    let any = false;
+    for (;;) {
+      let count = 0;
+      try {
+        count = fs.readSync(force(descriptor), byte, 0, 1, null);
+      } catch (error) {
+        if (error.code === "EAGAIN") {
+          continue;
+        }
+        if (error.code !== "EOF") {
+          throw error;
+        }
+      }
+      if (count === 0) {
+        break;
+      }
+      any = true;
+      if (byte[0] === 10) {
+        break;
+      }
+      bytes.push(byte[0]);
+    }
+    return done(any ? "1" + Buffer.from(bytes).toString("utf8") : "0");
+  },
+};
+
+export const primIsTerminal = {
+  a: 0,
+  b: (descriptor) => () => done(+tty.isatty(force(descriptor))),
+};
+
+// The names in a directory, each on a line.
+export const primListDirectory = {
+  a: 0,
+  b: (path) => () => done(fs.readdirSync(force(path)).join("\n")),
+};
+
+export const primCreateDirectory = {
+  a: 0,
+  b: (path) => () => {
+    fs.mkdirSync(force(path), { recursive: true });
+    return unit;
+  },
+};
+
+// Whether a path is there: 0 if not, 1 for a file, 2 for a directory.
+export const primPathKind = {
+  a: 0,
+  b: (path) => () => {
+    const found = fs.statSync(force(path), { throwIfNoEntry: false });
+    return done(found === undefined ? 0 : found.isDirectory() ? 2 : 1);
+  },
+};
+
+// A program run to its end with arguments, each on a line, and what it
+// exited with.
+export const primCallProcess = {
+  a: 0,
+  b: (program) => (packed) => () => {
+    const text = force(packed);
+    const result = child.spawnSync(
+      force(program),
+      text === "" ? [] : text.split("\n"),
+      { stdio: "inherit" },
+    );
+    if (result.error) {
+      throw result.error;
+    }
+    return done(result.status ?? 1);
+  },
+};
+
+// Thousandths of a second since some moment that does not change.
+export const primClock = {
+  a: 0,
+  b: () => done(Math.floor(performance.now()) | 0),
+};
+
+export const primOS = {
+  a: 0,
+  b:
+    typeof process === "undefined"
+      ? "browser"
+      : process.platform === "win32"
+        ? "mingw32"
+        : process.platform,
+};
+
+class Thrown {
+  constructor(value) {
+    this.value = value;
+  }
+}
+
+export const primThrow = {
+  a: 0,
+  b: (value) => {
+    throw new Thrown(value);
+  },
+};
+
+export const primCatch = {
+  a: 0,
+  b: (action) => (handler) => () => {
+    try {
+      return force(action)();
+    } catch (error) {
+      if (error instanceof Thrown) {
+        return force(handler)(error.value)();
+      }
+      throw error;
+    }
+  },
+};
 
 export {
   "instance Hazy.Num HelperInt" as numInt,

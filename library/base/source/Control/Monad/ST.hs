@@ -7,12 +7,10 @@ module Control.Monad.ST
   )
 where
 
-import Hazy.Prelude (ST, placeholder, runST)
+import Hazy.Prelude (IO (..), RealWorld, ST, placeholder, runST)
 
 fixST :: (a -> ST s a) -> ST s a
 fixST = placeholder
 
-data RealWorld
-
 stToIO :: ST RealWorld a -> IO a
-stToIO = placeholder
+stToIO = IO

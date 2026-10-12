@@ -579,7 +579,14 @@ evaluate context expression consumer = case expression of
           implicit context False method instanciation consumer
   Core.Variable {variable = index, instanciation} -> do
     let (producer, strict) = variable context index
-    implicit context strict producer instanciation consumer
+    case instanciation of
+      -- What a newtype wrapped is evaluated to the function of evidence
+      -- that it is.
+      Instanciation arguments
+        | Term.Binding {delayed = True} <- context !- index ->
+            generateEvidences context (toList arguments) $ \arguments ->
+              pure $ Cut producer (Force (Apply arguments consumer))
+      _ -> implicit context strict producer instanciation consumer
   Core.Method
     { method = Method.Index {methodIndex},
       evidence = dictionary,

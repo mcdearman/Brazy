@@ -1,7 +1,9 @@
 module System.Exit where
 
+import Hazy (primExit)
+import Hazy.Prelude (IO (..))
+import System.IO (hPutStrLn, stderr)
 import Control.Exception (Exception)
-import Hazy.Prelude (placeholder)
 
 data ExitCode
   = ExitSuccess
@@ -11,13 +13,15 @@ data ExitCode
 instance Exception ExitCode
 
 exitWith :: ExitCode -> IO a
-exitWith = placeholder
+exitWith code = IO $ primExit $ case code of
+  ExitSuccess -> 0
+  ExitFailure status -> status
 
 exitFailure :: IO a
-exitFailure = placeholder
+exitFailure = exitWith (ExitFailure 1)
 
 exitSuccess :: IO a
-exitSuccess = placeholder
+exitSuccess = exitWith ExitSuccess
 
 die :: String -> IO a
-die = placeholder
+die message = hPutStrLn stderr message >> exitFailure

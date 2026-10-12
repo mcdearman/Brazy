@@ -105,7 +105,7 @@ localBindings names instances Context {terms, evidence, types, unique, used, bui
 singleBinding :: Text -> Context s scope -> Context s (Scope.SimpleDeclaration ':+ scope)
 singleBinding name Context {terms, evidence, types, unique, used, builtinUsed} =
   Context
-    { terms = Term.SimpleDeclaration (Term.binding $ Local name) terms,
+    { terms = Term.SimpleDeclaration Term.Binding {name = Local name, strict = False, delayed = True} terms,
       evidence = Evidence0.SimpleDeclaration evidence,
       types = Type.SimpleDeclaration types,
       unique,
@@ -132,7 +132,8 @@ patternBindings names ConstructorInfo {entries} Context {terms, evidence, types,
     bind name EntryInfo {strict} =
       Term.Binding
         { name = Local name,
-          strict = Info.strict strict
+          strict = Info.strict strict,
+          delayed = False
         }
 
 evidenceBindings ::

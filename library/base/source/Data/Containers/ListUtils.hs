@@ -6,16 +6,23 @@ module Data.Containers.ListUtils
   )
 where
 
-import Hazy.Prelude (placeholder)
+import qualified Data.Set as Set (empty, insert, member)
 
 nubOrd :: (Ord a) => [a] -> [a]
-nubOrd = placeholder
+nubOrd = nubOrdOn id
 
 nubOrdOn :: (Ord b) => (a -> b) -> [a] -> [a]
-nubOrdOn = placeholder
+nubOrdOn f = go Set.empty
+  where
+    go _ [] = []
+    go seen (x : xs)
+      | Set.member key seen = go seen xs
+      | otherwise = x : go (Set.insert key seen) xs
+      where
+        key = f x
 
 nubInt :: [Int] -> [Int]
-nubInt = placeholder
+nubInt = nubOrd
 
 nubIntOn :: (a -> Int) -> [a] -> [a]
-nubIntOn = placeholder
+nubIntOn = nubOrdOn

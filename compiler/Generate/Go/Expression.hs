@@ -238,9 +238,11 @@ generatePure,
     ST s ([Javascript.Statement 'True], Javascript.Expression)
 generateImpure context expression = case expression of
   Variable {variable, instanciation} -> do
-    let Term.Binding {name, strict} = context !- variable
+    let Term.Binding {name, strict, delayed} = context !- variable
     name <- symbol context name
-    let expression = Javascript.Variable {name}
+    let expression = case instanciation of
+          Instanciation {} | delayed -> force Javascript.Variable {name}
+          _ -> Javascript.Variable {name}
     result <- implicit context strict expression instanciation
     pure ([], result)
   Method

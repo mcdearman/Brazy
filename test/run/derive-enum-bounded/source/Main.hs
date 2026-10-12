@@ -41,3 +41,13 @@ main = do
   print (maxBound :: T)
   print (minBound :: Both)
   print (maxBound :: Both)
+  -- Nothing comes after the last constructor.
+  print [H ..]
+  print [Only ..]
+
+data One = Only
+
+instance Show One where
+  show Only = "Only"
+
+deriving instance Enum One
