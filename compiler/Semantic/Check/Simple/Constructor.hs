@@ -28,7 +28,8 @@ instanciate position brand fresh Constructor {name, syntax, entries, shape} = ca
           name,
           syntax,
           entries = EntryInstance.instanciate position fresh <$> entries,
-          result = fresh
+          result = fresh,
+          indexed = False
         }
   -- The constructor's own variables are unknowns, of kinds that are not
   -- known either: what they are is found from how the constructor is used.
@@ -43,5 +44,6 @@ instanciate position brand fresh Constructor {name, syntax, entries, shape} = ca
           name,
           syntax,
           entries = EntryInstance.instanciate position own <$> entries,
-          result = substituteType (Strict.Vector.toLazy own) <$> arguments
+          result = substituteType (Strict.Vector.toLazy own) <$> arguments,
+          indexed = True
         }

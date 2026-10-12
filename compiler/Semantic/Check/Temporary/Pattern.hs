@@ -167,6 +167,21 @@ augmentPattern patternx = Term.Bound {at, select}
       String {} -> Strict.Vector.empty
 
 -- |
+-- Set the type of what is matched against the type a constructor makes.
+-- For a constructor that says what type it makes, this may tell something
+-- of the type's variables. For any other the two are simply the same.
+matched ::
+  Context s scope ->
+  Position ->
+  ConstructorInstance.ConstructorInstance s scope ->
+  Unify.Type s scope ->
+  Unify.Type s scope ->
+  ST s [Equality s scope]
+matched context position instancex typex base
+  | ConstructorInstance.indexed instancex = Unify.refine context position typex base
+  | otherwise = [] <$ Unify.unify context position typex base
+
+-- |
 -- A context in which more is known of type variables.
 knowing :: [Equality s scope] -> Context s scope -> Context s scope
 knowing found context@Context {equalities} = context {equalities = found ++ equalities}
@@ -194,7 +209,7 @@ check context@Context {typeEnvironment} typex = \case
             entries = ConstructorInstance.types instancex
             constructorInfo = ConstructorInstance.info instancex
         ConstructorInstance.mark context instancex
-        equalities <- Unify.refine context constructorPosition typex base
+        equalities <- matched context constructorPosition instancex typex base
         when (length entries /= length patterns) $ mismatchedConstructorArguments constructorPosition
         patterns <- sequence $ Strict.Vector.zipWith (check (knowing equalities context)) entries patterns
         pure $
@@ -229,7 +244,7 @@ check context@Context {typeEnvironment} typex = \case
           constructorInfo = ConstructorInstance.info instancex
           lookup index = entries Strict.Vector.! index
       ConstructorInstance.mark context instancex
-      equalities <- Unify.refine context constructorPosition typex base
+      equalities <- matched context constructorPosition instancex typex base
       fields <- traverse (Field.check (knowing equalities context) lookup) fields
       pure $
         Record
