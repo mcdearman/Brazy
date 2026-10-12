@@ -58,9 +58,10 @@ check context typex = \case
     pure Run {startPosition, effect, after}
   Semantic.Bind {startPosition, patternx, effect, thenx} -> do
     binder <- Unify.fresh Core.typex
-    patternx <- Pattern.check context binder patternx
     effect <- Expression.check context binder effect
+    patternx <- Pattern.check context binder patternx
     thenx <- check (Pattern.augment patternx context) (shiftLogical typex) thenx
+    Pattern.sealed context patternx [binder, typex]
     pure Bind {startPosition, patternx, effect, thenx}
   Semantic.Let {startPosition, declarations, body} -> do
     context Declarations.:& declarations <- Declarations.check context declarations

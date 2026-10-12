@@ -40,7 +40,7 @@ import qualified Syntax.Printer as Syntax (build)
 import qualified Syntax.Tree.Type as Syntax (Type (Call, argument, function, startPosition), print)
 
 collect :: Type s scopes -> ST s [Collected s scopes]
-collect = Generalizable.collect (Collector Mask.Inline)
+collect = Generalizable.collect (Naming Mask.Inline)
 
 data Error s where
   Unify :: Context s scope -> Type s scope -> Type s scope -> Error s
@@ -48,6 +48,9 @@ data Error s where
   Mismask :: Context s scope -> Type s scope -> Error s
   Constrain :: Context s scope -> Type2.Index scope -> Type s scope -> [Type s scope] -> Error s
   Unshift :: Context s (scope ':+ scopes) -> Type s (scope ':+ scopes) -> Error s
+  -- | A type that a constructor hides is part of a type outside the
+  -- match on that constructor.
+  Escape :: Context s scope -> Type s scope -> Error s
 
 abort :: Position -> Error s -> ST s a
 abort position = \case
@@ -102,6 +105,12 @@ abort position = \case
         temporary = temporaries (length unsolved) context
     term <- Syntax.build . Syntax.print . Semantic.label temporary <$> fabricate Shift.Shift labeled term
     escapingType position term
+  Escape context term -> do
+    unsolved <- nub <$> collect term
+    let labeled = zip unsolved [Local.Local i | i <- [0 ..]]
+        temporary = temporaries (length unsolved) context
+    term <- Syntax.build . Syntax.print . Semantic.label temporary <$> fabricate Shift.Shift labeled term
+    escapingType position term
   where
     temporaries :: Int -> Context s scopes -> Label.Context (Scope.Local ':+ scopes)
     temporaries length context = case Context.label context of
@@ -116,6 +125,18 @@ abort position = \case
             i <- [0 .. length]
             let name = Lexer.variableIdentifier (Text.pack $ "__flexible_" ++ show i)
             pure Label.LocalBinding {name}
+    named ::
+      [(Collected s scope, Local.Index scope')] ->
+      STRef s (Box s scope) ->
+      ST s (Semantic.Type () Resolve scope')
+    named names reference = case lookup (Collect reference) names of
+      Just variable ->
+        pure
+          Semantic.Variable
+            { startPosition = (),
+              variable
+            }
+      Nothing -> error "uncollected variable"
     fabricate ::
       Shift.Category scope scope' ->
       [(Collected s scope, Local.Index scope')] ->
@@ -125,14 +146,8 @@ abort position = \case
       Logical (Box reference) ->
         readSTRef reference >>= \case
           Solved typex -> fabricate category names typex
-          Unsolved {} -> case lookup (Collect reference) names of
-            Just variable ->
-              pure
-                Semantic.Variable
-                  { startPosition = (),
-                    variable
-                  }
-            Nothing -> error "uncollected variable"
+          Unsolved {} -> named names reference
+          Skolem {} -> named names reference
       Logical (Shift logical) -> fabricate (category Shift.:. Shift.Shift) names' (Logical logical)
         where
           names' = [(collect, name) | (Reach collect, name) <- names]

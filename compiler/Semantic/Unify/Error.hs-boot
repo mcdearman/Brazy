@@ -16,3 +16,4 @@ data Error s where
   Mismask :: Context s scope -> Type s scope -> Error s
   Constrain :: Context s scope -> Type2.Index scope -> Type s scope -> [Type s scope] -> Error s
   Unshift :: Context s (scope ':+ scopes) -> Type s (scope ':+ scopes) -> Error s
+  Escape :: Context s scope -> Type s scope -> Error s

@@ -75,7 +75,7 @@ check context@Context {typeEnvironment} typex Semantic.Constructor {constructorP
       let get index = assumeData <$> TypeBinding.content (typeEnvironment Type.! index)
       Builtin.index pure get typeIndex
     DataInstance {constructors} <-
-      Simple.Data.instanciate context constructorPosition datax
+      Simple.Data.instanciate ConstructorInstance.Build context constructorPosition datax
     let instancex = constructors Strict.Vector.! constructorIndex
         base = DataInstance.constructed instancex typeIndex
         typex' = ConstructorInstance.function instancex base

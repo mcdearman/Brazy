@@ -30,6 +30,8 @@ type Box :: Kind.Type -> Environment -> Kind.Type
 data Box s scope
 
 fresh :: Type s scope -> ST s (Type s scope)
+skolem :: Type s scope -> ST s (Type s scope)
+sealed :: Context s scope -> Position -> [Type s scope] -> Type s scope -> ST s ()
 mark :: Context s scope -> Position -> Mask.Erasure -> Type s scope -> ST s ()
 unify :: Context s scope -> Position -> Type s scope -> Type s scope -> ST s ()
 refine :: Context s scope -> Position -> Type s scope -> Type s scope -> ST s [Equality s scope]

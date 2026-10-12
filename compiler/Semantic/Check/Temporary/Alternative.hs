@@ -30,6 +30,7 @@ check ::
 check context typex binder Semantic.Alternative {parameter, rightHandSide} = do
   parameter <- Pattern.check context binder parameter
   rightHandSide <- RightHandSide.check (Pattern.augment parameter context) (shiftLogical typex) rightHandSide
+  Pattern.sealed context parameter [binder, typex]
   pure Alternative {parameter, rightHandSide}
 
 solve :: Alternative s scope -> Unify.Solve s (Solved.Alternative Group Check scope)

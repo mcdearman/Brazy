@@ -1,6 +1,6 @@
 module Semantic.Unify.Type where
 
-import Control.Monad (filterM, foldM, zipWithM)
+import Control.Monad (filterM, foldM, when, zipWithM)
 import Control.Monad.ST (ST)
 import Core.Substitute (logicalEvidence, logicalType, substituteType)
 import qualified Core.Tree.Constraint as Simple (argument)
@@ -65,6 +65,12 @@ data Box s scope
         erasure :: !Mask.Erasure
       }
   | Solved !(Type s scope)
+  | -- | A type that stands for itself alone: a type variable of a
+    -- constructor that is not the type of anything outside it, where the
+    -- constructor is matched on. Nothing is known of it but that it is some
+    -- type, so it is the same as itself and as nothing else, and it is
+    -- never worked out to be anything.
+    Skolem {kind :: !(Type s scope)}
 
 data Delay s scope = Delay
   { arguments :: [Type s scope],
@@ -80,6 +86,13 @@ instance Shift0.Functor (Logical s) where
 fresh :: Type s scope -> ST s (Type s scope)
 fresh kind = do
   box <- newSTRef $! Unsolved {kind, constraints = Map.empty, erasure = Mask.Erased}
+  pure $ Logical $ Box box
+
+-- |
+-- A new type that stands for itself alone: see 'Skolem'.
+skolem :: Type s scope -> ST s (Type s scope)
+skolem kind = do
+  box <- newSTRef $! Skolem {kind}
   pure $ Logical $ Box box
 
 -- | Unify two types
@@ -105,7 +118,46 @@ unify context_ position term1_ term2_ = unifyWith context_ term1_ term2_
           Type s scope ->
           Type s scope ->
           ST s ()
-        unify (Logical (Box reference)) (Logical (Box reference'))
+        unify term term' = do
+          left <- hidden term
+          right <- hidden term'
+          case (left, right) of
+            (Nothing, Nothing) -> plain term term'
+            (Just logical, Just logical') | same logical logical' -> pure ()
+            -- One that is known here to be some type is that type.
+            (Just logical, _) | Just known <- equatedHidden context logical -> unify known term'
+            (_, Just logical') | Just known <- equatedHidden context logical' -> unify term known
+            (Just _, Just _) -> mismatch
+            (Just _, Nothing) -> against term term'
+            (Nothing, Just _) -> against term' term
+        -- A type that stands for itself alone against one that does not. An
+        -- unknown is made to be it, and nothing else is the same as it.
+        against :: Type s scope -> Type s scope -> ST s ()
+        against rigid = \case
+          Logical logical ->
+            solution logical >>= \case
+              Just known -> unify rigid known
+              Nothing -> assign logical rigid
+          Variable index | Just known <- equated context index -> unify rigid known
+          _ -> mismatch
+        assign :: Logical s scope -> Type s scope -> ST s ()
+        assign (Box reference) term =
+          readSTRef reference >>= \case
+            Unsolved {kind, constraints, erasure} -> do
+              occurs context position erasure reference term
+              typeCheck context position kind term
+              reconstrain context position constraints term
+              writeSTRef reference $ Solved term
+            Solved {} -> error "assigned twice"
+            Skolem {} -> error "assigned to a type that stands for itself"
+        assign (Shift logical) term = do
+          term <- unshift context position term
+          unifyWith (Shift.unshift context) (Logical logical) term
+        plain ::
+          Type s scope ->
+          Type s scope ->
+          ST s ()
+        plain (Logical (Box reference)) (Logical (Box reference'))
           | reference == reference' = pure ()
           | otherwise = do
               box <- readSTRef reference
@@ -150,7 +202,9 @@ unify context_ position term1_ term2_ = unifyWith context_ term1_ term2_
                       constraints <- sequence $ Map.unionWith merge constraints1 constraints2
                       writeSTRef reference' $! Unsolved {kind = kind1, constraints, erasure = erasure1 <> erasure2}
                       writeSTRef reference $! Solved (Logical (Box reference'))
-        unify (Logical (Box reference)) term' =
+            combine Skolem {} _ = error "plain unification of a type that stands for itself"
+            combine _ Skolem {} = error "plain unification of a type that stands for itself"
+        plain (Logical (Box reference)) term' =
           readSTRef reference >>= \case
             Unsolved {kind, constraints, erasure} -> do
               occurs context position erasure reference term'
@@ -158,7 +212,8 @@ unify context_ position term1_ term2_ = unifyWith context_ term1_ term2_
               reconstrain context position constraints term'
               writeSTRef reference $ Solved term'
             Solved term -> unify term term'
-        unify term (Logical (Box reference')) =
+            Skolem {} -> error "plain unification of a type that stands for itself"
+        plain term (Logical (Box reference')) =
           readSTRef reference' >>= \case
             Unsolved {kind, constraints, erasure} -> do
               occurs context position erasure reference' term
@@ -166,56 +221,57 @@ unify context_ position term1_ term2_ = unifyWith context_ term1_ term2_
               reconstrain context position constraints term
               writeSTRef reference' $ Solved term
             Solved term' -> unify term term'
+            Skolem {} -> error "plain unification of a type that stands for itself"
         -- Types involving a higher scope must be solved in said scope.
         -- One that has been solved already is the type it was found to be,
         -- and is taken as that here, where more may be known of the type
         -- variables in it than is known further out.
-        unify (Logical (Shift logical)) term' =
+        plain (Logical (Shift logical)) term' =
           solution logical >>= \case
             Just term -> unify (shiftLogical term) term'
             Nothing -> do
               term' <- unshift context position term'
               unifyWith (Shift.unshift context) (Logical logical) term'
-        unify term (Logical (Shift logical)) =
+        plain term (Logical (Shift logical)) =
           solution logical >>= \case
             Just term' -> unify term (shiftLogical term')
             Nothing -> do
               term <- unshift context position term
               unifyWith (Shift.unshift context) term (Logical logical)
-        unify (Variable index) (Variable index')
+        plain (Variable index) (Variable index')
           | index == index' = pure ()
         -- A variable that is known here to be some type is that type.
-        unify (Variable index) term'
+        plain (Variable index) term'
           | Just known <- equated context index = unify known term'
-        unify term (Variable index')
+        plain term (Variable index')
           | Just known <- equated context index' = unify term known
-        unify (Constructor index) (Constructor index')
+        plain (Constructor index) (Constructor index')
           | index == index' = pure ()
           | otherwise = mismatch
-        unify (Call term1 term2) (Call term1' term2') = do
+        plain (Call term1 term2) (Call term1' term2') = do
           unify term1 term1'
           unify term2 term2'
-        unify (Function type1 type2) (Function type1' type2') = do
+        plain (Function type1 type2) (Function type1' type2') = do
           unify type1 type1'
           unify type2 type2'
-        unify (Function type1 type2) (Call function' type2') = do
+        plain (Function type1 type2) (Call function' type2') = do
           typeCheck context position (Type Small) type1
           typeCheck context position (Type Small) type2
           unify (Call (Constructor Type2.Arrow) type1) function'
           unify type2 type2'
-        unify (Call function type2) (Function type1' type2') = do
+        plain (Call function type2) (Function type1' type2') = do
           typeCheck context position (Type Small) type1'
           typeCheck context position (Type Small) type2'
           unify function (Call (Constructor Type2.Arrow) type1')
           unify type2 type2'
-        unify (Type universe) (Type universe') = do
+        plain (Type universe) (Type universe') = do
           unify universe universe'
-        unify Constraint Constraint = pure ()
-        unify Small Small = pure ()
-        unify Large Large = pure ()
-        unify Universe Universe = pure ()
-        unify Levity Levity = pure ()
-        unify _ _ = mismatch
+        plain Constraint Constraint = pure ()
+        plain Small Small = pure ()
+        plain Large Large = pure ()
+        plain Universe Universe = pure ()
+        plain Levity Levity = pure ()
+        plain _ _ = mismatch
 
     mismatch :: ST s ()
     mismatch = abort position (Unify context_ term1_ term2_)
@@ -228,11 +284,77 @@ equated Context {equalities} index = case [typex | Local.Equality index' typex <
   [] -> Nothing
 
 -- |
+-- What a type that stands for itself alone is known to be where this is.
+equatedHidden :: Context s scope -> Logical s scope -> Maybe (Type s scope)
+equatedHidden Context {equalities} logical =
+  case [typex | Local.Hidden logical' typex <- equalities, same logical logical'] of
+    typex : _ -> Just typex
+    [] -> Nothing
+
+-- |
+-- Whether two unknowns are the one unknown.
+same :: Logical s scope -> Logical s scope -> Bool
+same (Box reference) (Box reference') = reference == reference'
+same (Shift logical) (Shift logical') = same logical logical'
+same _ _ = False
+
+-- |
+-- A type that stands for itself alone, if a type is one, however it was
+-- come by.
+hidden :: Type s scope -> ST s (Maybe (Logical s scope))
+hidden = \case
+  Logical logical ->
+    solution logical >>= \case
+      Just typex -> hidden typex
+      Nothing -> do
+        rigid <- rigid logical
+        pure (if rigid then Just logical else Nothing)
+  _ -> pure Nothing
+  where
+    rigid :: Logical s scope' -> ST s Bool
+    rigid = \case
+      Box reference ->
+        readSTRef reference >>= \case
+          Skolem {} -> pure True
+          _ -> pure False
+      Shift logical -> rigid logical
+
+-- |
+-- Check that none of some types that stand for themselves alone is part of
+-- a type. They are what a constructor hides, and the type is one that is
+-- seen from outside the match on that constructor, where there is no saying
+-- what they are.
+sealed :: forall s scope. Context s scope -> Position -> [Type s scope] -> Type s scope -> ST s ()
+sealed context position own typex = do
+  found <- part typex
+  when found $ abort position (Escape context typex)
+  where
+    part :: Type s scope -> ST s Bool
+    part = \case
+      Logical logical ->
+        solution logical >>= \case
+          Just known -> part known
+          Nothing -> pure (any (is logical) own)
+      Call function argument -> either (part function) (part argument)
+      Function argument result -> either (part argument) (part result)
+      Type universe -> part universe
+      _ -> pure False
+    is logical = \case
+      Logical other -> same logical other
+      _ -> False
+    either left right = do
+      left <- left
+      if left then pure True else right
+
+-- |
 -- What is known of a type variable, as it is known one scope further out,
 -- if it can be said there: the variable has to be from there, and so does
 -- every variable and every unknown in what it is known to be.
 lowerEquality :: Local.Equality s (scope' ':+ scope) -> Maybe (Local.Equality s scope)
-lowerEquality (Local.Equality index typex) = Local.Equality <$> Shift.partialUnshift Nothing index <*> lower typex
+lowerEquality = \case
+  Local.Equality index typex -> Local.Equality <$> Shift.partialUnshift Nothing index <*> lower typex
+  Local.Hidden (Shift logical) typex -> Local.Hidden logical <$> lower typex
+  Local.Hidden (Box _) _ -> Nothing
   where
     lower :: Type s (scope' ':+ scope) -> Maybe (Type s scope)
     lower = \case
@@ -250,50 +372,61 @@ lowerEquality (Local.Equality index typex) = Local.Equality <$> Shift.partialUns
       Levity -> Just Levity
 
 -- |
--- Match the type of what is taken apart against the type a constructor
--- makes, and say what that tells of the type variables in the first.
+-- Match a type that the type of what is taken apart is given against what
+-- a constructor says it is given, and say what that tells of the types in
+-- the first.
 --
 -- Where the first has an unknown, the unknown is made what the second has,
 -- as when two types are made the same. Where it has a type variable and the
 -- second something else, nothing can be made the same: the variable is the
 -- signature's and stands for any type. But in the branch the match leads to
 -- it is known to be what the constructor says, and that is what is given
--- back, for the branch to be checked with.
+-- back, for the branch to be checked with. A type that some constructor
+-- hides is like a variable in this.
 --
--- The two have to be the same type to begin with: matching a value of one
--- type against a constructor of another is an error, as it always was. It
--- is only in what the type is given that they may differ. If they differ
--- there in a way that cannot be, no value of that constructor has the type
--- that is taken apart, and the branch is never reached. Nothing is said of
--- that here.
+-- If the two differ in a way that cannot be, no value of that constructor
+-- has the type that is taken apart, and the branch is never reached.
+-- Nothing is said of that here.
 refine :: forall s scope. Context s scope -> Position -> Type s scope -> Type s scope -> ST s [Local.Equality s scope]
-refine context position = go True []
+refine context position = go []
   where
-    -- Whether this is the type itself, and not something it is given.
-    go :: Bool -> [Local.Equality s scope] -> Type s scope -> Type s scope -> ST s [Local.Equality s scope]
-    go spine found left right = do
+    go :: [Local.Equality s scope] -> Type s scope -> Type s scope -> ST s [Local.Equality s scope]
+    go found left right = do
       left <- settled left
       right <- settled right
+      leftHidden <- hidden left
+      rightHidden <- hidden right
       let Context {equalities} = context
           here = context {equalities = found ++ equalities}
           plain = found <$ unify here position left right
+          -- A type cannot be known to be something it is part of.
+          learn equality typex = do
+            circular <- within here equality typex
+            pure (if circular then found else equality typex : found)
       case (left, right) of
+        _ | Just logical <- leftHidden, Just logical' <- rightHidden, same logical logical' -> pure found
+        _ | Just logical <- leftHidden, Just known <- equatedHidden here logical -> go found known right
+        _ | Just logical <- rightHidden, Just known <- equatedHidden here logical -> go found left known
         (Variable index, Variable index') | index == index' -> pure found
-        (Variable index, _) | Just known <- equated here index -> go spine found known right
-        (_, Variable index') | Just known <- equated here index' -> go spine found left known
-        (Logical _, _) -> plain
-        (_, Logical _) -> plain
-        (Variable index, _) | not spine -> pure (Local.Equality index right : found)
-        (_, Variable index') | not spine -> pure (Local.Equality index' left : found)
+        (Variable index, _) | Just known <- equated here index -> go found known right
+        (_, Variable index') | Just known <- equated here index' -> go found left known
+        (Logical _, _) | Nothing <- leftHidden -> plain
+        (_, Logical _) | Nothing <- rightHidden -> plain
+        _ | Just logical <- rightHidden -> learn (Local.Hidden logical) left
+        _ | Just logical <- leftHidden -> learn (Local.Hidden logical) right
+        (Variable index, _) -> learn (Local.Equality index) right
+        (_, Variable index') -> learn (Local.Equality index') left
         (Call function argument, Call function' argument') -> do
-          found <- go spine found function function'
-          go False found argument argument'
-        (Function argument result, Function argument' result') | not spine -> do
-          found <- go False found argument argument'
-          go False found result result'
-        (Type universe, Type universe') | not spine -> go False found universe universe'
-        (Constructor index, Constructor index') | index /= index', not spine -> pure found
-        _ -> plain
+          found <- go found function function'
+          go found argument argument'
+        (Function argument result, Function argument' result') -> do
+          found <- go found argument argument'
+          go found result result'
+        (Function {}, Call {}) -> plain
+        (Call {}, Function {}) -> plain
+        (Type universe, Type universe') -> go found universe universe'
+        -- Anything else is either the same on both sides or cannot be.
+        _ -> pure found
     -- A type as far as it has been worked out. An unknown from a scope
     -- further out that has been worked out is the type it was found to
     -- be: the type of a variable that was bound further out comes this way.
@@ -306,6 +439,38 @@ refine context position = go True []
       other -> pure other
 
 -- |
+-- Whether what would be known to be a type is part of that type.
+within ::
+  forall s scope.
+  Context s scope ->
+  (Type s scope -> Local.Equality s scope) ->
+  Type s scope ->
+  ST s Bool
+within context equality typex = part typex
+  where
+    part :: Type s scope -> ST s Bool
+    part = \case
+      Logical logical ->
+        solution logical >>= \case
+          Just known -> part known
+          Nothing -> case equality typex of
+            Local.Hidden subject _
+              | same subject logical -> pure True
+              | Just known <- equatedHidden context logical -> part known
+            _ -> pure False
+      Variable index -> case equality typex of
+        Local.Equality subject _ | subject == index -> pure True
+        _ | Just known <- equated context index -> part known
+        _ -> pure False
+      Call function argument -> either (part function) (part argument)
+      Function argument result -> either (part argument) (part result)
+      Type universe -> part universe
+      _ -> pure False
+    either left right = do
+      left <- left
+      if left then pure True else right
+
+-- |
 -- What an unknown was found to be, if it has been.
 solution :: Logical s scope -> ST s (Maybe (Type s scope))
 solution = \case
@@ -313,6 +478,7 @@ solution = \case
     readSTRef reference >>= \case
       Solved typex -> pure (Just typex)
       Unsolved {} -> pure Nothing
+      Skolem {} -> pure Nothing
   Shift logical -> fmap shiftLogical <$> solution logical
 
 -- todo merge this with Semantic.Check.Temporary.Type checking somehow
@@ -327,6 +493,8 @@ typeCheck context_ position = typeCheckWith context_
             readSTRef reference >>= \case
               Solved typex -> typeCheck kind typex
               Unsolved {kind = kind'} -> do
+                unify context position kind kind'
+              Skolem {kind = kind'} -> do
                 unify context position kind kind'
           Logical (Shift logical) -> do
             kind <- unshift context position kind
@@ -378,6 +546,7 @@ mark context position erasure term_ = mark context term_
               Unsolved {kind, constraints, erasure = erasure'} -> do
                 writeSTRef reference' Unsolved {kind, constraints, erasure = erasure <> erasure'}
               Solved typex -> mark context typex
+              Skolem {} -> pure ()
       Logical (Shift logical) -> do
         mark (Shift.unshift context) (Logical logical)
       Variable index -> case localEnvironment Local.Table.! index of
@@ -416,6 +585,7 @@ occurs context position erasure reference term_ = do
             readSTRef reference' >>= \case
               Unsolved {} -> pure ()
               Solved typex -> occurs typex
+              Skolem {} -> pure ()
       Logical Shift {} -> pure ()
       Variable _ -> pure ()
       Constructor _ -> pure ()
@@ -459,9 +629,25 @@ constrainWith context_ position classx_ term_ arguments_ = constrainWith context
       Type s scope ->
       [Type s scope] ->
       ST s (Evidence s scope)
-    constrainWith context classx term@(Logical (Box reference)) arguments =
+    constrainWith context classx term arguments =
+      hidden term >>= \case
+        -- Of a type that stands for itself alone, only what is known of it
+        -- where this is can be had.
+        Just logical
+          | Just known <- equatedHidden context logical -> constrainWith context classx known arguments
+          | otherwise -> abort position (Constrain context_ classx_ term_ arguments_)
+        Nothing -> plainly context classx term arguments
+    plainly ::
+      forall scope.
+      Context s scope ->
+      Type2.Index scope ->
+      Type s scope ->
+      [Type s scope] ->
+      ST s (Evidence s scope)
+    plainly context classx term@(Logical (Box reference)) arguments =
       readSTRef reference >>= \case
         Solved term -> constrainWith context classx term arguments
+        Skolem {} -> error "plain constraint of a type that stands for itself"
         Unsolved {kind, constraints, erasure} -> do
           case Map.lookup classx constraints of
             Nothing -> do
@@ -491,12 +677,12 @@ constrainWith context_ position classx_ term_ arguments_ = constrainWith context
                   writeSTRef reference $!
                     Unsolved {kind, constraints = Map.insert classx (delays ++ [delay]) constraints, erasure}
                   pure $ Evidence.Logical (Evidence.Box logical)
-    constrainWith context classx (Logical (Shift logical)) arguments = do
+    plainly context classx (Logical (Shift logical)) arguments = do
       arguments <- traverse (unshift context position) arguments
       let quit = abort position $ Unshift context (Constructor classx)
       classx <- Shift.partialUnshift quit classx
       shiftLogical <$> constrainWith (Shift.unshift context) classx (Logical logical) arguments
-    constrainWith context@Context {localEnvironment} classx (Variable index) arguments
+    plainly context@Context {localEnvironment} classx (Variable index) arguments
       | Local.Rigid {constraints} <- localEnvironment Local.Table.! index,
         Just known <- Map.lookup classx constraints,
         candidates@(_ : _) <-
@@ -521,9 +707,9 @@ constrainWith context_ position classx_ term_ arguments_ = constrainWith context
                 ([], [only]) -> use only
                 _ -> quit
     -- A variable that is known here to be some type is asked as that type.
-    constrainWith context classx (Variable index) arguments
+    plainly context classx (Variable index) arguments
       | Just known <- equated context index = constrainWith context classx known arguments
-    constrainWith context@Context {typeEnvironment} (Type2.Index classx) (Constructor index) arguments
+    plainly context@Context {typeEnvironment} (Type2.Index classx) (Constructor index) arguments
       | TypeBinding {classInstances} <- typeEnvironment Type.Table.! classx,
         Just instancex <- Map.lookup index classInstances = do
           dependencies <- instancex
@@ -536,7 +722,7 @@ constrainWith context_ position classx_ term_ arguments_ = constrainWith context
             None -> pure $ Evidence.Variable variable Instanciation.Mono
       where
         variable = Evidence.Direct (Type2.Index classx) index
-    constrainWith context@Context {typeEnvironment} classx (Constructor (Type2.Index index)) arguments
+    plainly context@Context {typeEnvironment} classx (Constructor (Type2.Index index)) arguments
       | TypeBinding {dataInstances} <- typeEnvironment Type.Table.! index,
         Just instancex <- Map.lookup classx dataInstances = do
           dependencies <- instancex
@@ -549,13 +735,13 @@ constrainWith context_ position classx_ term_ arguments_ = constrainWith context
             None -> pure $ Evidence.Variable variable Instanciation.Mono
       where
         variable = Evidence.Direct classx (Type2.Index index)
-    constrainWith context classx (Call function argument) arguments =
+    plainly context classx (Call function argument) arguments =
       constrainWith context classx function (argument : arguments)
-    constrainWith context classx (Function argument result) arguments = do
+    plainly context classx (Function argument result) arguments = do
       typeCheck context position (Type Small) argument
       typeCheck context position (Type Small) result
       constrainWith context classx (Constructor Type2.Arrow `Call` argument `Call` result) arguments
-    constrainWith context classx typex arguments = case typex of
+    plainly context classx typex arguments = case typex of
       Constructor typex -> Builtin.constrain quit constrain classx typex arguments
       _ -> quit
       where
@@ -615,10 +801,14 @@ compared open = go
         readSTRef reference >>= \case
           Solved left -> go left right
           Unsolved {} -> unknown reference right
+          Skolem {} -> itself reference right
       (_, Logical (Box reference)) ->
         readSTRef reference >>= \case
           Solved right -> go left right
           Unsolved {} -> pure open
+          Skolem {} -> case left of
+            Logical _ -> pure open
+            _ -> pure False
       (Logical (Shift left), Logical (Shift right)) -> go (Logical left) (Logical right)
       -- One is from a scope further out and the other is not: if it is
       -- worked out, it is looked at as it is here.
@@ -651,6 +841,7 @@ compared open = go
         readSTRef reference >>= \case
           Solved typex -> pure (Just typex)
           Unsolved {} -> pure Nothing
+          Skolem {} -> pure Nothing
       Shift logical -> fmap shiftLogical <$> known logical
     -- An unknown on the left: the same as itself, and otherwise only what
     -- an unknown could be.
@@ -662,7 +853,21 @@ compared open = go
             readSTRef reference' >>= \case
               Solved right -> unknown reference right
               Unsolved {} -> pure open
+              Skolem {} -> pure open
       _ -> pure open
+    -- A type that stands for itself alone on the left: the same as itself,
+    -- and otherwise only what an unknown could be.
+    itself :: forall scope'. STRef s (Box s scope') -> Type s scope' -> ST s Bool
+    itself reference = \case
+      Logical (Box reference')
+        | reference == reference' -> pure True
+        | otherwise ->
+            readSTRef reference' >>= \case
+              Solved right -> itself reference right
+              Unsolved {} -> pure open
+              Skolem {} -> pure False
+      Logical (Shift _) -> pure open
+      _ -> pure False
 
 unshiftBox misshift unshift reference kind constraints erasure = do
   let unshiftDelay (key, delays) = do
@@ -698,6 +903,8 @@ unshift context position typex = unshift typex
             box <- unshiftBox misshift unshift reference kind constraints erasure
             pure $ Logical box
           Solved term -> unshift term
+          -- It is of this scope, and cannot be said further out.
+          Skolem {} -> abort position $ Unshift context typex
       Logical (Shift logical) -> pure (Logical logical)
       Variable index -> Variable <$> Shift.partialUnshift misshift index
       Constructor index -> Constructor <$> Shift.partialUnshift misshift index
@@ -730,6 +937,7 @@ defaults reference =
   readSTRef reference >>= \case
     Solved typex -> follow typex
     Unsolved {constraints} -> pure (defaulting constraints)
+    Skolem {} -> pure False
   where
     -- The variable may have been made the same as another since.
     follow :: Type s scope -> ST s Bool
@@ -758,6 +966,7 @@ defaultFrom position constraints kind = case kind of
     readSTRef reference >>= \case
       Solved kind -> defaultFrom position constraints kind
       Unsolved {} -> unsupportedFeatureConstraintedTypeDefaulting position
+      Skolem {} -> unsupportedFeatureConstraintedTypeDefaulting position
   Type universe -> defaultUniverse position constraints universe
   Levity -> pure $ Constructor Type2.Lazy
   _ -> unsupportedFeatureConstraintedTypeDefaulting position
@@ -770,6 +979,7 @@ defaultUniverse position constraints universe = case universe of
         | null constraints -> pure $ Type Small
         | defaulting constraints -> pure $ Constructor Type2.Integer
         | otherwise -> unsupportedFeatureConstraintedTypeDefaulting position
+      Skolem {} -> unsupportedFeatureConstraintedTypeDefaulting position
   Small
     | null constraints -> pure $ Constructor (Type2.Tuple 0)
     | defaulting constraints -> pure $ Constructor Type2.Integer

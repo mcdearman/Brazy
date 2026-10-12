@@ -76,9 +76,10 @@ check context typex = \case
           | otherwise = Type2.MonadFail
     evidence <- Unify.constrain context startPosition classx monad
     Unify.unify context startPosition (monad # output) typex
-    patternx <- Pattern.check context input patternx
     effect <- Expression.check context (monad # input) effect
+    patternx <- Pattern.check context input patternx
     thenx <- check (Pattern.augment patternx context) (shiftLogical $ monad # output) thenx
+    Pattern.sealed context patternx [input, monad # output]
     pure Bind {startPosition, patternx, evidence, effect, thenx, fail = not neverFail}
   Semantic.Let {startPosition, declarations, body} -> do
     context Declarations.:& declarations <- Declarations.check context declarations

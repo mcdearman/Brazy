@@ -35,10 +35,13 @@ check context typex = \case
     pure Plain {plain}
   Semantic.Bound {boundPosition, parameter, body} -> do
     parameterType <- Unify.fresh Core.typex
-    parameter <- Pattern.check context parameterType parameter
     resultType <- Unify.fresh Core.typex
-    body <- check (Pattern.augment parameter context) (shiftLogical resultType) body
+    -- What the function is to be is said before its parameter is looked
+    -- at, as for the first parameter of a lambda.
     Unify.unify context boundPosition typex (parameterType -#> resultType)
+    parameter <- Pattern.check context parameterType parameter
+    body <- check (Pattern.augment parameter context) (shiftLogical resultType) body
+    Pattern.sealed context parameter [parameterType, resultType]
     pure Bound {boundPosition, parameter, body}
 
 solve :: Lambda s scope -> Unify.Solve s (Solved.Lambda Group Check scope)

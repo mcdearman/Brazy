@@ -41,6 +41,11 @@ constructorFunction DataInstance {constructors} Constructor.Index {typeIndex, co
     constructor = constructors Strict.Vector.! constructorIndex
 
 -- |
+-- What the type is given.
+given :: DataInstance s scope -> Strict.Vector (Unify.Type s scope)
+given DataInstance {types} = types
+
+-- |
 -- The type a constructor makes a value of.
 constructed :: ConstructorInstance s scope -> Type2.Index scope -> Unify.Type s scope
 constructed ConstructorInstance {result} typeIndex = foldl (#) (Core.constructor typeIndex) result

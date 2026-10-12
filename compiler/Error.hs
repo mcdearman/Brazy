@@ -65,6 +65,7 @@ module Error
     nonUniqueConstraints,
     constraintError,
     escapingType,
+    refiningBinding,
     illegalInstanceClass,
     illegalInstanceData,
     illegalFixity,
@@ -274,6 +275,7 @@ data Type
   | NonUniqueConstraints
   | ConstraintError
   | EscapingType
+  | RefiningBinding
   | IllegalInstanceClass
   | IllegalInstanceData
   | IllegalFixity
@@ -472,6 +474,11 @@ escapingType position typex =
         typex,
         fromString "`"
       ]
+
+refiningBinding :: Position -> a
+refiningBinding position =
+  errorAt RefiningBinding position $
+    fromString "a binding cannot match a constructor that hides a type or says what type it makes"
 
 illegalInstanceClass :: Position -> a
 illegalInstanceClass position =
