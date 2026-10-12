@@ -19,6 +19,7 @@ import Data.Traversable (for)
 import qualified Data.Vector as Vector
 import qualified Data.Vector.Strict as Strict.Vector
 import Semantic.Check.Context (Context (..))
+import Semantic.Check.LocalBinding (shiftEquality)
 import qualified Semantic.Check.Mask as Mask
 import qualified Semantic.Index.Local as Local
 import qualified Semantic.Index.Table.Local as Table.Local
@@ -111,11 +112,12 @@ generalizeBody ::
   ST s (Body (ForallOver typex) (Simple.TypeLambdaOver term) s scope)
 generalizeBody position context (Generalize run) = do
   typex ::: term <- run $ case context of
-    Context {termEnvironment, localEnvironment, typeEnvironment} ->
+    Context {termEnvironment, localEnvironment, typeEnvironment, equalities} ->
       Context
         { termEnvironment = Table.Term.Local termEnvironment,
           localEnvironment = Table.Local.Local Vector.empty localEnvironment,
-          typeEnvironment = Table.Type.Local typeEnvironment
+          typeEnvironment = Table.Type.Local typeEnvironment,
+          equalities = shiftEquality <$> equalities
         }
   candidates <- collect (Collector Mask.Runtime) typex
   traverse_ shiftUnwanted candidates

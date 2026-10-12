@@ -22,6 +22,7 @@ import qualified Data.Vector.Strict as Strict.Vector
 import Data.Void (Void)
 import Order (orderWithInt)
 import Semantic.Check.Context (Context (..))
+import Semantic.Check.LocalBinding (shiftEquality)
 import qualified Semantic.Check.LocalBinding as LocalBinding
 import Semantic.Check.Mask (Mask)
 import qualified Semantic.Check.TypeBinding as TypeBinding
@@ -49,7 +50,7 @@ augmentNamed ::
   Mask ->
   Context s scope ->
   ST s (Context s (Local ':+ scope))
-augmentNamed name _ parameters constraints mask Context {termEnvironment, localEnvironment, typeEnvironment}
+augmentNamed name _ parameters constraints mask Context {termEnvironment, localEnvironment, typeEnvironment, equalities}
   | parameters <- Strict.Vector.toLazy parameters = do
       let entailed classx arguments evidence = do
             Class.Class {constraints} <- do
@@ -90,7 +91,8 @@ augmentNamed name _ parameters constraints mask Context {termEnvironment, localE
         Context
           { termEnvironment = Term.Local termEnvironment,
             localEnvironment = Local.Local locals localEnvironment,
-            typeEnvironment = Type.Local typeEnvironment
+            typeEnvironment = Type.Local typeEnvironment,
+            equalities = shiftEquality <$> equalities
           }
 
 augment ::

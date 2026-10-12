@@ -2,6 +2,7 @@ module Semantic.Check.Temporary.PatternField where
 
 import Control.Monad.ST (ST)
 import Semantic.Check.Context (Context)
+import Semantic.Check.LocalBinding (Equality)
 import {-# SOURCE #-} Semantic.Check.Temporary.Pattern (Pattern)
 import {-# SOURCE #-} qualified Semantic.Check.Temporary.Pattern as Pattern
 import Semantic.Check.TermBinding (TermBinding)
@@ -20,6 +21,9 @@ data Field s scope = Field
 
 (!) :: Field s scope -> Bound -> Unify.Type s scope
 Field {patternx} ! bound = patternx Pattern.! bound
+
+learnt :: Field s scope -> [Equality s scope]
+learnt Field {patternx} = Pattern.learnt patternx
 
 augmentField :: Field s scopes -> Term.Bound (TermBinding s) (scope ':+ scopes)
 augmentField Field {patternx} = Pattern.augmentPattern patternx

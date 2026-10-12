@@ -21,7 +21,8 @@ import qualified Data.Vector as Vector
 import Error (unsupportedFeatureConstraintedTypeDefaulting)
 import Semantic.Check.Context (Context (..))
 import qualified Semantic.Check.Context as Context
-import qualified Semantic.Check.LocalBinding as Local (Constraint (..), LocalBinding (..))
+import qualified Semantic.Check.LocalBinding as Local (Constraint (..), Equality (..), LocalBinding (..))
+import qualified Semantic.Index.Local as Local.Index (Index)
 import qualified Semantic.Check.Mask as Mask
 import Semantic.Check.TypeBinding (TypeBinding (TypeBinding))
 import qualified Semantic.Check.TypeBinding as TypeBinding
@@ -174,7 +175,11 @@ unify context_ position term1_ term2_ = unifyWith context_ term1_ term2_
           unifyWith (Shift.unshift context) term (Logical logical)
         unify (Variable index) (Variable index')
           | index == index' = pure ()
-          | otherwise = mismatch
+        -- A variable that is known here to be some type is that type.
+        unify (Variable index) term'
+          | Just known <- equated context index = unify known term'
+        unify term (Variable index')
+          | Just known <- equated context index' = unify term known
         unify (Constructor index) (Constructor index')
           | index == index' = pure ()
           | otherwise = mismatch
@@ -205,6 +210,84 @@ unify context_ position term1_ term2_ = unifyWith context_ term1_ term2_
 
     mismatch :: ST s ()
     mismatch = abort position (Unify context_ term1_ term2_)
+
+-- |
+-- What a type variable is known to be where this is: see 'Local.Equality'.
+equated :: Context s scope -> Local.Index.Index scope -> Maybe (Type s scope)
+equated Context {equalities} index = case [typex | Local.Equality index' typex <- equalities, index' == index] of
+  typex : _ -> Just typex
+  [] -> Nothing
+
+-- |
+-- What is known of a type variable, as it is known one scope further out,
+-- if it can be said there: the variable has to be from there, and so does
+-- every variable and every unknown in what it is known to be.
+lowerEquality :: Local.Equality s (scope' ':+ scope) -> Maybe (Local.Equality s scope)
+lowerEquality (Local.Equality index typex) = Local.Equality <$> Shift.partialUnshift Nothing index <*> lower typex
+  where
+    lower :: Type s (scope' ':+ scope) -> Maybe (Type s scope)
+    lower = \case
+      Logical (Shift logical) -> Just (Logical logical)
+      Logical (Box _) -> Nothing
+      Variable index -> Variable <$> Shift.partialUnshift Nothing index
+      Constructor index -> Constructor <$> Shift.partialUnshift Nothing index
+      Call function argument -> Call <$> lower function <*> lower argument
+      Function argument result -> Function <$> lower argument <*> lower result
+      Type universe -> Type <$> lower universe
+      Constraint -> Just Constraint
+      Small -> Just Small
+      Large -> Just Large
+      Universe -> Just Universe
+      Levity -> Just Levity
+
+-- |
+-- Match the type of what is taken apart against the type a constructor
+-- makes, and say what that tells of the type variables in the first.
+--
+-- Where the first has an unknown, the unknown is made what the second has,
+-- as when two types are made the same. Where it has a type variable and the
+-- second something else, nothing can be made the same: the variable is the
+-- signature's and stands for any type. But in the branch the match leads to
+-- it is known to be what the constructor says, and that is what is given
+-- back, for the branch to be checked with.
+--
+-- If the two cannot be the same at all, no value of that constructor has
+-- the type that is taken apart, and the branch is never reached. Nothing is
+-- said of that here.
+refine :: forall s scope. Context s scope -> Position -> Type s scope -> Type s scope -> ST s [Local.Equality s scope]
+refine context position = go []
+  where
+    go :: [Local.Equality s scope] -> Type s scope -> Type s scope -> ST s [Local.Equality s scope]
+    go found left right = do
+      left <- settled left
+      right <- settled right
+      let Context {equalities} = context
+          here = context {equalities = found ++ equalities}
+          plain = found <$ unify here position left right
+      case (left, right) of
+        (Variable index, Variable index') | index == index' -> pure found
+        (Variable index, _) | Just known <- equated here index -> go found known right
+        (_, Variable index') | Just known <- equated here index' -> go found left known
+        (Logical _, _) -> plain
+        (_, Logical _) -> plain
+        (Variable index, _) -> pure (Local.Equality index right : found)
+        (_, Variable index') -> pure (Local.Equality index' left : found)
+        (Call function argument, Call function' argument') -> do
+          found <- go found function function'
+          go found argument argument'
+        (Function argument result, Function argument' result') -> do
+          found <- go found argument argument'
+          go found result result'
+        (Type universe, Type universe') -> go found universe universe'
+        (Constructor index, Constructor index') | index /= index' -> pure found
+        _ -> plain
+    settled :: Type s scope -> ST s (Type s scope)
+    settled = \case
+      Logical (Box reference) ->
+        readSTRef reference >>= \case
+          Solved typex -> settled typex
+          Unsolved {} -> pure (Logical (Box reference))
+      other -> pure other
 
 -- todo merge this with Semantic.Check.Temporary.Type checking somehow
 typeCheck :: Context s scope -> Position -> Type s scope -> Type s scope -> ST s ()
@@ -411,6 +494,9 @@ constrainWith context_ position classx_ term_ arguments_ = constrainWith context
                 (first : _, _) -> use first
                 ([], [only]) -> use only
                 _ -> quit
+    -- A variable that is known here to be some type is asked as that type.
+    constrainWith context classx (Variable index) arguments
+      | Just known <- equated context index = constrainWith context classx known arguments
     constrainWith context@Context {typeEnvironment} (Type2.Index classx) (Constructor index) arguments
       | TypeBinding {classInstances} <- typeEnvironment Type.Table.! classx,
         Just instancex <- Map.lookup index classInstances = do

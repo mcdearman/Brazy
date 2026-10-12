@@ -9,6 +9,7 @@ import Core.Type.Functor (shiftLogical)
 import Data.Vector.Strict as Strict (Vector)
 import qualified Data.Vector.Strict as Strict.Vector
 import Semantic.Check.Context (Context (..))
+import Semantic.Check.LocalBinding (shiftEquality)
 import qualified Semantic.Check.Go.Scheme as Solved (Scheme (..))
 import Semantic.Check.LocalBinding (LocalBinding (Wobbly, label, wobbly))
 import Semantic.Check.Temporary.Constraints (Constraints)
@@ -58,12 +59,13 @@ solve context Scheme {startPosition, implicit, parameters = wobbly, constraints,
   pure $ Solved.Scheme {startPosition, implicit, parameters, constraints, result}
 
 augment :: Strict.Vector (TypePattern s scope) -> Context s scope -> Context s (Local ':+ scope)
-augment scheme Context {termEnvironment, localEnvironment, typeEnvironment}
+augment scheme Context {termEnvironment, localEnvironment, typeEnvironment, equalities}
   | scheme <- Strict.Vector.toLazy scheme =
       Context
         { termEnvironment = Term.Local termEnvironment,
           localEnvironment = Local.Local (fmap wobbly scheme) localEnvironment,
-          typeEnvironment = Type.Local typeEnvironment
+          typeEnvironment = Type.Local typeEnvironment,
+          equalities = shiftEquality <$> equalities
         }
   where
     wobbly
@@ -78,12 +80,13 @@ augmentSolve ::
   Strict.Vector (Solved.TypePattern Position Check scope) ->
   Context s scope ->
   Context s (Local ':+ scope)
-augmentSolve scheme Context {termEnvironment, localEnvironment, typeEnvironment}
+augmentSolve scheme Context {termEnvironment, localEnvironment, typeEnvironment, equalities}
   | scheme <- Strict.Vector.toLazy scheme =
       Context
         { termEnvironment = Term.Local termEnvironment,
           localEnvironment = Local.Local (fmap wobbly scheme) localEnvironment,
-          typeEnvironment = Type.Local typeEnvironment
+          typeEnvironment = Type.Local typeEnvironment,
+          equalities = shiftEquality <$> equalities
         }
   where
     wobbly :: Solved.TypePattern position Check scope -> LocalBinding s (scope' ':+ scope)

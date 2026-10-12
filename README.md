@@ -36,7 +36,7 @@ Haskell features are missing, only a test Javascript backend is implemented.
 # Missing
 
 - Deriving (Partial)
-- GADTs
+- GADTs (Partial)
 - Polymorphic Components
 - Strict Functions
 - Some Builtin Instances
@@ -499,7 +499,30 @@ Planned.
 ### GADTs
 Pragma: `GADTs`
 
-Planned.
+A type can be declared with `where`, each constructor given with its whole
+type. A constructor may make the type at arguments of its own choosing, and
+matching on it then tells what the type variables of what was matched are,
+for the branch the match leads to:
+
+```haskell
+data Expr a where
+  Number :: Int -> Expr Int
+  If :: Expr Bool -> Expr a -> Expr a -> Expr a
+
+eval :: Expr a -> a
+eval (Number n) = n
+eval (If c t e) = if eval c then eval t else eval e
+```
+
+What is not there yet:
+
+* A constructor that requires something of its types (`Show a => a -> T`).
+* Records in a type declared with `where`, and deriving for one.
+* The type of what is matched has to be known where it is matched, from a
+  signature. Hazy does not work it out from the branches.
+* A type variable that a constructor hides is taken for an unknown type, so a
+  program that lets one get out is not refused.
+* A branch that can never be reached is not refused either.
 
 ### Implicit Prelude
 * Pragma `ImplicitPrelude`

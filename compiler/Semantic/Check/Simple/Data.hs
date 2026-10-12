@@ -13,12 +13,13 @@ import Syntax.Position (Position)
 instanciate, instanciateMark :: Context s scope -> Position -> Data scope -> ST s (DataInstance s scope)
 instanciate _ position Data {parameters, constructors, selectors, brand} = do
   types <- traverse (Unify.fresh . logicalType) parameters
+  constructors <- traverse (Constructor.instanciate position brand types) constructors
   let datax =
         DataInstance
           { position,
             types,
             selectors,
-            constructors = Constructor.instanciate position brand types <$> constructors
+            constructors
           }
   pure datax
 instanciateMark context position datax = do

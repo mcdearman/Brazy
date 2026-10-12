@@ -6,10 +6,11 @@ import Core.Substitute (logicalType)
 import qualified Core.Tree.Type as Core
 import Core.Tree.TypeDeclaration (assumeData)
 import qualified Data.Kind
+import Data.Maybe (mapMaybe)
 import Data.Vector (Vector)
 import qualified Data.Vector as Vector
 import qualified Semantic.Check.DataInstance as DataInstance
-import Semantic.Check.LocalBinding (LocalBinding)
+import Semantic.Check.LocalBinding (Equality, LocalBinding, shiftEquality)
 import qualified Semantic.Check.LocalBinding as LocalBinding
 import Semantic.Check.Simple.Data as Simple.Data (instanciateMark)
 import Semantic.Check.TermBinding (TermBinding (..))
@@ -45,17 +46,23 @@ type Context :: Data.Kind.Type -> Environment -> Data.Kind.Type
 data Context s scope = Context
   { termEnvironment :: !(Term.Table (TermBinding s) scope),
     localEnvironment :: !(Local.Table (LocalBinding s) scope),
-    typeEnvironment :: !(Type.Table (TypeBinding s) scope)
+    typeEnvironment :: !(Type.Table (TypeBinding s) scope),
+    -- | What type variables are known to be here, from the matches on
+    -- constructors that this is inside.
+    equalities :: ![Equality s scope]
   }
 
 typeEnvironment_ = typeEnvironment
 
 instance Shift.Unshift (Context s) where
-  unshift Context {termEnvironment, localEnvironment, typeEnvironment} =
+  unshift Context {termEnvironment, localEnvironment, typeEnvironment, equalities} =
     Context
       { termEnvironment = Shift.unshift termEnvironment,
         localEnvironment = Shift.unshift localEnvironment,
-        typeEnvironment = Shift.unshift typeEnvironment
+        typeEnvironment = Shift.unshift typeEnvironment,
+        -- What is known here is known further out as far as it can be
+        -- said there.
+        equalities = mapMaybe Unify.lowerEquality equalities
       }
 
 globalBindings :: forall s. Vector (Module (ST s) Group Check Scope.Global) -> Context s Scope.Global
@@ -63,7 +70,8 @@ globalBindings modules =
   Context
     { termEnvironment = Term.Global $ termBindings <$> modules,
       localEnvironment = Local.Global,
-      typeEnvironment = Type.Global $ typeBindings <$> modules
+      typeEnvironment = Type.Global $ typeBindings <$> modules,
+      equalities = []
     }
   where
     termBindings Module {declarations = Declarations {terms}} =
@@ -95,12 +103,13 @@ localBindings ::
     (Scope.Declaration ':+ scope) ->
   Context s (Scope.Declaration ':+ scope)
 localBindings
-  Context {termEnvironment, localEnvironment, typeEnvironment}
+  Context {termEnvironment, localEnvironment, typeEnvironment, equalities}
   Declarations {terms, types, typeExtras, dataInstances, classInstances} =
     Context
       { termEnvironment = Term.Declaration termBindings termEnvironment,
         localEnvironment = Local.Declaration localEnvironment,
-        typeEnvironment = Type.Declaration typeBindings typeEnvironment
+        typeEnvironment = Type.Declaration typeBindings typeEnvironment,
+        equalities = shiftEquality <$> equalities
       }
     where
       termBindings = TermBinding.local <$> terms
@@ -118,11 +127,12 @@ groupTermBindings ::
   Vector (Unify.Type s scope) ->
   Context s scope ->
   Context s (Scope.GroupTerm ':+ scope)
-groupTermBindings declarations Context {termEnvironment, localEnvironment, typeEnvironment} =
+groupTermBindings declarations Context {termEnvironment, localEnvironment, typeEnvironment, equalities} =
   Context
     { termEnvironment = Term.GroupTerm termBindings termEnvironment,
       localEnvironment = Local.GroupTerm localEnvironment,
-      typeEnvironment = Type.GroupTerm typeEnvironment
+      typeEnvironment = Type.GroupTerm typeEnvironment,
+      equalities = shiftEquality <$> equalities
     }
   where
     termBindings = TermBinding.group <$> declarations
@@ -133,12 +143,17 @@ groupTypeBindings ::
   Vector (Unify.Type s scope) ->
   Context s scope ->
   Context s (Scope.GroupType ':+ scope)
-groupTypeBindings positions labels declarations Context {termEnvironment, localEnvironment, typeEnvironment} =
-  Context
-    { termEnvironment = Term.GroupType termEnvironment,
-      localEnvironment = Local.GroupType localEnvironment,
-      typeEnvironment = Type.GroupType typeBindings typeEnvironment
-    }
+groupTypeBindings
+  positions
+  labels
+  declarations
+  Context {termEnvironment, localEnvironment, typeEnvironment, equalities} =
+    Context
+      { termEnvironment = Term.GroupType termEnvironment,
+        localEnvironment = Local.GroupType localEnvironment,
+        typeEnvironment = Type.GroupType typeBindings typeEnvironment,
+        equalities = shiftEquality <$> equalities
+      }
   where
     typeBindings = Vector.zipWith3 TypeBinding.group positions labels declarations
 

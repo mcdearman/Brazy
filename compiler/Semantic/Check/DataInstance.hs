@@ -35,10 +35,15 @@ baseType :: DataInstance s scope -> Type2.Index scope -> Unify.Type s scope
 baseType DataInstance {types} typeIndex = foldl (#) (Core.constructor typeIndex) types
 
 constructorFunction :: DataInstance s scope -> Constructor.Index scope -> Unify.Type s scope
-constructorFunction instancex@DataInstance {constructors} Constructor.Index {typeIndex, constructorIndex} =
-  ConstructorInstance.function
-    (constructors Strict.Vector.! constructorIndex)
-    (baseType instancex typeIndex)
+constructorFunction DataInstance {constructors} Constructor.Index {typeIndex, constructorIndex} =
+  ConstructorInstance.function constructor (constructed constructor typeIndex)
+  where
+    constructor = constructors Strict.Vector.! constructorIndex
+
+-- |
+-- The type a constructor makes a value of.
+constructed :: ConstructorInstance s scope -> Type2.Index scope -> Unify.Type s scope
+constructed ConstructorInstance {result} typeIndex = foldl (#) (Core.constructor typeIndex) result
 
 selectorFunction :: DataInstance s scope -> Selector.Index scope -> Unify.Type s scope
 selectorFunction instancex (Selector.Index typeIndex selectorIndex) =

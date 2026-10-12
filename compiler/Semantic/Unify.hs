@@ -12,6 +12,8 @@ module Semantic.Unify
     fresh,
     mark,
     unify,
+    refine,
+    lowerEquality,
     constrain,
     Zonk (..),
     Zonker,
@@ -65,6 +67,8 @@ import {-# SOURCE #-} Semantic.Unify.Type
     fresh,
     mark,
     unify,
+    refine,
+    lowerEquality,
   )
 import {-# SOURCE #-} Semantic.Unify.Zonk
   ( Zonk (..),

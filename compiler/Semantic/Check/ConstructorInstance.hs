@@ -18,7 +18,11 @@ data ConstructorInstance s scope = ConstructorInstance
   { brand :: !Brand,
     name :: !Variable.Constructor,
     syntax :: !Syntax,
-    entries :: !(Strict.Vector (EntryInstance s scope))
+    entries :: !(Strict.Vector (EntryInstance s scope)),
+    -- | The arguments of the type it makes a value of. For most this is
+    -- what the type was given. A constructor of a type declared with
+    -- @where@ has its own.
+    result :: !(Strict.Vector (Unify.Type s scope))
   }
 
 info :: ConstructorInstance s scope -> ConstructorInfo s scope

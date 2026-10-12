@@ -10,7 +10,8 @@ import qualified Data.Vector.Strict as Strict
 import Semantic.Check.Mask (Mask)
 import qualified Semantic.Index.Type2 as Type2
 import qualified Semantic.Label.Binding.Local as Label
-import Semantic.Scope (Environment)
+import qualified Semantic.Index.Local as Local (Index)
+import Semantic.Scope (Environment (..))
 import qualified Semantic.Shift0 as Shift0
 import qualified Semantic.Unify as Unify (Type)
 
@@ -45,6 +46,20 @@ instance Shift0.Functor (LocalBinding s) where
         { label,
           wobbly = Core.mapLogical category wobbly
         }
+
+-- |
+-- What a type variable is known to be, somewhere. Matching on a constructor
+-- that says what type it makes tells what the variables of the type that
+-- was matched on are, for as far as the match reaches:
+--
+-- > eval :: Expr a -> a
+-- > eval (Number n) = n
+--
+-- where @Number :: Int -> Expr Int@, so that @a@ is @Int@ on that line.
+data Equality s scope = Equality !(Local.Index scope) !(Unify.Type s scope)
+
+shiftEquality :: Equality s scope -> Equality s (scope' ':+ scope)
+shiftEquality (Equality index typex) = Equality (Shift0.map Shift0.Shift index) (Core.shiftLogical typex)
 
 data Constraint scope = Constraint
   { arguments :: !(Strict.Vector (Simple.Type scope)),
