@@ -578,8 +578,9 @@ Multiline strings are supported.
 * Pragma: `StandaloneDeriving`
 * Toggleable: False
 
-Standard alone deriving is supported. As of now it's the only supported
-`deriving` mechanism.
+Standard alone deriving is supported. A `deriving` clause on a type is taken
+as the standalone declaration for each class it names, requiring that class
+of every parameter of the type.
 
 # Deviations:
 ## Bugs
@@ -593,31 +594,13 @@ exotic :: (Eq (f Int), Eq (f Char)) => f Int -> f Int -> f Char -> f Char -> Boo
 exotic a b c d = a == b && c == d
 ```
 
-### Class methods are always public
-If you have access to a typeclass, then you are able to define instances for
-it's methods regards on whether or not the method is exported.
+### Deriving clauses require the class of every parameter
 
-For example, this is legal:
-```haskell
-module Hidden ( Hidden ) where
-
-class Hidden a where
- private :: a
-```
-```haskell
-module Usage where
-import Hidden (Hidden)
-
-data Usage = Usage
-
-instance Hidden Usage where
-  private = Usage
-```
-
-### Deriving instance is required
-
-Only `deriving instance` is support right now. Normal `deriving` declarations
-are completely ignored at the moment.
+A `deriving` clause is taken as `deriving instance` with the class required
+of each of the type's parameters. That asks for more than is needed of a
+parameter that is the type of nothing the value holds, and it is wrong for a
+parameter that stands for a type that takes arguments. For those, write the
+`deriving instance` out with what it requires.
 
 ### Derive `Read` and `Ix` are unsupported
 

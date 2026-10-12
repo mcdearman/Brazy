@@ -74,6 +74,7 @@ resolve context lookup = \case
                         prerequisites
                         parameters
                         memberMethods
+                        (const True)
                         instanceDefinition
                   }
               entry = case instanceHead of

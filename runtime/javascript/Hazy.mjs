@@ -246,14 +246,24 @@ export const primIntToInteger = {
   b: (x) => BigInt(force(x)),
 };
 
+// Dividing by zero stops the program, as it does for an Integer and as it
+// does in native code. Left alone it would give zero.
+const divisor = (y_) => {
+  const y = force(y_);
+  if (y === 0) {
+    throw new Error("divide by zero");
+  }
+  return y;
+};
+
 export const primIntQuot = {
   a: 0,
-  b: (x) => (y) => (force(x) / force(y)) | 0,
+  b: (x) => (y) => (force(x) / divisor(y)) | 0,
 };
 
 export const primIntRem = {
   a: 0,
-  b: (x) => (y) => (force(x) % force(y)) | 0,
+  b: (x) => (y) => (force(x) % divisor(y)) | 0,
 };
 
 export const primIntegerCastToInt = {

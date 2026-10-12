@@ -704,8 +704,16 @@ Known bugs:
 
 - [ ] Constraints with overlapping class and rigid variable pairs, such as
       `(Eq (f Int), Eq (f Char))`
-- [ ] Class methods are always public, whether or not they are exported
-- [ ] Plain `deriving` clauses are ignored; only `deriving instance` works
+- [x] Class methods are always public, whether or not they are exported.
+      An instance could define a method that the class's module had not
+      exported. It can now define only what can be seen where it is: a
+      method that came with the class, or one that is in scope by its own
+      name, with any qualifiers (test `test/bad/modules/hidden-method`)
+- [x] Plain `deriving` clauses are ignored; only `deriving instance` works.
+      A clause is now taken as the standalone declaration for each class it
+      names, where the declarations are parsed. The instance requires the
+      class of every parameter of the type, which is more than Haskell asks
+      of some types: see the README (test `derive-clause`)
 - [ ] `Read` and `Ix` cannot be derived
 
 Found while comparing the two backends:
@@ -716,11 +724,14 @@ Found while comparing the two backends:
       reading a list of tuples failed (fixed in `Hazy.mjs`; test
       `read-tuple`)
 - [x] `tools/test.sh` needed bash 4, which macOS does not ship
-- [ ] `read` does not skip leading whitespace: `read " 1 " :: Int` fails on
-      both backends
-- [ ] `quot` and `rem` on `Int` by zero give 0 on Javascript and do not fail
-- [ ] `trace` is only reachable as `Hazy.Prelude.trace`; `base` has no
-      `Debug.Trace`
+- [x] `read` does not skip leading whitespace: `read " 1 " :: Int` fails on
+      both backends. `readSigned` is now as the Report has it, and reads a
+      number as a token (test `read-space`)
+- [x] `quot` and `rem` on `Int` by zero give 0 on Javascript and do not fail.
+      They stop the program now, as they do for an `Integer` and in native
+      code
+- [x] `trace` is only reachable as `Hazy.Prelude.trace`; `base` has no
+      `Debug.Trace`. It has one now
 - [ ] Much of `library/base` is placeholders that fail when called
       (`Data.List.sort`, `Data.Char.toUpper`, `Data.Maybe.fromMaybe`), which
       shows up quickly at the prompt

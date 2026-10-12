@@ -226,6 +226,52 @@ toImport = \case
   Builtin {targetPosition, target} -> Just Import.Builtin {targetPosition, target}
   _ -> Nothing
 
+-- |
+-- The instances that a declaration asks for with a @deriving@ clause, each
+-- as the declaration that asks for it by itself:
+--
+-- > data T a = A a deriving (Eq)
+--
+-- is as if it were followed by
+--
+-- > deriving instance (Eq a) => Eq (T a)
+--
+-- The instance requires the class of every parameter of the type. That is
+-- what is wanted when each parameter is the type of something the value
+-- holds. It asks for more than is needed of a parameter that is not, and it
+-- is wrong for a parameter that stands for a type that takes arguments: for
+-- those the instance has to be asked for by itself, with what it requires
+-- written out.
+derived :: Declaration Position -> [Declaration Position]
+derived = \case
+  Data {startPosition, typeName, parameters, dataDefinition = Data.ADT {derivingx}} -> do
+    className <- toList derivingx
+    let requires pattern =
+          Constraint.Constraint
+            { startPosition,
+              classVariable = startPosition :@ className,
+              typeVariable = startPosition :@ TypePattern.name pattern,
+              arguments = Strict.Vector.empty
+            }
+    pure
+      Instance
+        { startPosition,
+          prerequisites =
+            if null parameters
+              then Constraints.None
+              else Constraints.Constraints (fmap requires parameters),
+          classPosition = startPosition,
+          className,
+          instanceHead =
+            InstanceHead.Head
+              { startPosition,
+                typeName = Variable.Local Variable.:=. typeName,
+                parameters
+              },
+          instanceDefinition = InstanceDeclarations._derivingInstance
+        }
+  _ -> []
+
 parse :: Parser (Declaration Position)
 parse =
   asum

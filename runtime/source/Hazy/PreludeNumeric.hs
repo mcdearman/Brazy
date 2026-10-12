@@ -30,9 +30,12 @@ showInt x
       _ -> error "Numeric.showInt: (`quot` 10) not in 0-9 range"
 
 readSigned :: (Real a) => ReadS a -> ReadS a
-readSigned f = readParen False $ \string -> case lex string of
-  [("-", string)] -> [(-n, str) | (n, str) <- f string]
-  _ -> f string
+readSigned readPos = readParen False read'
+  where
+    -- As the Report has it. The number is a whole token, so the space
+    -- before it is passed over, as it is before any token.
+    read' r = read'' r ++ [(-x, t) | ("-", s) <- lex r, (x, t) <- read'' s]
+    read'' r = [(n, s) | (str, s) <- lex r, (n, "") <- readPos str]
 
 readDec :: (Eq a, Num a) => ReadS a
 readDec string = do

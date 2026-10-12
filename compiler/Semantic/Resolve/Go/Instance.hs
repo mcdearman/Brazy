@@ -38,6 +38,7 @@ resolve ::
   Syntax.Constraints Position ->
   Strict.Vector (Syntax.TypePattern Position) ->
   Map Variable Int ->
+  (Variable -> Bool) ->
   Syntax.InstanceDeclarations Position ->
   Instance Identity Identity Normal Resolve scope
 resolve
@@ -46,6 +47,7 @@ resolve
   prerequisites
   parameters
   memberMethods
+  visible
   declarations
     | parameters <- TypePattern.resolve <$> parameters,
       prerequisites <- Constraints.resolve (Scheme.augmentWith parameters context) prerequisites =
@@ -62,7 +64,12 @@ resolve
                       leftHandSide
                       rightHandSide of
                       Complete.Definition _ name function
-                        | Just index <- Map.lookup name memberMethods -> (index, function)
+                        -- A method that the class's module did not export
+                        -- cannot be given a definition, any more than it
+                        -- can be used.
+                        | Just index <- Map.lookup name memberMethods,
+                          visible name ->
+                            (index, function)
                         | otherwise -> notClassMethod startPosition
             header =
               Identity

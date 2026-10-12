@@ -28,9 +28,11 @@ instance TermBindingVariables Declarations where
 
 parse :: Parser (Declarations Position)
 parse =
-  declarations . Strict.Vector.fromList
+  declarations . Strict.Vector.fromList . concatMap withDerived
     <$> betweenBraces (sepEndBySemicolon Declaration.parse)
   where
     declarations declarations = Declarations {declarations}
+    -- A declaration, and then the instances it asks to be derived.
+    withDerived declaration = declaration : Declaration.derived declaration
 
 empty = Declarations {declarations = Strict.Vector.empty}

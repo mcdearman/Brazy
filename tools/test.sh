@@ -36,6 +36,12 @@ for bad in $(sources test/bad/resolve); do
     $HAZY --debug-fail "$fail" --resolve "$bad"
 done
 
+# Run the bad resolve tests that take more than one module
+for bad_dir in test/bad/modules/*/; do
+    fail=$(cat "$bad_dir/test")
+    $HAZY --debug-fail "$fail" --resolve "$bad_dir/source"
+done
+
 # Run the bad check tests
 echo "=== Bad Check ==="
 for bad in $(sources test/bad/check); do
