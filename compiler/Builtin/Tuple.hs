@@ -1,6 +1,6 @@
 module Builtin.Tuple where
 
-import Core.Tree.Constructor (Constructor (..))
+import Core.Tree.Constructor (Constructor (..), Shape (..))
 import Core.Tree.Data (Data (Data))
 import qualified Core.Tree.Data as Data
 import Core.Tree.Entry (Entry (..))
@@ -34,5 +34,6 @@ definition n =
                 strict = Type.Constructor Type2.Lazy
               },
           syntax = Standard,
+          shape = Ordinary,
           name = Variable.ConstructorIdentifier $ constructorIdentifier $ pack $ "Tuple" ++ show n
         }

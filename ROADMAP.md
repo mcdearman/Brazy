@@ -704,12 +704,38 @@ constructor stands for into scope for its branch.
 
 The order to take it in:
 
-- [ ] Declarations in GADT syntax that are ordinary types, and those that
-      hide a type: nine of the fifty, and the part that needs no equalities
-- [ ] Constructors with a result type of their own, and matching on them:
-      the other forty-one
-- [ ] Run the check again and count what stops it next. Each of the items
-      below is a guess until then
+- [x] Declarations in GADT syntax, and constructors with a result type of
+      their own. The resolver already carried them; the checker threw them
+      out. A constructor now says what type it makes (`Shape`, in
+      `Semantic.Tree.Constructor` and `Core.Tree.Constructor`): the type it
+      is declared in at the type's parameters, as before, or at arguments of
+      its own, with type variables of its own in scope. Once checked, a type
+      declared with `where` is a type like any other, so nothing after the
+      checker had to change. Where a constructor is used its own variables
+      are unknowns, and the type it makes is what its signature says
+- [x] Matching on such a constructor. The type of what is matched is set
+      against the type the constructor makes (`refine`, in
+      `Semantic.Unify.Type`). Where the first has an unknown, the unknown
+      is made what the constructor says. Where it has a type variable of a
+      signature, nothing can be made the same, but the variable is known to
+      be that for as far as the match reaches: the context of checking
+      holds what is known (`equalities`), and making two types the same, and
+      finding an instance, look there when they meet a type variable. A
+      lambda is now told what type it is to be before its parameter is
+      looked at, since a match tells nothing of a type that is not known
+      yet (tests `gadt-syntax`, `gadt-expression`, `gadt-indexed`)
+- [ ] What that leaves of GADTs: constructors that require something of
+      their types, records, deriving, and refusing what should be refused
+      (a hidden type that gets out, a branch that cannot be reached). None
+      of the 156 constructors of this kind in the compiler's own source
+      requires anything of its types, so none of this is in the way
+- [ ] Types that are defined by each other across modules. The check now
+      stops at `compiler/Core/Tree/Expression.hs` with "cyclical type
+      checking": `Expression` and `Statements` are in two modules that
+      import each other, by way of an `hs-boot` file as far as GHC is
+      concerned
+- [ ] Run the check again after each of these and count what stops it next.
+      Each of the items below is a guess until then
 
 `hazy.cabal` gives the working list:
 
@@ -802,7 +828,7 @@ Missing:
       through the ordinary instance lookup. That gives `default`
       declarations and classes of a program's own. When it is done, the
       `Fallback` in `Semantic.Unify.Evidence` goes. Not now
-- [ ] GADTs
+- [x] GADTs, in the part the compiler's own source needs first: see M6
 - [ ] Polymorphic components
 - [ ] Strict functions
 - [ ] Remaining builtin instances

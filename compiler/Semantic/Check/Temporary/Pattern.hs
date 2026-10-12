@@ -4,8 +4,7 @@ import Control.Monad (when)
 import Control.Monad.ST (ST)
 import qualified Core.Builtin as Builtin
 import qualified Core.Tree.Forall as Core (mono)
-import Core.Tree.Type ((#))
-import qualified Core.Tree.Type as Core (char, constructor, list, typex)
+import qualified Core.Tree.Type as Core (char, list, typex)
 import Core.Tree.TypeDeclaration (assumeData)
 import Core.Type.Functor (shiftLogical)
 import Data.Map (Map)
@@ -39,6 +38,7 @@ import Semantic.Stage (Check, Resolve)
 import Semantic.Tree.Combinators.Inferred (Inferred (..))
 import qualified Semantic.Tree.Pattern as Semantic
 import qualified Semantic.Tree.Pattern as Solved
+import Semantic.Check.LocalBinding (Equality, shiftEquality)
 import qualified Semantic.Unify as Unify
 import Syntax.Position (Position)
 import Syntax.StringLiteral (StringLiteral)
@@ -53,6 +53,9 @@ data Pattern s scope
       }
   | Constructor
       { typex :: !(Unify.Type s scope),
+        -- | What matching on the constructor tells of the type variables
+        -- of the type that is matched on.
+        equalities :: ![Equality s scope],
         constructorPosition :: !Position,
         names :: !(Map Variable Position),
         irrefutable :: !Prelude.Bool,
@@ -63,6 +66,9 @@ data Pattern s scope
       }
   | Record
       { typex :: !(Unify.Type s scope),
+        -- | What matching on the constructor tells of the type variables
+        -- of the type that is matched on.
+        equalities :: ![Equality s scope],
         constructorPosition :: !Position,
         names :: !(Map Variable Position),
         irrefutable :: !Prelude.Bool,
@@ -124,12 +130,27 @@ patternx ! Bound.Select index bound = case patternx of
   Wildcard {} -> error "bad index"
 
 augment :: Pattern s scope -> Context s scope -> Context s (Scope.Pattern ':+ scope)
-augment patternx Context {termEnvironment, localEnvironment, typeEnvironment} =
+augment patternx Context {termEnvironment, localEnvironment, typeEnvironment, equalities} =
   Context
     { termEnvironment = Term.Pattern (augmentPattern patternx) termEnvironment,
       localEnvironment = Local.Pattern localEnvironment,
-      typeEnvironment = Type.Pattern typeEnvironment
+      typeEnvironment = Type.Pattern typeEnvironment,
+      equalities = shiftEquality <$> (learnt patternx ++ equalities)
     }
+
+-- |
+-- Everything that matching a pattern tells of type variables, from the
+-- pattern and from the patterns inside it.
+learnt :: Pattern s scope -> [Equality s scope]
+learnt = \case
+  Wildcard {} -> []
+  Constructor {equalities, patterns} -> foldMap learnt patterns ++ equalities
+  Record {equalities, fields} -> foldMap Field.learnt fields ++ equalities
+  List {items} -> foldMap learnt items
+  Integer {} -> []
+  Float {} -> []
+  Character {} -> []
+  String {} -> []
 
 augmentPattern :: Pattern s scopes -> Term.Bound (TermBinding s) (scope ':+ scopes)
 augmentPattern patternx = Term.Bound {at, select}
@@ -144,6 +165,11 @@ augmentPattern patternx = Term.Bound {at, select}
       Float {} -> Strict.Vector.empty
       Character {} -> Strict.Vector.empty
       String {} -> Strict.Vector.empty
+
+-- |
+-- A context in which more is known of type variables.
+knowing :: [Equality s scope] -> Context s scope -> Context s scope
+knowing found context@Context {equalities} = context {equalities = found ++ equalities}
 
 check :: Context s scope -> Unify.Type s scope -> Semantic.Pattern Resolve scope -> ST s (Pattern s scope)
 check context@Context {typeEnvironment} typex = \case
@@ -161,20 +187,20 @@ check context@Context {typeEnvironment} typex = \case
         datax <- do
           let get index = assumeData <$> TypeBinding.content (typeEnvironment Type.! index)
           Builtin.index pure get typeIndex
-        DataInstance {types, constructors} <-
+        DataInstance {constructors} <-
           Simple.Data.instanciate context constructorPosition datax
-        let root = Core.constructor typeIndex
-            base = foldl (#) root types
-            instancex = constructors Strict.Vector.! constructorIndex
+        let instancex = constructors Strict.Vector.! constructorIndex
+            base = DataInstance.constructed instancex typeIndex
             entries = ConstructorInstance.types instancex
             constructorInfo = ConstructorInstance.info instancex
         ConstructorInstance.mark context instancex
-        Unify.unify context constructorPosition typex base
+        equalities <- Unify.refine context constructorPosition typex base
         when (length entries /= length patterns) $ mismatchedConstructorArguments constructorPosition
-        patterns <- sequence $ Strict.Vector.zipWith (check context) entries patterns
+        patterns <- sequence $ Strict.Vector.zipWith (check (knowing equalities context)) entries patterns
         pure $
           Constructor
             { typex,
+              equalities,
               constructorPosition,
               names,
               irrefutable,
@@ -195,20 +221,20 @@ check context@Context {typeEnvironment} typex = \case
       datax <- do
         let get index = assumeData <$> TypeBinding.content (typeEnvironment Type.! index)
         Builtin.index pure get typeIndex
-      DataInstance {types, constructors} <-
+      DataInstance {constructors} <-
         Simple.Data.instanciate context constructorPosition datax
-      let root = Core.constructor typeIndex
-          base = foldl (#) root types
-          instancex = constructors Strict.Vector.! constructorIndex
+      let instancex = constructors Strict.Vector.! constructorIndex
+          base = DataInstance.constructed instancex typeIndex
           entries = ConstructorInstance.types instancex
           constructorInfo = ConstructorInstance.info instancex
           lookup index = entries Strict.Vector.! index
       ConstructorInstance.mark context instancex
-      Unify.unify context constructorPosition typex base
-      fields <- traverse (Field.check context lookup) fields
+      equalities <- Unify.refine context constructorPosition typex base
+      fields <- traverse (Field.check (knowing equalities context) lookup) fields
       pure $
         Record
           { typex,
+            equalities,
             names,
             constructorPosition,
             irrefutable,

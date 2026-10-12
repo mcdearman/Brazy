@@ -3,6 +3,8 @@ module Core.Tree.Constructor where
 import qualified Core.Substitute as Substitute
 import Core.Tree.Entry (Entry)
 import qualified Core.Tree.Entry as Entry
+import Core.Tree.Type (Type)
+import qualified Core.Tree.Type as Type
 import qualified Data.Vector.Strict as Strict
 import qualified Semantic.Shift as Shift
 import qualified Semantic.Shift0 as Shift0
@@ -11,10 +13,21 @@ import Semantic.Tree.Constructor (Syntax)
 import qualified Semantic.Tree.Constructor as Solved
 import qualified Syntax.Variable as Variable
 
+-- |
+-- What type a constructor makes a value of: see 'Solved.Shape'.
+data Shape scope
+  = Ordinary
+  | Indexed
+      { variables :: !Int,
+        arguments :: !(Strict.Vector (Type scope))
+      }
+  deriving (Show)
+
 data Constructor scope = Constructor
   { name :: !Variable.Constructor,
     syntax :: !Syntax,
-    entries :: !(Strict.Vector (Entry scope))
+    entries :: !(Strict.Vector (Entry scope)),
+    shape :: !(Shape scope)
   }
   deriving (Show)
 
@@ -25,18 +38,26 @@ instance Shift.Functor Constructor where
   map = Substitute.mapDefault
 
 instance Substitute.Functor Constructor where
-  map category Constructor {name, syntax, entries} =
+  map category Constructor {name, syntax, entries, shape} =
     Constructor
       { name,
         syntax,
-        entries = Substitute.map category <$> entries
+        entries = Substitute.map category <$> entries,
+        shape = case shape of
+          Ordinary -> Ordinary
+          Indexed {variables, arguments} ->
+            Indexed {variables, arguments = Substitute.map category <$> arguments}
       }
 
 simplify :: Solved.Constructor Check scope -> Constructor scope
 simplify = \case
-  Solved.Constructor {name, syntax, entries} ->
+  Solved.Constructor {name, syntax, entries, shape} ->
     Constructor
       { name,
         syntax,
-        entries = Entry.simplify <$> entries
+        entries = Entry.simplify <$> entries,
+        shape = case shape of
+          Solved.Ordinary -> Ordinary
+          Solved.Indexed {variables, arguments} ->
+            Indexed {variables, arguments = Type.simplify <$> arguments}
       }

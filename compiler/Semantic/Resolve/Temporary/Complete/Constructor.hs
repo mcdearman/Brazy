@@ -45,6 +45,7 @@ resolve context selectorNames constructor = case constructor of
             { position,
               name,
               syntax = Real.Standard,
+              shape = Real.Ordinary,
               entries = Strict.Vector.fromList (Entry.resolve context <$> toList entries)
             }
       }
@@ -60,6 +61,7 @@ resolve context selectorNames constructor = case constructor of
               name,
               syntax = Real.Infix $ case context != position :@ Local := name of
                 _ Constructor.:@ Identity Constructor.Binding {fixity} -> fixity,
+              shape = Real.Ordinary,
               entries = Strict.Vector.fromList (Entry.resolve context <$> [left, right])
             }
       }
@@ -74,6 +76,7 @@ resolve context selectorNames constructor = case constructor of
             { position,
               name,
               syntax = Real.Record $ fmap Field.name fields,
+              shape = Real.Ordinary,
               entries = fmap Field.shrink fields
             }
       }

@@ -182,11 +182,10 @@ check
       datax <- do
         let get index = assumeData <$> TypeBinding.content (typeEnvironment Type.! index)
         Builtin.index pure get typeIndex
-      DataInstance {types, constructors} <-
+      DataInstance {constructors} <-
         Simple.Data.instanciate context constructorPosition datax
-      let root = Core.constructor typeIndex
-          base = foldl (#) root types
-          instancex = constructors Strict.Vector.! constructorIndex
+      let instancex = constructors Strict.Vector.! constructorIndex
+          base = DataInstance.constructed instancex typeIndex
           entries = ConstructorInstance.types instancex
           constructorInfo = ConstructorInstance.info instancex
           lookup index = entries Strict.Vector.! index
@@ -279,16 +278,19 @@ check context typex Semantic.Do {startPosition, dox} = do
   pure Do {startPosition, dox}
 check context typex Semantic.Lambda {startPosition, parameter, body} = do
   parameterType <- Unify.fresh Core.typex
-  parameter <- Pattern.check context parameterType parameter
   resultType <- Unify.fresh Core.typex
-  body <- Lambda.check (Pattern.augment parameter context) (shiftLogical resultType) body
+  -- What the function is to be is said before its parameter is looked at:
+  -- matching on a constructor that says what type it makes tells nothing
+  -- of a type that is not known yet.
   Unify.unify context startPosition typex (parameterType -#> resultType)
+  parameter <- Pattern.check context parameterType parameter
+  body <- Lambda.check (Pattern.augment parameter context) (shiftLogical resultType) body
   pure Lambda {startPosition, parameter, body}
 check context typex Semantic.LambdaCase {startPosition, cases} = do
   parameterType <- Unify.fresh Core.typex
   resultType <- Unify.fresh Core.typex
-  cases <- traverse (Alternative.check context resultType parameterType) cases
   Unify.unify context startPosition typex (parameterType -#> resultType)
+  cases <- traverse (Alternative.check context resultType parameterType) cases
   pure LambdaCase {startPosition, cases}
 check context typex Semantic.RightSection {left, operatorPosition, right} = do
   argumentType1 <- Unify.fresh Core.typex
