@@ -726,8 +726,9 @@ The order to take it in:
       yet (tests `gadt-syntax`, `gadt-expression`, `gadt-indexed`)
 - [ ] What that leaves of GADTs: constructors that require something of
       their types, records, deriving, and refusing what should be refused
-      (a hidden type that gets out, a branch that cannot be reached). The
-      first is used by six declarations in the compiler's source
+      (a hidden type that gets out, a branch that cannot be reached). None
+      of the 156 constructors of this kind in the compiler's own source
+      requires anything of its types, so none of this is in the way
 - [ ] Types that are defined by each other across modules. The check now
       stops at `compiler/Core/Tree/Expression.hs` with "cyclical type
       checking": `Expression` and `Statements` are in two modules that
