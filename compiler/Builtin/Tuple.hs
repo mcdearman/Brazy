@@ -4,6 +4,7 @@ import Core.Tree.Constructor (Constructor (..), Shape (..))
 import Core.Tree.Data (Data (Data))
 import qualified Core.Tree.Data as Data
 import Core.Tree.Entry (Entry (..))
+import qualified Core.Tree.Forall as Forall (mono)
 import qualified Core.Tree.Type as Type
 import Data.Foldable (Foldable (toList))
 import Data.Text (pack)
@@ -30,7 +31,7 @@ definition n =
       Constructor
         { entries = Strict.Vector.generate n $ \n ->
             Entry
-              { entry = Type.Variable (Local.Local n),
+              { entry = Forall.mono (Type.Variable (Local.Local n)),
                 strict = Type.Constructor Type2.Lazy
               },
           syntax = Standard,

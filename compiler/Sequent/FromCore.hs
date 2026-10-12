@@ -629,6 +629,11 @@ evaluate context expression consumer = case expression of
   Core.Newtype {argument} -> evaluate context argument consumer
   Core.Dictionary {evidence} -> generateEvidence context evidence $ \dictionary ->
     pure $ Cut dictionary consumer
+  Core.Generalized {definition = definition@TypeLambdaOver {constraints, result}} -> case constraints of
+    None -> evaluate (Context.evidenceBindings Vector.empty context) result consumer
+    Constraints {} -> do
+      function <- declaration context definition
+      pure $ Cut function consumer
 
 letRec :: [(Text, Producer)] -> Statement -> Statement
 letRec [] body = body

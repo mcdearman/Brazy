@@ -5,6 +5,7 @@ module Semantic.Check.Temporary.Pattern where
 import Control.Monad.ST (ST)
 import Data.Kind (Type)
 import Semantic.Check.Context (Context)
+import Semantic.Check.EntryInstance (EntryInstance)
 import Semantic.Check.LocalBinding (Equality)
 import Semantic.Check.TermBinding (TermBinding)
 import qualified Semantic.Index.Table.Term as Term
@@ -27,5 +28,6 @@ learnt :: Pattern s scope -> [Equality s scope]
 given :: (Bound -> Bound) -> Pattern s scope -> [Equality s (Scope.Pattern ':+ scope)]
 owned :: Pattern s scope -> [(Position, Unify.Type s scope)]
 augmentPattern :: Pattern s scopes -> Term.Bound (TermBinding s) (scope ':+ scopes)
+held :: Context s scope -> EntryInstance s scope -> Semantic.Pattern Resolve scope -> ST s (Pattern s scope)
 check :: Context s scope -> Unify.Type s scope -> Semantic.Pattern Resolve scope -> ST s (Pattern s scope)
 solve :: Pattern s scope -> Unify.Solve s (Solved.Pattern Check scope)

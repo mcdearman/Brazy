@@ -14,7 +14,7 @@ import Semantic.Check.Temporary.Constraints (Constraints)
 import qualified Semantic.Check.Temporary.Constraints as Constraints
 import Semantic.Check.Temporary.Constructor (Constructor (..), Shape (..))
 import qualified Semantic.Check.Temporary.Constructor as Constructor
-import Semantic.Check.Temporary.Entry (Entry (..))
+import Semantic.Check.Temporary.Entry (Entry (..), Held (Plain))
 import Semantic.Check.Temporary.Method (Method)
 import qualified Semantic.Check.Temporary.Method as Method
 import qualified Semantic.Check.Temporary.Scheme as Scheme
@@ -178,7 +178,7 @@ own context Semantic.GADTConstructor {position, name, syntax, typex} = do
     pure (left, right)
   entries <- for held $ \(strict, startPosition, typex) -> do
     entry <- Type.check inner Core.typex typex
-    pure Entry {startPosition, entry, strict}
+    pure Entry {startPosition, entry = Plain entry, strict}
   made <- Type.check inner Core.typex made
   pure
     Owned

@@ -1,6 +1,9 @@
 module Core.Tree.Entry where
 
 import qualified Core.Substitute as Substitute
+import Core.Tree.Constraints (ConstraintsF (..))
+import Core.Tree.Forall (Forall, ForallOver (..))
+import qualified Core.Tree.Forall as Forall
 import Core.Tree.Type (Type)
 import qualified Core.Tree.Type as Type
 import qualified Semantic.Index.Type2 as Type2
@@ -12,10 +15,18 @@ import qualified Semantic.Tree.Entry as Solved
 import Semantic.Tree.StrictnessAnnotation (StrictnessAnnotation (..))
 
 data Entry scope = Entry
-  { entry :: !(Type scope),
+  { -- | The type of what is held, which may have a @forall@ of its own.
+    entry :: !(Forall scope),
     strict :: !(Type scope)
   }
   deriving (Show)
+
+-- |
+-- Whether the type of what is held has a @forall@ of its own.
+quantified :: Entry scope -> Bool
+quantified Entry {entry = ForallOver {parameters, constraints}} = case constraints of
+  None -> not (null parameters)
+  Constraints {} -> True
 
 instance Shift0.Functor Entry where
   map = Shift.mapDefault
@@ -33,7 +44,7 @@ instance Substitute.Functor Entry where
 simplify :: Solved.Entry position Check scope -> Entry scope
 simplify Solved.Entry {entry = Restricted entry, strict} =
   Entry
-    { entry = Type.simplify entry,
+    { entry = Forall.simplify entry,
       strict = case strict of
         Lazy -> Type.Constructor Type2.Lazy
         Strict -> Type.Constructor Type2.Strict

@@ -29,6 +29,7 @@ import Core.Tree.MethodInfo (MethodInfo)
 import Core.Tree.Statements (Statements)
 import qualified Core.Tree.Statements as Statements
 import qualified Core.Tree.Type as Type
+import Core.Tree.TypeLambda (TypeLambda, TypeLambdaOver (..))
 import Data.Foldable (toList)
 import qualified Data.Kind
 import Data.List.Reverse (List (..))
@@ -124,6 +125,12 @@ data Expression scope
     Dictionary
       { evidence :: !(Evidence scope)
       }
+  | -- | A value of a type with a @forall@ of its own, for a constructor to
+    -- hold. If the type requires something, the value is a function of the
+    -- evidence for it, as a definition of such a type is.
+    Generalized
+      { definition :: !(TypeLambda scope)
+      }
   deriving (Show)
 
 data Direction = Construct | Destruct
@@ -199,6 +206,10 @@ instance Substitute.Functor Expression where
     Dictionary {evidence} ->
       Dictionary
         { evidence = Substitute.map category evidence
+        }
+    Generalized {definition} ->
+      Generalized
+        { definition = Substitute.map category definition
         }
 
 monoVariable :: Term.Index scope -> Expression scope
@@ -860,6 +871,15 @@ simplifyWith expression [] = case expression of
   Semantic.String {string} ->
     foldr (cons . Character) nil (StringLiteral.unpack string)
   Semantic.Do {dox} -> simplify dox
+  Semantic.Generalized {expression = Known TypeLambdaOver {parameters, constraints, result}} ->
+    Generalized
+      { definition =
+          TypeLambdaOver
+            { parameters,
+              constraints,
+              result = simplify result
+            }
+      }
   Semantic.Annotation {expression = Known expression, annotation, instanciation = Solved instanciation} ->
     Let
       { declarations = Declarations.single $ shift $ Declaration.annotation expression annotation,

@@ -10,8 +10,6 @@ import Semantic.Tree.Scheme (Scheme)
 import qualified Semantic.Tree.Scheme as Scheme
 import Semantic.Tree.StrictnessAnnotation (StrictnessAnnotation (..))
 import qualified Semantic.Tree.StrictnessAnnotation as StrictnessAnnotation
-import Semantic.Tree.Type (Type)
-import qualified Semantic.Tree.Type as Type
 
 data Entry position stage scope = Entry
   { startPosition :: !position,
@@ -39,11 +37,10 @@ instance FreeTypeVariables (Entry position) where
       ]
 
 -- |
--- This type is here as a temporary measure until polymorphic components are
--- supported
+-- The type of what a constructor holds. It may have a @forall@ of its own.
 data Restricted position stage scope where
   Canonical :: !(Scheme position Resolve scope) -> Restricted position Resolve scope
-  Restricted :: !(Type position Check scope) -> Restricted position Check scope
+  Restricted :: !(Scheme position Check scope) -> Restricted position Check scope
 
 instance (Show position) => Show (Restricted position stage scope) where
   showsPrec d = \case
@@ -77,4 +74,4 @@ anonymize Entry {entry, strict} =
     anonymizeRestrict :: Restricted position stage scope -> Restricted () stage scope
     anonymizeRestrict = \case
       Canonical scheme -> Canonical (Scheme.anonymize scheme)
-      Restricted typex -> Restricted (Type.anonymize typex)
+      Restricted scheme -> Restricted (Scheme.anonymize scheme)

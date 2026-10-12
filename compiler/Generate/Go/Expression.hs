@@ -248,6 +248,11 @@ generateImpure context expression = case expression of
   Dictionary {evidence} -> do
     value <- Evidence.generate context evidence
     pure ([], value)
+  Generalized {definition = definition@TypeLambdaOver {constraints, result}} -> case constraints of
+    None -> generateImpure (Context.evidenceBindings Vector.empty context) result
+    Constraints {} -> do
+      value <- declaration context definition
+      pure ([], value)
   _ -> generatePure context expression
 generatePure context expression = case expression of
   Constructor {constructor, arguments, constructorInfo} -> do
