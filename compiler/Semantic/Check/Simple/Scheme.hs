@@ -49,7 +49,7 @@ augmentNamed ::
   Mask ->
   Context s scope ->
   ST s (Context s (Local ':+ scope))
-augmentNamed name position parameters constraints mask Context {termEnvironment, localEnvironment, typeEnvironment}
+augmentNamed name _ parameters constraints mask Context {termEnvironment, localEnvironment, typeEnvironment}
   | parameters <- Strict.Vector.toLazy parameters = do
       let entailed classx arguments evidence = do
             Class.Class {constraints} <- do
@@ -63,7 +63,7 @@ augmentNamed name position parameters constraints mask Context {termEnvironment,
                     { arguments,
                       evidence
                     }
-            pure $ (shift classx, root) : concat children
+            pure $ (shift classx, [root]) : concat children
           collect index Constraint {classx, head, arguments} = do
             let evidence =
                   Evidence.Variable
@@ -76,7 +76,7 @@ augmentNamed name position parameters constraints mask Context {termEnvironment,
         Constraints constraints -> zipWithM collect [0 ..] $ toList constraints
         None -> pure []
       let ordered = orderWithInt (++) [] (length parameters) collected
-          constraints = Vector.map (Map.fromListWith $ LocalBinding.combine position) ordered
+          constraints = Vector.map (Map.fromListWith $ flip LocalBinding.combine) ordered
           rigid index typex constraints =
             LocalBinding.Rigid
               { label = Label.LocalBinding {name = name index},

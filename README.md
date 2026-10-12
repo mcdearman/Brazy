@@ -586,14 +586,6 @@ of every parameter of the type.
 ## Bugs
 These are deviations that will are planned to get fixed at some point.
 
-### Constraints must have unique typeclass variable pairs
-Constraints must not have overlapping typeclass / rigid variable pairs.
-For example, something like this is not allowed:
-```haskell
-exotic :: (Eq (f Int), Eq (f Char)) => f Int -> f Int -> f Char -> f Char -> Bool
-exotic a b c d = a == b && c == d
-```
-
 ### Deriving clauses require the class of every parameter
 
 A `deriving` clause is taken as `deriving instance` with the class required

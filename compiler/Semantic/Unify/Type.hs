@@ -1,6 +1,6 @@
 module Semantic.Unify.Type where
 
-import Control.Monad (zipWithM_)
+import Control.Monad (filterM, foldM, zipWithM)
 import Control.Monad.ST (ST)
 import Core.Substitute (logicalEvidence, logicalType, substituteType)
 import qualified Core.Tree.Constraint as Simple (argument)
@@ -58,7 +58,9 @@ data Logical s scopes where
 data Box s scope
   = Unsolved
       { kind :: !(Type s scope),
-        constraints :: !(Map (Type2.Index scope) (Delay s scope)),
+        -- | What is asked of the variable, by class. A class may be
+        -- asked of it more than once, given different arguments.
+        constraints :: !(Map (Type2.Index scope) [Delay s scope]),
         erasure :: !Mask.Erasure
       }
   | Solved !(Type s scope)
@@ -129,14 +131,19 @@ unify context_ position term1_ term2_ = unifyWith context_ term1_ term2_
               Unsolved {kind = kind2, constraints = constraints2, erasure = erasure2}
                 | constraints1 <- fmap pure constraints1,
                   constraints2 <- fmap pure constraints2,
+                  -- What is asked of both, given the same arguments, is
+                  -- asked once. The rest is asked as well.
                   let merge left right = do
-                        left@Delay {arguments = arguments1, evidence = evidence1} <- left
-                        Delay {arguments = arguments2, evidence = evidence2} <- right
-                        if length arguments1 == length arguments2
-                          then traverse_ (uncurry unify) (zip arguments1 arguments2)
-                          else error "different parameter length"
-                        Evidence.unify evidence1 evidence2
-                        pure left =
+                        left <- left
+                        right <- right
+                        let add known delay@Delay {arguments = arguments2, evidence = evidence2} = do
+                              found <- firstM (\Delay {arguments = arguments1} -> sameAll arguments1 arguments2) known
+                              case found of
+                                Just Delay {evidence = evidence1} -> do
+                                  Evidence.unify evidence1 evidence2
+                                  pure known
+                                Nothing -> pure (known ++ [delay])
+                        foldM add left right =
                     do
                       Semantic.Unify.Type.unify context position kind1 kind2
                       constraints <- sequence $ Map.unionWith merge constraints1 constraints2
@@ -360,13 +367,21 @@ constrainWith context_ position classx_ term_ arguments_ = constrainWith context
                     pure Evidence.Fallback {classx, permitted = defaults reference}
               logical <- newSTRef Evidence.Unsolved {fallback}
               let delay = Delay {arguments, evidence = Evidence.Logical (Evidence.Box logical)}
-              writeSTRef reference $! Unsolved {kind, constraints = Map.insert classx delay constraints, erasure}
+              writeSTRef reference $! Unsolved {kind, constraints = Map.insert classx [delay] constraints, erasure}
               pure $ Evidence.Logical (Evidence.Box logical)
-            Just Delay {arguments = arguments', evidence}
-              | length arguments == length arguments' -> do
-                  zipWithM_ (unify context position) arguments arguments'
-                  pure evidence
-              | otherwise -> error "error argument length doesn't match"
+            -- The class is asked of the variable already. If it is asked
+            -- of it given these same arguments, this is the same question.
+            -- Otherwise it is one more.
+            Just delays -> do
+              found <- firstM (\Delay {arguments = arguments'} -> sameAll arguments arguments') delays
+              case found of
+                Just Delay {evidence} -> pure evidence
+                Nothing -> do
+                  logical <- newSTRef Evidence.Unsolved {fallback = Nothing}
+                  let delay = Delay {arguments, evidence = Evidence.Logical (Evidence.Box logical)}
+                  writeSTRef reference $!
+                    Unsolved {kind, constraints = Map.insert classx (delays ++ [delay]) constraints, erasure}
+                  pure $ Evidence.Logical (Evidence.Box logical)
     constrainWith context classx (Logical (Shift logical)) arguments = do
       arguments <- traverse (unshift context position) arguments
       let quit = abort position $ Unshift context (Constructor classx)
@@ -374,11 +389,28 @@ constrainWith context_ position classx_ term_ arguments_ = constrainWith context
       shiftLogical <$> constrainWith (Shift.unshift context) classx (Logical logical) arguments
     constrainWith context@Context {localEnvironment} classx (Variable index) arguments
       | Local.Rigid {constraints} <- localEnvironment Local.Table.! index,
-        Just Local.Constraint {arguments = arguments', evidence} <- Map.lookup classx constraints,
-        arguments' <- [logicalType argument | argument <- toList arguments'],
-        length arguments' == length arguments = do
-          traverse_ (uncurry $ unify context position) (zip arguments arguments')
-          pure (logicalEvidence evidence)
+        Just known <- Map.lookup classx constraints,
+        candidates@(_ : _) <-
+          [ ([logicalType argument | argument <- toList arguments'], evidence)
+          | Local.Constraint {arguments = arguments', evidence} <- known,
+            length arguments' == length arguments
+          ] = do
+          -- What is known of the variable may be known for several lists of
+          -- arguments. The one that is meant is the one these arguments can
+          -- be: if only one can, they are made to be it.
+          let use (arguments', evidence) = do
+                traverse_ (uncurry $ unify context position) (zip arguments arguments')
+                pure (logicalEvidence evidence)
+              quit = abort position (Constrain context_ classx_ term_ arguments_)
+          case candidates of
+            [only] -> use only
+            _ -> do
+              exact <- filterM (sameAll arguments . fst) candidates
+              possible <- filterM (alikeAll arguments . fst) candidates
+              case (exact, possible) of
+                (first : _, _) -> use first
+                ([], [only]) -> use only
+                _ -> quit
     constrainWith context@Context {typeEnvironment} (Type2.Index classx) (Constructor index) arguments
       | TypeBinding {classInstances} <- typeEnvironment Type.Table.! classx,
         Just instancex <- Map.lookup index classInstances = do
@@ -421,20 +453,94 @@ constrainWith context_ position classx_ term_ arguments_ = constrainWith context
 reconstrain ::
   Context s scope ->
   Position ->
-  Map (Type2.Index scope) (Delay s scope) ->
+  Map (Type2.Index scope) [Delay s scope] ->
   Type s scope ->
   ST s ()
 reconstrain context position constraints term =
-  for_ (Map.toList constraints) $ \(classx, Delay {arguments, evidence}) -> do
-    evidence' <- constrainWith context position classx term arguments
-    Evidence.unify evidence evidence'
+  for_ (Map.toList constraints) $ \(classx, delays) ->
+    for_ delays $ \Delay {arguments, evidence} -> do
+      evidence' <- constrainWith context position classx term arguments
+      Evidence.unify evidence evidence'
+
+-- |
+-- The first of some things that passes a test.
+firstM :: (Monad m) => (a -> m Bool) -> [a] -> m (Maybe a)
+firstM test = \case
+  [] -> pure Nothing
+  first : rest -> do
+    passed <- test first
+    if passed then pure (Just first) else firstM test rest
+
+-- |
+-- Whether two lists of types are the same as they stand: nothing is made
+-- to be anything. Types that are not worked out yet are the same only if
+-- they are the same unknown.
+sameAll :: [Type s scope] -> [Type s scope] -> ST s Bool
+sameAll = comparedAll False
+
+-- |
+-- Whether two lists of types could be the same: a type that is not worked
+-- out yet could be anything.
+alikeAll :: [Type s scope] -> [Type s scope] -> ST s Bool
+alikeAll = comparedAll True
+
+comparedAll :: Bool -> [Type s scope] -> [Type s scope] -> ST s Bool
+comparedAll open left right
+  | length left /= length right = pure False
+  | otherwise = and <$> zipWithM (compared open) left right
+
+compared :: forall s scope. Bool -> Type s scope -> Type s scope -> ST s Bool
+compared open = go
+  where
+    go :: forall scope'. Type s scope' -> Type s scope' -> ST s Bool
+    go left right = case (left, right) of
+      (Logical (Box reference), _) ->
+        readSTRef reference >>= \case
+          Solved left -> go left right
+          Unsolved {} -> unknown reference right
+      (_, Logical (Box reference)) ->
+        readSTRef reference >>= \case
+          Solved right -> go left right
+          Unsolved {} -> pure open
+      (Logical (Shift left), Logical (Shift right)) -> go (Logical left) (Logical right)
+      -- One is from a scope further out and the other is not: it is not
+      -- looked into.
+      (Logical (Shift _), _) -> pure open
+      (_, Logical (Shift _)) -> pure open
+      (Variable left, Variable right) -> pure (left == right)
+      (Constructor left, Constructor right) -> pure (left == right)
+      (Call function argument, Call function' argument') -> both (go function function') (go argument argument')
+      (Function argument result, Function argument' result') -> both (go argument argument') (go result result')
+      (Type left, Type right) -> go left right
+      (Constraint, Constraint) -> pure True
+      (Small, Small) -> pure True
+      (Large, Large) -> pure True
+      (Universe, Universe) -> pure True
+      (Levity, Levity) -> pure True
+      _ -> pure False
+    both left right = do
+      left <- left
+      if left then right else pure False
+    -- An unknown on the left: the same as itself, and otherwise only what
+    -- an unknown could be.
+    unknown :: forall scope'. STRef s (Box s scope') -> Type s scope' -> ST s Bool
+    unknown reference = \case
+      Logical (Box reference')
+        | reference == reference' -> pure True
+        | otherwise ->
+            readSTRef reference' >>= \case
+              Solved right -> unknown reference right
+              Unsolved {} -> pure open
+      _ -> pure open
 
 unshiftBox misshift unshift reference kind constraints erasure = do
-  let unshiftDelay (key, Delay {arguments, evidence}) = do
+  let unshiftDelay (key, delays) = do
         key <- Shift.partialUnshift misshift key
-        arguments <- traverse unshift arguments
-        evidence <- Evidence.unshift evidence
-        pure (key, Delay {arguments, evidence})
+        delays <- for delays $ \Delay {arguments, evidence} -> do
+          arguments <- traverse unshift arguments
+          evidence <- Evidence.unshift evidence
+          pure Delay {arguments, evidence}
+        pure (key, delays)
   kind <- unshift kind
   -- Type variables may link to constraints that mention the variable
   -- itself. To allow unshifting these cycles, the unshifted box is
@@ -501,8 +607,8 @@ defaults reference =
       Logical (Shift logical) -> follow (Logical logical)
       _ -> pure False
 
-defaulting :: Map (Type2.Index scope) (Delay s scope) -> Bool
-defaulting constraints = not (null classes) && all plain (Map.elems constraints) && any known classes
+defaulting :: Map (Type2.Index scope) [Delay s scope] -> Bool
+defaulting constraints = not (null classes) && all plain (concat (Map.elems constraints)) && any known classes
   where
     classes = Map.keys constraints
     plain Delay {arguments} = null arguments
@@ -512,7 +618,7 @@ defaulting constraints = not (null classes) && all plain (Map.elems constraints)
 defaultFrom,
   defaultUniverse ::
     Position ->
-    Map (Type2.Index scope') (Delay s scope') ->
+    Map (Type2.Index scope') [Delay s scope'] ->
     Type s scope'' ->
     ST s (Simple.Type scope)
 defaultFrom position constraints kind = case kind of
