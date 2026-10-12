@@ -743,8 +743,15 @@ done then.
 
 Known bugs:
 
-- [ ] Constraints with overlapping class and rigid variable pairs, such as
-      `(Eq (f Int), Eq (f Char))`
+- [x] Constraints with overlapping class and rigid variable pairs, such as
+      `(Eq (f Int), Eq (f Char))`. A type variable held one thing for each
+      class: what was known of it, if it was a variable of a signature, or
+      what was asked of it, if it was not worked out yet. The second
+      constraint for a class was taken to be the first, and its arguments
+      made the same, so `Int` had to be `Char`. A variable now holds a list
+      for each class. What is asked given the same arguments is asked once;
+      given others it is asked as well. Where several things are known, the
+      one that is meant is the one the arguments can be (test `constraints`)
 - [x] Class methods are always public, whether or not they are exported.
       An instance could define a method that the class's module had not
       exported. It can now define only what can be seen where it is: a

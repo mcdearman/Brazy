@@ -7,21 +7,22 @@ import qualified Data.Kind (Type)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import qualified Data.Vector.Strict as Strict
-import Error (nonUniqueConstraints)
 import Semantic.Check.Mask (Mask)
 import qualified Semantic.Index.Type2 as Type2
 import qualified Semantic.Label.Binding.Local as Label
 import Semantic.Scope (Environment)
 import qualified Semantic.Shift0 as Shift0
 import qualified Semantic.Unify as Unify (Type)
-import Syntax.Position (Position)
 
 type LocalBinding :: Data.Kind.Type -> Environment -> Data.Kind.Type
 data LocalBinding s scope
   = Rigid
       { label :: !(forall scope. Label.LocalBinding scope),
         rigid :: !(Simple.Type scope),
-        constraints :: !(Map (Type2.Index scope) (Constraint scope)),
+        -- | What is known of the variable, by class. There may be more
+        -- than one thing known for a class, of the variable given
+        -- different arguments: @Eq (f Int)@ and @Eq (f Char)@.
+        constraints :: !(Map (Type2.Index scope) [Constraint scope]),
         mask :: !Mask
       }
   | Wobbly
@@ -35,7 +36,8 @@ instance Shift0.Functor (LocalBinding s) where
       Rigid
         { label,
           rigid = Shift0.map category rigid,
-          constraints = Map.map (Shift0.map category) $ Map.mapKeysMonotonic (Shift0.map category) constraints,
+          constraints =
+            Map.map (map (Shift0.map category)) $ Map.mapKeysMonotonic (Shift0.map category) constraints,
           mask
         }
     Wobbly {label, wobbly} ->
@@ -50,11 +52,14 @@ data Constraint scope = Constraint
   }
   deriving (Show)
 
-combine :: Position -> Constraint scope -> Constraint scope -> Constraint scope
-combine position left@Constraint {arguments} Constraint {arguments = argument'}
-  -- evidence is left biased
-  | arguments == argument' = left
-  | otherwise = nonUniqueConstraints position
+-- |
+-- Put together what is known for one class. What is known twice over, of
+-- the variable given the same arguments, is kept once: the evidence is left
+-- biased.
+combine :: [Constraint scope] -> [Constraint scope] -> [Constraint scope]
+combine left right = left ++ filter new right
+  where
+    new Constraint {arguments} = all (\Constraint {arguments = known} -> known /= arguments) left
 
 instance Shift0.Functor Constraint where
   map category Constraint {arguments, evidence} =
