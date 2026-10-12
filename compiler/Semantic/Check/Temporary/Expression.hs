@@ -256,7 +256,9 @@ check
     let typex' = DataInstance.baseType instancex updateType
     Unify.unify context updatePosition typex typex'
     base <- check context typex base
-    updates <- sequence $ flip fmap updates $ \update@Semantic.Select {pick} ->
+    updates <- sequence $ flip fmap updates $ \update@Semantic.Select {pick} -> do
+      -- What is put in has the type that the value holds there.
+      Unify.unify context updatePosition typex (DataInstance.selected instancex updateType pick)
       Select.check context (DataInstance.selectorType instancex pick) update
     let updateInfo = DataInstance.updateInfo instancex
     pure

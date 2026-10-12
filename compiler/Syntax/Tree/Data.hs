@@ -4,6 +4,7 @@
 -- Parser syntax tree for data types
 module Syntax.Tree.Data where
 
+import qualified Data.Strict.Maybe as Strict (Maybe (..))
 import qualified Data.Vector.Strict as Strict (Vector)
 import qualified Data.Vector.Strict as Strict.Vector
 import Syntax.FreeVariables (TermBindingVariables (..))
@@ -21,6 +22,8 @@ import Syntax.Tree.Constructor (Constructor)
 import qualified Syntax.Tree.Constructor as Constructor
 import Syntax.Tree.GADTConstructor (GADTConstructor)
 import qualified Syntax.Tree.GADTConstructor as GADTConstructor
+import Syntax.Tree.Type (Type)
+import qualified Syntax.Tree.Type as Type
 import Syntax.Variable (QualifiedConstructorIdentifier)
 import qualified Syntax.Variable as Variable
 
@@ -35,25 +38,37 @@ data Data position
   | -- |
     --  > data T where { A :: T }
     --  >        ^^^^^^^^^^^^^^^^
-    GADT {gadtConstructors :: !(Strict.Vector GADTConstructor)}
+    --
+    -- The type's kind may be said before the constructors, and then the
+    -- constructors may be left out:
+    --
+    --  > data T :: Type -> Type where { A :: T a }
+    --  >        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    GADT
+      { kind :: !(Strict.Maybe (Type position)),
+        gadtConstructors :: !(Strict.Vector (GADTConstructor position)),
+        derivingx :: !(Strict.Vector QualifiedConstructorIdentifier)
+      }
   deriving (Show)
 
 instance TermBindingVariables Data where
   termBindingVariables ADT {constructors} = foldMap termBindingVariables constructors
-  termBindingVariables _ = mempty
+  termBindingVariables GADT {gadtConstructors} = foldMap termBindingVariables gadtConstructors
 
 parse :: Parser (Data Position)
 parse =
   asum
-    [ gadt
-        <$ token "where"
-        <*> betweenBraces
-          (Strict.Vector.fromList <$> sepEndBySemicolon GADTConstructor.parse),
+    [ gadt . Strict.Just
+        <$> (token "::" *> Type.parse)
+        <*> asum [token "where" *> block, pure Strict.Vector.empty]
+        <*> parseDerive,
+      gadt Strict.Nothing <$ token "where" <*> block <*> parseDerive,
       adt <$> Constructor.parseMany <*> parseDerive
     ]
   where
     adt constructors derivingx = ADT {constructors, derivingx}
-    gadt gadtConstructors = GADT {gadtConstructors}
+    gadt kind gadtConstructors derivingx = GADT {kind, gadtConstructors, derivingx}
+    block = betweenBraces (Strict.Vector.fromList <$> sepEndBySemicolon GADTConstructor.parse)
 
 parseDerive :: Parser (Strict.Vector QualifiedConstructorIdentifier)
 parseDerive =

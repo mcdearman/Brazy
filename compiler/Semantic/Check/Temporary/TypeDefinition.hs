@@ -23,7 +23,6 @@ import qualified Semantic.Check.Temporary.TypePattern as TypePattern
 import Semantic.Scope (Environment (..))
 import qualified Semantic.Scope as Scope
 import Semantic.Stage (Check, Resolve)
-import Semantic.Tree.Constructor (Syntax (Standard))
 import qualified Semantic.Tree.Constraints as Semantic (Constraints (..))
 import qualified Semantic.Tree.GADTConstructor as Semantic (GADTConstructor (..))
 import qualified Semantic.Tree.Scheme as Semantic (Scheme (..))
@@ -50,7 +49,8 @@ data TypeDefinition s scope
       { brand :: !Brand,
         position :: !Position,
         parameters :: !(Strict.Vector (TypePattern s scope)),
-        owned :: !(Strict.Vector (Owned s scope))
+        owned :: !(Strict.Vector (Owned s scope)),
+        selectors :: !(Strict.Vector Selector)
       }
   | Class
       { position :: !Position,
@@ -113,12 +113,12 @@ check context kind = \case
             constraints,
             methods
           }
-  Semantic.GADT {position, brand, parameters, gadtConstructors} -> do
+  Semantic.GADT {position, brand, parameters, gadtConstructors, selectors} -> do
     parameters <- traverse fresh parameters
     let kind' = foldr ((-#>) . TypePattern.typex) Core.typex parameters
     Unify.unify context position kind' kind
     owned <- traverse (own context) gadtConstructors
-    pure GADT {brand, position, parameters, owned}
+    pure GADT {brand, position, parameters, owned, selectors}
   where
     fresh Semantic.TypePattern {name, position} = do
       level <- Unify.fresh Core.universe
@@ -142,7 +142,7 @@ check context kind = \case
 -- constructor's choosing, where a constructor declared the other way always
 -- makes the type applied to its parameters.
 own :: Context s scope -> Semantic.GADTConstructor Resolve scope -> ST s (Owned s scope)
-own context Semantic.GADTConstructor {position, name, typex} = do
+own context Semantic.GADTConstructor {position, name, syntax, typex} = do
   let Semantic.Scheme {parameters, constraints, result = signature} = typex
   -- A constructor that requires something of its types is not done yet.
   case constraints of
@@ -165,7 +165,7 @@ own context Semantic.GADTConstructor {position, name, typex} = do
           Constructor
             { position,
               name,
-              syntax = Standard,
+              syntax,
               entries = Strict.Vector.fromList entries,
               shape =
                 Indexed
@@ -193,12 +193,12 @@ solve :: Context s scope -> TypeDefinition s scope -> Unify.Solve s (Solved.Type
 solve context = \case
   -- Once it is checked, a type declared with @where@ is a type like any
   -- other, some of whose constructors say what type they make.
-  GADT {brand, position, parameters, owned} -> do
+  GADT {brand, position, parameters, owned, selectors} -> do
     parameters <- traverse TypePattern.solve parameters
     constructors <- for owned $ \Owned {variables, constructor} -> do
       variables <- traverse TypePattern.solve variables
       Constructor.solve (Scheme.augmentSolve variables context) constructor
-    pure Solved.ADT {position, brand, parameters, constructors, selectors = Strict.Vector.empty}
+    pure Solved.ADT {position, brand, parameters, constructors, selectors}
   ADT {brand, position, parameters, constructors, selectors} -> do
     parameters <- traverse TypePattern.solve parameters
     context <- pure $ Scheme.augmentSolve parameters context

@@ -29,6 +29,7 @@ data TypeDefinition stage scope
         brand :: !Brand,
         parameters :: !(Strict.Vector (TypePattern Position stage scope)),
         gadtConstructors :: !(Strict.Vector (GADTConstructor stage scope)),
+        selectors :: !(Strict.Vector Selector),
         unsupported :: !(Unsupported stage)
       }
   | Class
@@ -52,12 +53,13 @@ instance Shift.Functor (TypeDefinition stage) where
           constructors = fmap (Shift.map (Shift.Over category)) constructors,
           selectors
         }
-    GADT {position, brand, parameters, gadtConstructors, unsupported} ->
+    GADT {position, brand, parameters, gadtConstructors, selectors, unsupported} ->
       GADT
         { position,
           brand,
           parameters = Shift.map category <$> parameters,
           gadtConstructors = fmap (Shift.map category) gadtConstructors,
+          selectors,
           unsupported
         }
     Class {position, parameter, methods, constraints} ->

@@ -242,6 +242,21 @@ matched context position datax typeIndex instancex typex
   | otherwise = [] <$ Unify.unify context position typex (DataInstance.constructed instancex typeIndex)
 
 -- |
+-- The context in which what a constructor holds is looked at, where a value
+-- of a type is taken apart that is known to be made with that constructor.
+-- An instance that is derived looks at what each constructor holds this way.
+within ::
+  Context s scope ->
+  Position ->
+  DataInstance s scope ->
+  Type2.Index scope ->
+  ConstructorInstance.ConstructorInstance s scope ->
+  ST s (Context s scope)
+within context position datax typeIndex instancex = do
+  equalities <- matched context position datax typeIndex instancex (DataInstance.baseType datax typeIndex)
+  pure (knowing equalities context)
+
+-- |
 -- A context in which more is known of type variables.
 knowing :: [Equality s scope] -> Context s scope -> Context s scope
 knowing found context@Context {equalities} = context {equalities = found ++ equalities}
