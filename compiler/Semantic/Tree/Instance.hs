@@ -18,7 +18,7 @@ import Syntax.Position (Position)
 data Instance solve loeb layout stage scope = Instance
   { startPosition :: !Position,
     definition :: !(InstanceDefinition2 solve loeb layout stage scope),
-    prerequisites :: loeb (Inferred Core.Constraints stage scope)
+    prerequisites :: loeb (Inferred Core.Prerequisites stage scope)
   }
 
 instance (Show1 solve, Show1 loeb) => Show (Instance solve loeb layout stage scope) where

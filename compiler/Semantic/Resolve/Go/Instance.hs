@@ -76,6 +76,7 @@ resolve
                 Header
                   { parameters,
                     prerequisites,
+                    equated = Strict.Vector.empty,
                     lenient = case declarations of
                       Syntax.DerivingClause -> True
                       _ -> False

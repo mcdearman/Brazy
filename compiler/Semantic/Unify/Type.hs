@@ -6,6 +6,7 @@ import Core.Substitute (logicalEvidence, logicalType, substituteType)
 import qualified Core.Tree.Constraint as Simple (argument)
 import qualified Core.Tree.Constraint as Simple.Constraint
 import Core.Tree.Constraints (ConstraintsF (..))
+import qualified Core.Tree.Constraints as Instance (Prerequisites (..))
 import qualified Core.Tree.Evidence as Evidence (EvidenceF (..))
 import Core.Tree.Instanciation (InstanciationF (Instanciation))
 import qualified Core.Tree.Instanciation as Instanciation (InstanciationF (..))
@@ -721,7 +722,11 @@ constrainWith context_ position classx_ term_ arguments_ = constrainWith context
     plainly context@Context {typeEnvironment} (Type2.Index classx) (Constructor index) arguments
       | TypeBinding {classInstances} <- typeEnvironment Type.Table.! classx,
         Just instancex <- Map.lookup index classInstances = do
-          dependencies <- instancex
+          Instance.Prerequisites {required = dependencies, equated = fixed} <- instancex
+          -- What the instance requires its type to be given, it is given.
+          for_ fixed $ \(index, typex) -> case drop index arguments of
+            argument : _ -> unify context position argument (substituteType (Vector.fromList arguments) typex)
+            [] -> pure ()
           case dependencies of
             Constraints dependencies -> do
               arguments <- for dependencies $ \constraint@Simple.Constraint.Constraint {classx} ->
@@ -734,7 +739,11 @@ constrainWith context_ position classx_ term_ arguments_ = constrainWith context
     plainly context@Context {typeEnvironment} classx (Constructor (Type2.Index index)) arguments
       | TypeBinding {dataInstances} <- typeEnvironment Type.Table.! index,
         Just instancex <- Map.lookup classx dataInstances = do
-          dependencies <- instancex
+          Instance.Prerequisites {required = dependencies, equated = fixed} <- instancex
+          -- What the instance requires its type to be given, it is given.
+          for_ fixed $ \(index, typex) -> case drop index arguments of
+            argument : _ -> unify context position argument (substituteType (Vector.fromList arguments) typex)
+            [] -> pure ()
           case dependencies of
             Constraints dependencies -> do
               arguments <- for dependencies $ \constraint@Simple.Constraint.Constraint {classx} ->

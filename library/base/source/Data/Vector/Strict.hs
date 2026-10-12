@@ -5,6 +5,26 @@ import Hazy.Prelude (placeholder)
 
 data Vector a
 
+instance Functor Vector
+
+instance Foldable Vector
+
+instance Traversable Vector
+
+instance Applicative Vector
+
+instance Monad Vector
+
+instance (Eq a) => Eq (Vector a)
+
+instance (Ord a) => Ord (Vector a)
+
+instance (Show a) => Show (Vector a)
+
+instance Semigroup (Vector a)
+
+instance Monoid (Vector a)
+
 length :: Vector a -> Int
 length = placeholder
 

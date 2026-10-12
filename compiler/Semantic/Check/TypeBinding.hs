@@ -1,7 +1,7 @@
 module Semantic.Check.TypeBinding where
 
 import Control.Monad.ST (ST)
-import Core.Tree.Constraints (Constraints)
+import Core.Tree.Constraints (Prerequisites)
 import qualified Core.Tree.Type as Core.Type
 import qualified Core.Tree.Type as Simple (Type)
 import qualified Core.Tree.TypeDeclaration as Core.TypeDeclaration
@@ -59,8 +59,8 @@ data TypeBinding s scope = TypeBinding
     content :: ST s (Simple.TypeDeclaration scope),
     extra :: ST s (Unify.Solve s (Simple.TypeDeclarationExtra scope)),
     synonym :: ST s (Type.Synonym Check scope),
-    dataInstances :: Map (Type2.Index scope) (ST s (Constraints scope)),
-    classInstances :: Map (Type2.Index scope) (ST s (Constraints scope))
+    dataInstances :: Map (Type2.Index scope) (ST s (Prerequisites scope)),
+    classInstances :: Map (Type2.Index scope) (ST s (Prerequisites scope))
   }
 
 instance Shift0.Functor (TypeBinding s) where
@@ -127,7 +127,7 @@ global
         classInstances = bindInstance <$> classInstances
       }
     where
-      bindInstance :: (Monad m) => Semantic.Instance solve m layout Check scope -> m (Constraints scope)
+      bindInstance :: (Monad m) => Semantic.Instance solve m layout Check scope -> m (Prerequisites scope)
       bindInstance Semantic.Instance {prerequisites} =
         prerequisites >>= \case Solved prerequisites -> pure prerequisites
 
@@ -177,7 +177,7 @@ local
         classInstances = bindInstance <$> classInstances
       }
     where
-      bindInstance :: (Monad m) => Semantic.Instance solve m layout Check scope -> m (Constraints scope)
+      bindInstance :: (Monad m) => Semantic.Instance solve m layout Check scope -> m (Prerequisites scope)
       bindInstance Semantic.Instance {prerequisites} =
         prerequisites >>= \case Solved prerequisites -> pure prerequisites
 

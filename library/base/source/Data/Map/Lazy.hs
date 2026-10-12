@@ -135,6 +135,22 @@ import Hazy.Prelude (placeholder)
 
 data Map k a
 
+instance Functor (Map k)
+
+instance Foldable (Map k)
+
+instance Traversable (Map k)
+
+instance (Eq k, Eq a) => Eq (Map k a)
+
+instance (Ord k, Ord a) => Ord (Map k a)
+
+instance (Show k, Show a) => Show (Map k a)
+
+instance (Ord k) => Semigroup (Map k a)
+
+instance (Ord k) => Monoid (Map k a)
+
 empty :: Map k a
 empty = placeholder
 
