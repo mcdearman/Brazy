@@ -77,6 +77,7 @@ resolve
                   { parameters,
                     prerequisites,
                     equated = Strict.Vector.empty,
+                    needed = Inferred,
                     lenient = case declarations of
                       Syntax.DerivingClause -> True
                       _ -> False
@@ -100,6 +101,9 @@ resolve
                     }
          in Instance
               { startPosition,
+                clause = case declarations of
+                  Syntax.DerivingClause -> True
+                  _ -> False,
                 definition,
                 prerequisites = Identity Inferred
               }

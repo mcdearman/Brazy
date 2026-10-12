@@ -1258,7 +1258,8 @@ wanted state token environment = \case
   -- the consumer is never made.
   New name object@Object {kind = Closure, method = Return, captured, parameters = [_]} (Substitute pairs Force)
     | (kept, taken) <- splitEnd (length captured) environment,
-      (_, [(_, consumer), (_, forced)]) <- snd . waiting <$> substitute Set.empty (kept ++ [(name, unmade)]) pairs,
+      (_, renamed) <- substitute Set.empty (kept ++ [(name, unmade)]) pairs,
+      (_, [(_, consumer), (_, forced)]) <- waiting renamed,
       toLazyText consumer == toLazyText unmade -> do
         (entry, direct, borrowed) <- continuation state name (fmap snd token) forced (map snd taken) object
         keeping <- readSTRef (holders state)

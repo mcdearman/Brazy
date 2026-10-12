@@ -17,6 +17,9 @@ import Syntax.Position (Position)
 
 data Instance solve loeb layout stage scope = Instance
   { startPosition :: !Position,
+    -- | Whether it is asked for in a @deriving@ clause, where nothing says
+    -- what it requires.
+    clause :: !Bool,
     definition :: !(InstanceDefinition2 solve loeb layout stage scope),
     prerequisites :: loeb (Inferred Core.Prerequisites stage scope)
   }
@@ -35,30 +38,33 @@ instance (Functor solve, Functor loeb) => Shift0.Functor (Instance solve loeb la
   map = Shift.mapDefault
 
 instance (Functor solve, Functor loeb) => Shift.Functor (Instance solve loeb layout stage) where
-  map category Instance {startPosition, definition, prerequisites} =
+  map category Instance {startPosition, clause, definition, prerequisites} =
     Instance
       { startPosition,
+        clause,
         definition = Shift.map category definition,
         prerequisites = Shift.map category <$> prerequisites
       }
 
 instance Traversable2 (Instance solve) where
-  traverse2 (Morph f) Instance {startPosition, definition, prerequisites} =
+  traverse2 (Morph f) Instance {startPosition, clause, definition, prerequisites} =
     instancex <$> traverse2 (Morph f) definition <*> getCompose (f prerequisites)
     where
       instancex definition prerequisites =
-        Instance {startPosition, definition, prerequisites}
+        Instance {startPosition, clause, definition, prerequisites}
 
 instance (solve ~ Identity, loeb ~ Identity) => Connect (Instance solve loeb) where
-  connect Instance {startPosition, definition, prerequisites} =
+  connect Instance {startPosition, clause, definition, prerequisites} =
     Instance
       { startPosition,
+        clause,
         definition = connect definition,
         prerequisites
       }
-  seperate Instance {startPosition, definition, prerequisites} =
+  seperate Instance {startPosition, clause, definition, prerequisites} =
     Instance
       { startPosition,
+        clause,
         definition = seperate definition,
         prerequisites
       }

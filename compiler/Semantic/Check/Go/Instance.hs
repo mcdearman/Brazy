@@ -13,6 +13,7 @@ import qualified Semantic.Check.Go.InstanceDefinition2 as InstanceDefinition2
 import Semantic.Layout (Group)
 import Semantic.Stage (Check, Resolve)
 import Semantic.Tree.Combinators.Inferred (Inferred (Solved))
+import qualified Semantic.Tree.Combinators.Inferred as Inferred (get)
 import Semantic.Tree.Instance (Instance (..))
 import qualified Semantic.Tree.Instance as Semantic (Instance (..))
 import Semantic.Tree.InstanceDefinition2 (Annotation (..), Header (..), InstanceDefinition2 (..))
@@ -27,9 +28,10 @@ check ::
   (declarations (ST s) -> Context s scope) ->
   Instance Identity Identity Group Resolve scope ->
   Instance solve (Topological.Formula declarations s) Group Check scope
-check key solve reflection information Instance {startPosition, definition} =
+check key solve reflection information Instance {startPosition, clause, definition} =
   Instance
     { startPosition,
+      clause,
       definition =
         let reflection' declarations = case reflection declarations of
               Instance {definition} -> definition
@@ -41,13 +43,13 @@ check key solve reflection information Instance {startPosition, definition} =
               let Instance {definition} = reflection declarations
               case definition of
                 annotation ::: _ -> do
-                  Header {prerequisites, equated} <- case annotation of
+                  Header {needed, equated} <- case annotation of
                     Standard header -> header
                     DerivedInstance header -> header
                   pure $
                     Solved
                       Core.Constraints.Prerequisites
-                        { required = Core.Constraints.simplify prerequisites,
+                        { required = Inferred.get needed,
                           equated = fmap (\(index, typex) -> (index, Core.Type.simplify typex)) equated
                         }
           }
@@ -56,6 +58,6 @@ check key solve reflection information Instance {startPosition, definition} =
 solve ::
   Instance (Unify.Solve s) Identity Group Check scope ->
   Unify.Solve s (Instance Identity Identity Group Check scope)
-solve Semantic.Instance {startPosition, definition, prerequisites} = do
+solve Semantic.Instance {startPosition, clause, definition, prerequisites} = do
   definition <- InstanceDefinition2.solve definition
-  pure Instance {startPosition, definition, prerequisites}
+  pure Instance {startPosition, clause, definition, prerequisites}

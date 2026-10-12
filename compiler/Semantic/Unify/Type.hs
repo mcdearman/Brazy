@@ -14,6 +14,7 @@ import Core.Tree.Type (TypeF (..), (#))
 import qualified Core.Tree.Type as Simple (Type)
 import Core.Type.Functor (shiftLogical)
 import Data.Foldable (for_, toList, traverse_)
+import qualified Data.Kind
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.STRef (STRef, newSTRef, readSTRef, writeSTRef)
@@ -51,12 +52,17 @@ import Prelude hiding (Functor, head, map)
 
 type Type s scope = TypeF (Logical s scope) scope
 
+-- The kinds of these two are written out, as they are in the file that
+-- stands for this module to the modules it is defined together with: Hazy
+-- does not read that file, and cannot work the kinds out round the circle.
+type Logical :: Data.Kind.Type -> Environment -> Data.Kind.Type
 data Logical s scopes where
   Box :: !(STRef s (Box s scopes)) -> Logical s scopes
   -- |
   -- Bring a type from a higher scope into current scope
   Shift :: !(Logical s scopes) -> Logical s (scope ':+ scopes)
 
+type Box :: Data.Kind.Type -> Environment -> Data.Kind.Type
 data Box s scope
   = Unsolved
       { kind :: !(Type s scope),
@@ -722,7 +728,7 @@ constrainWith context_ position classx_ term_ arguments_ = constrainWith context
     plainly context@Context {typeEnvironment} (Type2.Index classx) (Constructor index) arguments
       | TypeBinding {classInstances} <- typeEnvironment Type.Table.! classx,
         Just instancex <- Map.lookup index classInstances = do
-          Instance.Prerequisites {required = dependencies, equated = fixed} <- instancex
+          Instance.Prerequisites {required = dependencies, equated = fixed} <- TypeBinding.prerequisites instancex
           -- What the instance requires its type to be given, it is given.
           for_ fixed $ \(index, typex) -> case drop index arguments of
             argument : _ -> unify context position argument (substituteType (Vector.fromList arguments) typex)
@@ -739,7 +745,7 @@ constrainWith context_ position classx_ term_ arguments_ = constrainWith context
     plainly context@Context {typeEnvironment} classx (Constructor (Type2.Index index)) arguments
       | TypeBinding {dataInstances} <- typeEnvironment Type.Table.! index,
         Just instancex <- Map.lookup classx dataInstances = do
-          Instance.Prerequisites {required = dependencies, equated = fixed} <- instancex
+          Instance.Prerequisites {required = dependencies, equated = fixed} <- TypeBinding.prerequisites instancex
           -- What the instance requires its type to be given, it is given.
           for_ fixed $ \(index, typex) -> case drop index arguments of
             argument : _ -> unify context position argument (substituteType (Vector.fromList arguments) typex)

@@ -1,5 +1,6 @@
 module Semantic.Tree.InstanceDefinition2 where
 
+import qualified Core.Tree.Constraints as Core (Constraints)
 import Data.Functor.Classes (Show1, showsPrec1)
 import Data.Functor.Compose (getCompose)
 import Data.Functor.Identity (Identity (..))
@@ -13,6 +14,7 @@ import Semantic.Scope (Environment ((:+)), Local)
 import qualified Semantic.Shift as Shift
 import qualified Semantic.Shift0 as Shift0
 import Semantic.Stage (Stage)
+import Semantic.Tree.Combinators.Inferred (Inferred)
 import Semantic.Tree.Constraints (Constraints)
 import Semantic.Tree.InstanceDefinition (InstanceDefinition)
 import Semantic.Tree.MethodConcrete (Auto, Manual, Origin)
@@ -88,6 +90,10 @@ data Header stage scope = Header
     -- instance is checked: see 'Core.Prerequisites'. Before that they are
     -- among what is required.
     equated :: !(Strict.Vector (Int, Semantic.Type Position stage (Local ':+ scope))),
+    -- | What the instance requires with evidence, once it is checked. For
+    -- most instances this is what was written. For one from a @deriving@
+    -- clause nothing was written, and it is worked out.
+    needed :: !(Inferred Core.Constraints stage scope),
     -- | Whether what is required was not written, but is the class of each
     -- parameter it can be asked of: an instance from a @deriving@ clause.
     lenient :: !Bool
@@ -98,10 +104,11 @@ instance Shift0.Functor (Header stage) where
   map = Shift.mapDefault
 
 instance Shift.Functor (Header stage) where
-  map category Header {parameters, prerequisites, equated, lenient} =
+  map category Header {parameters, prerequisites, equated, needed, lenient} =
     Header
       { parameters = Shift.map category <$> parameters,
         prerequisites = Shift.map category prerequisites,
+        needed = Shift.map category needed,
         equated = fmap (\(index, typex) -> (index, Shift.map (Shift.Over category) typex)) equated,
         lenient
       }
