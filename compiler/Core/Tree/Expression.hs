@@ -125,6 +125,11 @@ data Expression scope
     Dictionary
       { evidence :: !(Evidence scope)
       }
+  | -- | What an action gives when it is run: an action whose state is its
+    -- own, so that running it is not seen from outside.
+    Run
+      { imperative :: !(Expression scope)
+      }
   | -- | A value of a type with a @forall@ of its own, for a constructor to
     -- hold. If the type requires something, the value is a function of the
     -- evidence for it, as a definition of such a type is.
@@ -210,6 +215,10 @@ instance Substitute.Functor Expression where
     Generalized {definition} ->
       Generalized
         { definition = Substitute.map category definition
+        }
+    Run {imperative} ->
+      Run
+        { imperative = Substitute.map category imperative
         }
 
 monoVariable :: Term.Index scope -> Expression scope
@@ -871,6 +880,8 @@ simplifyWith expression [] = case expression of
   Semantic.String {string} ->
     foldr (cons . Character) nil (StringLiteral.unpack string)
   Semantic.Do {dox} -> simplify dox
+  Semantic.RunST {imperative} -> Run {imperative = simplify imperative}
+  Semantic.RunSTAlone {} -> error "runST with no action is checked away"
   Semantic.Generalized {expression = Known TypeLambdaOver {parameters, constraints, result}} ->
     Generalized
       { definition =

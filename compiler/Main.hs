@@ -99,6 +99,7 @@ import System.IO.Unsafe (unsafeInterleaveIO, unsafePerformIO)
 import Status (Status)
 import qualified Status (finished, progress, start, status, warning)
 import Verbose (runVerbose)
+import qualified Verbose (Debug)
 import Prelude hiding (Show (show))
 import qualified Prelude
 
@@ -164,6 +165,9 @@ stage1 verbose = case verbose of
   Debug -> runVerbose . traverse parse
   Normal -> pure . runIdentity . traverse parse
   where
+    -- It is used both ways, so its type is said: Hazy gives a definition
+    -- with no type written a type that requires nothing.
+    parse :: (Verbose.Debug verbose) => Loaded -> verbose (Syntax.Module Position)
     parse Root {extensions, name, contents} = Parser.parse extensions Module.parse name contents
     parse Inner {extensions, path, name, contents} =
       Syntax.assumeName path

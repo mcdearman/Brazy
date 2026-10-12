@@ -29,6 +29,13 @@ newtype Const a b = Const
   { getConst :: a
   }
 
+instance Functor (Const a) where
+  fmap _ (Const a) = Const a
+
+instance (Monoid a) => Applicative (Const a) where
+  pure _ = Const mempty
+  Const a <*> Const b = Const (a <> b)
+
 newtype WrappedMonad m a = WrapMonad
   { unwrapMonad :: m a
   }

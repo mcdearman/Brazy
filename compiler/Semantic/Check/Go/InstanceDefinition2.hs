@@ -285,6 +285,16 @@ checkMethod Method {context, position, base, self, extra} source index scheme Ge
         category = Substitute Shift.Shift typeReplacements evidenceReplacements
     pure $ Generated $ Solved $ Substitute.map category defaultx
 
+-- |
+-- A method of an instance, as it is checked: inside the type variables of
+-- the method's own type. Where it was written, the type variables in scope
+-- were the instance's parameters, and those are what its types still mean:
+-- the method's own variables come between, and it has no names for them.
+inside :: MethodConcrete origin Group Resolve scope -> MethodConcrete origin Group Resolve (Local ':+ scope)
+inside = \case
+  Definition definition -> Definition (shift definition)
+  generated@Generated {} -> shift generated
+
 checkBody ::
   (Monad solve) =>
   Position ->
@@ -368,7 +378,7 @@ checkBody position key Solve {solve} reflection information lookup members =
                   self,
                   extra
                 }
-        members <- Strict.Vector.izipWithM (checkMethod arguments source) methods (shift <$> members)
+        members <- Strict.Vector.izipWithM (checkMethod arguments source) methods (inside <$> members)
         members <- solve $ sequence members
         pure $ do
           members <- members

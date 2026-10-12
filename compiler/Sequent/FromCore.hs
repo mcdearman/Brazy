@@ -629,6 +629,9 @@ evaluate context expression consumer = case expression of
   Core.Newtype {argument} -> evaluate context argument consumer
   Core.Dictionary {evidence} -> generateEvidence context evidence $ \dictionary ->
     pure $ Cut dictionary consumer
+  -- An action is a function of nothing, and what it gives may be yet to be
+  -- evaluated.
+  Core.Run {imperative} -> evaluate context imperative (Apply [] (Force consumer))
   Core.Generalized {definition = definition@TypeLambdaOver {constraints, result}} -> case constraints of
     None -> evaluate (Context.evidenceBindings Vector.empty context) result consumer
     Constraints {} -> do

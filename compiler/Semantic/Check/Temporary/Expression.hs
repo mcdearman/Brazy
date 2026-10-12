@@ -22,7 +22,7 @@ import qualified Data.Strict.Vector2 as Strict (Vector2)
 import Data.Traversable (for)
 import qualified Data.Vector.Strict as Strict (Vector)
 import qualified Data.Vector.Strict as Strict.Vector
-import Error (mismatchedConstructorArguments, unsupportedFeatureRunST)
+import Error (badRunSTCall, mismatchedConstructorArguments)
 import qualified Semantic.Check.ConstructorInstance as ConstructorInstance
 import Semantic.Check.Context (Context (..))
 import Semantic.Check.DataInstance (DataInstance (DataInstance))
@@ -62,6 +62,7 @@ import qualified Semantic.Check.TermBinding as TermBinding (TermBinding (..), Ty
 import qualified Semantic.Check.TypeAnnotation as Annotation
 import qualified Semantic.Check.TypeBinding as TypeBinding
 import qualified Semantic.Index.Constructor as Constructor
+import qualified Semantic.Index.Local as Local (Index (Local))
 import qualified Semantic.Index.Table.Term as Term ((!))
 import qualified Semantic.Index.Table.Type as Type
 import qualified Semantic.Index.Term as Term.Index (Index)
@@ -71,6 +72,7 @@ import Semantic.Scope (Environment (..))
 import qualified Semantic.Scope as Scope
 import Semantic.Stage (Check, Resolve)
 import Semantic.Shift (shift)
+import qualified Semantic.Shift0 as Shift0
 import qualified Semantic.Tree.CallHead as Head (CallHead (..))
 import Semantic.Tree.Combinators.Inferred (Inferred (Solved))
 import qualified Semantic.Tree.Declarations as Proper.Declarations
@@ -165,6 +167,10 @@ data Expression s scope
   | Do
       { startPosition :: !Position,
         dox :: !(Do s scope)
+      }
+  | RunST
+      { startPosition :: !Position,
+        imperative :: !(Expression s scope)
       }
   | -- | An expression of a type with a @forall@ of its own, for a
     -- constructor to hold.
@@ -285,18 +291,22 @@ holding
              in Call (Call CallHead {callHead = apply} (foldl Call made (reverse before))) final
           _ -> foldl Call made arguments
       else pure Nothing
-    where
-      applying = \case
-        TermBinding.Rigid
-          ForallOver
-            { parameters,
-              constraints = None,
-              result =
-                Core.Function
-                  (Core.Function (Core.Variable from) (Core.Variable to))
-                  (Core.Function (Core.Variable from') (Core.Variable to'))
-            } -> length parameters == 2 && from == from' && to == to' && from /= to
-        _ -> Prelude.False
+
+-- |
+-- Whether a function can do nothing but apply: whether its type is
+-- @(a -> b) -> a -> b@ for any @a@ and @b@.
+applying :: TermBinding.Type s scope -> Prelude.Bool
+applying = \case
+  TermBinding.Rigid
+    ForallOver
+      { parameters,
+        constraints = None,
+        result =
+          Core.Function
+            (Core.Function (Core.Variable from) (Core.Variable to))
+            (Core.Function (Core.Variable from') (Core.Variable to'))
+      } -> length parameters == 2 && from == from' && to == to' && from /= to
+  _ -> Prelude.False
 
 check :: Context s scope -> Unify.Type s scope -> Semantic.Expression Group Resolve scope -> ST s (Expression s scope)
 check context typex Semantic.CallHead {callHead} = do
@@ -331,8 +341,25 @@ check context typex Semantic.List {startPosition, items} = do
   Unify.unify context startPosition typex (Core.list inner)
   items <- traverse (check context inner) items
   pure List {startPosition, items}
-check context resultType call@Semantic.Call {function, argument} = do
+check context@Context {termEnvironment} resultType call@Semantic.Call {function, argument} = do
   special <- case call of
+    -- An action given to runST through a function that only applies, as in
+    -- @runST $ do ...@. Running the action is all that is left of it: what
+    -- such a function could evaluate first is the action, and running it
+    -- evaluates that.
+    Semantic.Call
+      { function =
+          Semantic.Call
+            { function = Semantic.CallHead {callHead = Head.Variable {variable}},
+              argument = Semantic.RunSTAlone {startPosition}
+            },
+        argument = imperative
+      } -> do
+        let TermBinding.TermBinding binding = termEnvironment Term.! variable
+        applies <- applying <$> binding
+        if applies
+          then Just <$> check context resultType Semantic.RunST {startPosition, imperative}
+          else badRunSTCall startPosition
     -- A constructor given the last thing it is given through a function
     -- that only applies, as in @C $ x@.
     Semantic.Call
@@ -465,8 +492,23 @@ check context typex Semantic.Annotation {expression = Explicit expression, opera
   (typex', instanciation) <- instanciate context operatorPosition annotation'
   Unify.unify context operatorPosition typex typex'
   pure Annotation {expression, operatorPosition, annotation, instanciation}
-check _ _ Semantic.RunST {startPosition} =
-  unsupportedFeatureRunST startPosition
+-- What is run has to be an action whatever its state is, so that nothing of
+-- the state can be part of what it gives: its type is one with a forall,
+--
+-- > forall s. ST s a
+--
+-- for the type @a@ that is wanted.
+check _ _ Semantic.RunSTAlone {startPosition} = badRunSTCall startPosition
+check context typex Semantic.RunST {startPosition, imperative} = do
+  let state = Core.Variable (Local.Local 0)
+      scheme =
+        ForallOver
+          { parameters = Strict.Vector.singleton Core.typex,
+            constraints = None,
+            result = Core.Constructor Type2.ST # state # Shift0.map Shift0.Shift typex
+          }
+  imperative <- generalize context startPosition scheme imperative
+  pure RunST {startPosition, imperative}
 -- Only the checker makes these.
 check _ _ Semantic.Generalized {} = error "an expression the resolver does not make"
 check context typex Semantic.Negate {startPosition, negative} = do
@@ -552,6 +594,9 @@ solve = \case
   Generalized {expression} -> do
     expression <- expression
     pure Solved.Generalized {expression = Known expression}
+  RunST {startPosition, imperative} -> do
+    imperative <- solve imperative
+    pure Solved.RunST {startPosition, imperative}
   Annotation {expression, operatorPosition, annotation, instanciation} -> do
     expression <- expression
     instanciation <- Unify.solveEvidence operatorPosition instanciation

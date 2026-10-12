@@ -248,6 +248,11 @@ generateImpure context expression = case expression of
   Dictionary {evidence} -> do
     value <- Evidence.generate context evidence
     pure ([], value)
+  -- An action is a function of nothing, and what it gives may be yet to be
+  -- evaluated.
+  Run {imperative} -> do
+    (statements, function) <- generateImpure context imperative
+    pure (statements, force Javascript.Call {function, arguments = []})
   Generalized {definition = definition@TypeLambdaOver {constraints, result}} -> case constraints of
     None -> generateImpure (Context.evidenceBindings Vector.empty context) result
     Constraints {} -> do

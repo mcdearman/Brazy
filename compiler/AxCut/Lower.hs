@@ -86,7 +86,7 @@ focus supply = \case
   Halt -> pure Halt
   Abort -> pure Abort
   LetRec bindings body -> do
-    bindings <- traverse (traverse (inside supply)) bindings
+    bindings <- traverse (\(name, value) -> (,) name <$> inside supply value) bindings
     body <- focus supply body
     pure $ LetRec bindings body
   Primitive primitive arguments consumer ->

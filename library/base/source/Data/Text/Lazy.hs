@@ -110,8 +110,19 @@ where
 
 import Data.Int (Int64)
 import Hazy.Prelude (placeholder)
+import qualified Hazy.Prelude as Strict (Text)
 
 data Text
+
+instance Eq Text
+
+instance Ord Text
+
+instance Show Text
+
+instance Semigroup Text
+
+instance Monoid Text
 
 pack :: String -> Text
 pack = placeholder
@@ -131,10 +142,10 @@ fromChunks = placeholder
 toChunks :: Text -> [Text]
 toChunks = placeholder
 
-toStrict :: Text -> Text
+toStrict :: Text -> Strict.Text
 toStrict = placeholder
 
-fromStrict :: Text -> Text
+fromStrict :: Strict.Text -> Text
 fromStrict = placeholder
 
 foldrChunks :: (Text -> a -> a) -> a -> Text -> a
