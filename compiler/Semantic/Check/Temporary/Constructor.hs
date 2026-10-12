@@ -1,7 +1,9 @@
 module Semantic.Check.Temporary.Constructor where
 
 import Control.Monad.ST (ST)
+import Data.Traversable (for)
 import qualified Data.Vector.Strict as Strict (Vector)
+import qualified Data.Vector.Strict as Strict.Vector (empty)
 import Semantic.Check.Context (Context (..))
 import Semantic.Check.Temporary.Entry (Entry)
 import qualified Semantic.Check.Temporary.Entry as Entry
@@ -21,6 +23,7 @@ data Shape s scope
   = Ordinary
   | Indexed
       { variables :: !Int,
+        equated :: !(Strict.Vector (Type s scope, Type s scope)),
         arguments :: !(Strict.Vector (Type s scope))
       }
 
@@ -46,7 +49,12 @@ solve context Constructor {position, name, syntax, entries, shape} = do
   entries <- traverse (Entry.solve context) entries
   shape <- case shape of
     Ordinary -> pure Solved.Ordinary
-    Indexed {variables, arguments} -> do
+    Indexed {variables, equated, arguments} -> do
       arguments <- traverse (Type.solve context) arguments
-      pure Solved.Indexed {variables, arguments}
+      equated <- for equated $ \(left, right) -> do
+        left <- Type.solve context left
+        right <- Type.solve context right
+        pure (left, right)
+      -- What it requires is put in by whoever knows it.
+      pure Solved.Indexed {variables, asked = Strict.Vector.empty, equated, arguments}
   pure Solved.Constructor {position, name, syntax, entries, shape}

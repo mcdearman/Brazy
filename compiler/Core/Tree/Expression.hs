@@ -120,6 +120,10 @@ data Expression scope
         argument :: !(Expression scope),
         direction :: !Direction
       }
+  | -- | Evidence as a value, for a constructor to hold.
+    Dictionary
+      { evidence :: !(Evidence scope)
+      }
   deriving (Show)
 
 data Direction = Construct | Destruct
@@ -191,6 +195,10 @@ instance Substitute.Functor Expression where
         { constructor = Substitute.map category constructor,
           argument = Substitute.map category argument,
           direction
+        }
+    Dictionary {evidence} ->
+      Dictionary
+        { evidence = Substitute.map category evidence
         }
 
 monoVariable :: Term.Index scope -> Expression scope
@@ -624,6 +632,16 @@ simplifyConstructorExact constructor Semantic.ConstructorInfo {entries} argument
       arguments,
       constructorInfo = ConstructorInfo {entries}
     }
+-- What the constructor requires of its types is held after everything
+-- else, as evidence.
+simplifyConstructorExact constructor Semantic.ConstructorInfo.Holding {entries, held} arguments =
+  Constructor
+    { constructor,
+      arguments = arguments <> fmap dictionary held,
+      constructorInfo = ConstructorInfo {entries}
+    }
+  where
+    dictionary evidence = Dictionary {evidence}
 simplifyConstructorExact constructor Semantic.ConstructorInfo.Newtype arguments =
   Newtype
     { constructor,

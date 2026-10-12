@@ -245,6 +245,9 @@ generateImpure context expression = case expression of
     (context, declarations) <- Declarations.generate context declarations
     (extra, result) <- generateImpure context letBody
     pure (declarations ++ extra, result)
+  Dictionary {evidence} -> do
+    value <- Evidence.generate context evidence
+    pure ([], value)
   _ -> generatePure context expression
 generatePure context expression = case expression of
   Constructor {constructor, arguments, constructorInfo} -> do

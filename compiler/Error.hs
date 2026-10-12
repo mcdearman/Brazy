@@ -89,6 +89,7 @@ module Error
     orphanInstance,
     improperBindingGroup,
     cannotDerive,
+    derivingRequired,
     partialSynonym,
     derivingNonEnum,
     unsupportedFeatureRunST,
@@ -583,6 +584,11 @@ cannotDerive position instancex = errorAt CannotDerive position $ mconcat builde
       [ fromString "cannot derive: ",
         instancex
       ]
+
+derivingRequired :: Position -> a
+derivingRequired position =
+  errorAt CannotDerive position $
+    fromString "cannot derive an instance for a type with a constructor that requires something of its types"
 
 partialSynonym :: Position -> a
 partialSynonym position = errorAt PartialSynonym position $ fromString "not enough type synonym arguments"

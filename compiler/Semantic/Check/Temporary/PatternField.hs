@@ -9,6 +9,7 @@ import Semantic.Check.TermBinding (TermBinding)
 import qualified Semantic.Index.Table.Term as Term
 import Semantic.Index.Term (Bound)
 import Semantic.Scope (Environment ((:+)))
+import qualified Semantic.Scope as Scope (Pattern)
 import Semantic.Stage (Check, Resolve)
 import qualified Semantic.Tree.PatternField as Semantic
 import qualified Semantic.Tree.PatternField as Solved
@@ -28,6 +29,9 @@ learnt Field {patternx} = Pattern.learnt patternx
 
 owned :: Field s scope -> [(Position, Unify.Type s scope)]
 owned Field {patternx} = Pattern.owned patternx
+
+given :: (Bound -> Bound) -> Field s scope -> [Equality s (Scope.Pattern ':+ scope)]
+given path Field {patternx} = Pattern.given path patternx
 
 augmentField :: Field s scopes -> Term.Bound (TermBinding s) (scope ':+ scopes)
 augmentField Field {patternx} = Pattern.augmentPattern patternx

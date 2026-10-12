@@ -2,7 +2,7 @@ module Semantic.Check.Simple.Constructor where
 
 import Control.Monad.ST (ST)
 import Core.Substitute (substituteType)
-import Core.Tree.Constructor (Constructor (..), Shape (..))
+import Core.Tree.Constructor (Asked (..), Constructor (..), Shape (..))
 import qualified Core.Tree.Type as Core
 import qualified Data.Vector.Strict as Strict
 import Data.Traversable (for)
@@ -12,6 +12,7 @@ import Data.Foldable (toList)
 import Data.Maybe (catMaybes, isNothing)
 import Semantic.Check.ConstructorInstance (ConstructorInstance (ConstructorInstance), Use (..))
 import qualified Semantic.Index.Local as Local
+import qualified Semantic.Index.Type2 as Type2
 import qualified Semantic.Check.ConstructorInstance as ConstructorInstance
 import qualified Semantic.Check.EntryInstance as EntryInstance
 import Semantic.Scope (Environment ((:+)), Local)
@@ -30,14 +31,17 @@ instanciate use position brand fresh Constructor {name, syntax, entries, shape} 
   Ordinary ->
     pure
       ConstructorInstance
-        { brand,
+        { position,
+          brand,
           name,
           syntax,
           entries = EntryInstance.instanciate position fresh <$> entries,
           result = fresh,
           indexed = False,
           refined = False <$ fresh,
-          hidden = []
+          hidden = [],
+          asked = [],
+          equated = []
         }
   -- To make a value, the constructor's own variables are unknowns, of
   -- kinds that are not known either: what they are is found from how the
@@ -49,7 +53,7 @@ instanciate use position brand fresh Constructor {name, syntax, entries, shape} 
   -- of the type is for a constructor declared the other way. Any other
   -- stands for a type that nothing outside the match can say, and stands
   -- for itself alone.
-  Indexed {variables, arguments} -> do
+  Indexed {variables, asked, equated, arguments} -> do
     let places = settling [] (toList arguments)
         settled = catMaybes places
         open index = case use of
@@ -61,14 +65,23 @@ instanciate use position brand fresh Constructor {name, syntax, entries, shape} 
       if open index then Unify.fresh kind else Unify.skolem kind
     pure
       ConstructorInstance
-        { brand,
+        { position,
+          brand,
           name,
           syntax,
           entries = EntryInstance.instanciate position own <$> entries,
           result = substituteType (Strict.Vector.toLazy own) <$> arguments,
           indexed = True,
           refined = Strict.Vector.fromList (isNothing <$> places),
-          hidden = [typex | (index, typex) <- zip [0 ..] (toList own), not (open index)]
+          hidden = [typex | (index, typex) <- zip [0 ..] (toList own), not (open index)],
+          asked =
+            [ (Type2.unlocal classx, substituteType (Strict.Vector.toLazy own) subject)
+            | Asked {classx, subject} <- toList asked
+            ],
+          equated =
+            [ (substituteType (Strict.Vector.toLazy own) left, substituteType (Strict.Vector.toLazy own) right)
+            | (left, right) <- toList equated
+            ]
         }
   where
     -- For each argument of the type that is made, the variable it settles,

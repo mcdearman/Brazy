@@ -1,19 +1,25 @@
 module Semantic.Check.Temporary.Pattern where
 
-import Control.Monad (foldM, when)
+import Control.Monad (foldM, when, zipWithM)
 import Control.Monad.ST (ST)
 import qualified Core.Builtin as Builtin
+import qualified Core.Tree.Class as Class (Class (..))
+import qualified Core.Tree.Constraint as Constraint (ConstraintF (..))
+import qualified Core.Tree.Evidence as Evidence (EvidenceF (..))
 import qualified Core.Tree.Forall as Core (mono)
 import qualified Core.Tree.Type as Core (char, list, typex)
-import Core.Tree.TypeDeclaration (assumeData)
+import Core.Tree.TypeDeclaration (assumeClass, assumeData)
 import Core.Type.Functor (shiftLogical)
 import Data.Foldable (for_, toList, traverse_)
 import Data.Map (Map)
+import qualified Data.Map as Map (empty)
 import qualified Data.Strict.Vector1 as Strict (Vector1)
 import qualified Data.Vector.Strict as Strict (Vector)
+import Data.Traversable (for)
 import qualified Data.Vector.Strict as Strict.Vector
 import Error
-  ( mismatchedConstructorArguments,
+  ( derivingRequired,
+    mismatchedConstructorArguments,
     refiningBinding,
   )
 import qualified Semantic.Check.ConstructorInstance as ConstructorInstance
@@ -33,14 +39,17 @@ import qualified Semantic.Index.Table.Term as Term
 import qualified Semantic.Index.Table.Type as Type
 import Semantic.Index.Term (Bound)
 import qualified Semantic.Index.Term as Bound (Bound (..))
+import qualified Semantic.Index.Term as Index (Index (Pattern))
 import qualified Semantic.Index.Type2 as Type2
 import Semantic.Scope (Environment (..))
 import qualified Semantic.Scope as Scope
+import Semantic.Shift (shift)
 import Semantic.Stage (Check, Resolve)
 import Semantic.Tree.Combinators.Inferred (Inferred (..))
 import qualified Semantic.Tree.Pattern as Semantic
 import qualified Semantic.Tree.Pattern as Solved
-import Semantic.Check.LocalBinding (Equality, shiftEquality)
+import qualified Semantic.Tree.PatternField as Padding (Field (..))
+import Semantic.Check.LocalBinding (Equality (Given), shiftEquality)
 import qualified Semantic.Unify as Unify
 import Syntax.Position (Position)
 import Syntax.StringLiteral (StringLiteral)
@@ -60,6 +69,11 @@ data Pattern s scope
         equalities :: ![Equality s scope],
         -- | The types the constructor hides.
         hidden :: ![Unify.Type s scope],
+        -- | What is known to hold of types where the match is made: what
+        -- the constructor requires of its types.
+        required :: ![Required s scope],
+        -- | How many things the constructor holds evidence for.
+        evident :: !Int,
         constructorPosition :: !Position,
         names :: !(Map Variable Position),
         irrefutable :: !Prelude.Bool,
@@ -75,10 +89,17 @@ data Pattern s scope
         equalities :: ![Equality s scope],
         -- | The types the constructor hides.
         hidden :: ![Unify.Type s scope],
+        -- | What is known to hold of types where the match is made: what
+        -- the constructor requires of its types.
+        required :: ![Required s scope],
+        -- | How many things the constructor holds evidence for.
+        evident :: !Int,
         constructorPosition :: !Position,
         names :: !(Map Variable Position),
         irrefutable :: !Prelude.Bool,
         constructor :: !(Constructor.Index scope),
+        -- | How many things the constructor holds, apart from evidence.
+        arity :: !Int,
         fields :: !(Strict.Vector (Field s scope)),
         single :: !Prelude.Bool,
         constructorInfo :: !(ConstructorInfo s scope)
@@ -123,6 +144,62 @@ data Pattern s scope
         items :: !(Strict.Vector1 (Pattern s scope))
       }
 
+-- |
+-- Something that holds of a type inside a match on a constructor that
+-- requires it. The value that is matched holds the evidence: this says
+-- which of the things it holds evidence for, counted from the first, and
+-- then which class that one's class requires in turn, and so on, if it is
+-- not that one itself.
+data Required s scope = Required
+  { classx :: !(Type2.Index scope),
+    subject :: !(Unify.Type s scope),
+    slot :: !Int,
+    supers :: ![Int]
+  }
+
+-- |
+-- Everything that holds when some things are required: each of them, and
+-- whatever the class of each requires of the same type.
+requirements :: Context s scope -> [(Type2.Index scope, Unify.Type s scope)] -> ST s [Required s scope]
+requirements Context {typeEnvironment} asked = concat <$> zipWithM top [0 ..] asked
+  where
+    top slot (classx, subject) = entailed slot [] classx subject
+    entailed slot supers classx subject = do
+      Class.Class {constraints} <- do
+        let get index = assumeClass <$> TypeBinding.content (typeEnvironment Type.! index)
+        Builtin.index pure get classx
+      children <- for (zip [0 ..] $ toList constraints) $ \(index, Constraint.Constraint {classx = super, arguments}) ->
+        if null arguments
+          then entailed slot (supers ++ [index]) super subject
+          else pure []
+      pure (Required {classx, subject, slot, supers} : concat children)
+
+-- |
+-- What holds inside a match on a pattern, with the evidence named as the
+-- match names it: after what the pattern says its constructor holds comes
+-- the evidence the constructor holds.
+given :: (Bound -> Bound) -> Pattern s scope -> [Equality s (Scope.Pattern ':+ scope)]
+given path = \case
+  Wildcard {} -> []
+  Constructor {required, patterns} ->
+    evidence path (length patterns) required
+      ++ concat (zipWith (\index -> given (path . Bound.Select index)) [0 ..] (toList patterns))
+  Record {required, fields} ->
+    evidence path (length fields) required
+      ++ concat (zipWith (\index -> Field.given (path . Bound.Select index)) [0 ..] (toList fields))
+  List {items} -> concat (zipWith (\index -> given (path . Bound.Select index)) [0 ..] (toList items))
+  Integer {} -> []
+  Float {} -> []
+  Character {} -> []
+  String {} -> []
+  where
+    evidence :: (Bound -> Bound) -> Int -> [Required s scope] -> [Equality s (Scope.Pattern ':+ scope)]
+    evidence path base required = do
+      Required {classx, subject, slot, supers} <- required
+      let held = Evidence.Held {term = Index.Pattern (path (Bound.Select (base + slot) Bound.At))}
+          super base index = Evidence.Super {base, index}
+      pure (Given (shift classx) (shiftLogical subject) (foldl super held supers))
+
 (!) :: Pattern s scope -> Bound -> Unify.Type s scope
 patternx ! Bound.At = typex patternx
 patternx ! Bound.Select index bound = case patternx of
@@ -141,7 +218,7 @@ augment patternx Context {termEnvironment, localEnvironment, typeEnvironment, eq
     { termEnvironment = Term.Pattern (augmentPattern patternx) termEnvironment,
       localEnvironment = Local.Pattern localEnvironment,
       typeEnvironment = Type.Pattern typeEnvironment,
-      equalities = shiftEquality <$> (learnt patternx ++ equalities)
+      equalities = fmap shiftEquality (learnt patternx ++ equalities) ++ given id patternx
     }
 
 -- |
@@ -238,7 +315,8 @@ matched context position datax typeIndex instancex typex
       let refine found (given, made) = do
             more <- Unify.refine (knowing found context) position given made
             pure (more ++ found)
-      foldM refine [] [(given, made) | (Prelude.True, given, made) <- places]
+      -- And the types the constructor says are the same, are.
+      foldM refine [] ([(given, made) | (Prelude.True, given, made) <- places] ++ ConstructorInstance.equated instancex)
   | otherwise = [] <$ Unify.unify context position typex (DataInstance.constructed instancex typeIndex)
 
 -- |
@@ -252,9 +330,12 @@ within ::
   Type2.Index scope ->
   ConstructorInstance.ConstructorInstance s scope ->
   ST s (Context s scope)
-within context position datax typeIndex instancex = do
-  equalities <- matched context position datax typeIndex instancex (DataInstance.baseType datax typeIndex)
-  pure (knowing equalities context)
+within context position datax typeIndex instancex
+  -- The evidence a value holds would have to be named by what is derived.
+  | not (null (ConstructorInstance.asked instancex)) = derivingRequired position
+  | otherwise = do
+      equalities <- matched context position datax typeIndex instancex (DataInstance.baseType datax typeIndex)
+      pure (knowing equalities context)
 
 -- |
 -- A context in which more is known of type variables.
@@ -283,8 +364,10 @@ check context@Context {typeEnvironment} typex = \case
             entries = ConstructorInstance.types instancex
             constructorInfo = ConstructorInstance.info instancex
             hidden = ConstructorInstance.hidden instancex
+            evident = length (ConstructorInstance.asked instancex)
         ConstructorInstance.mark context instancex
         equalities <- matched context constructorPosition datax typeIndex instancex typex
+        required <- requirements context (ConstructorInstance.asked instancex)
         when (length entries /= length patterns) $ mismatchedConstructorArguments constructorPosition
         patterns <- sequence $ Strict.Vector.zipWith (check (knowing equalities context)) entries patterns
         pure $
@@ -292,6 +375,8 @@ check context@Context {typeEnvironment} typex = \case
             { typex,
               equalities,
               hidden,
+              required,
+              evident,
               constructorPosition,
               names,
               irrefutable,
@@ -318,15 +403,20 @@ check context@Context {typeEnvironment} typex = \case
           entries = ConstructorInstance.types instancex
           constructorInfo = ConstructorInstance.info instancex
           hidden = ConstructorInstance.hidden instancex
+          evident = length (ConstructorInstance.asked instancex)
           lookup index = entries Strict.Vector.! index
       ConstructorInstance.mark context instancex
       equalities <- matched context constructorPosition datax typeIndex instancex typex
+      required <- requirements context (ConstructorInstance.asked instancex)
       fields <- traverse (Field.check (knowing equalities context) lookup) fields
       pure $
         Record
           { typex,
             equalities,
             hidden,
+            required,
+            evident,
+            arity = length entries,
             names,
             constructorPosition,
             irrefutable,
@@ -355,6 +445,12 @@ check context@Context {typeEnvironment} typex = \case
     equal <- Unify.constrain context startPosition Type2.Eq typex
     pure Float {typex, names, irrefutable, startPosition, float, evidence, equal}
 
+-- |
+-- A match on something a value holds that the pattern does not say: the
+-- evidence, which is held after everything else.
+unnamed :: Int -> Padding.Field Check scope
+unnamed index = Padding.Field index Solved.Wildcard {names = Map.empty}
+
 solve :: Pattern s scope -> Unify.Solve s (Solved.Pattern Check scope)
 solve = \case
   Wildcard {names} -> pure Solved.Wildcard {names}
@@ -365,9 +461,13 @@ solve = \case
       constructorPosition,
       constructor,
       patterns,
+      evident,
       constructorInfo
     } -> do
       patterns <- traverse solve patterns
+      -- The evidence the value holds is matched as well, so that it has a
+      -- name: it comes after everything the pattern says.
+      patterns <- pure (patterns <> Strict.Vector.replicate evident Solved.Wildcard {names = Map.empty})
       constructorInfo <- ConstructorInfo.solve constructorInfo
       pure
         Solved.Constructor
@@ -386,9 +486,12 @@ solve = \case
       constructor,
       fields,
       single,
+      evident,
+      arity,
       constructorInfo
     } -> do
       fields <- traverse Field.solve fields
+      fields <- pure $ fields <> Strict.Vector.fromList (unnamed <$> [arity .. arity + evident - 1])
       constructorInfo <- ConstructorInfo.solve constructorInfo
       pure
         Solved.Record

@@ -79,9 +79,9 @@ check context@Context {typeEnvironment} typex Semantic.Constructor {constructorP
     let instancex = constructors Strict.Vector.! constructorIndex
         base = DataInstance.constructed instancex typeIndex
         typex' = ConstructorInstance.function instancex base
-        constructorInfo = ConstructorInstance.info instancex
     ConstructorInstance.mark context instancex
     Unify.unify context constructorPosition typex typex'
+    constructorInfo <- ConstructorInstance.built context instancex
     pure Constructor {constructorPosition, constructor, constructorInfo}
 check
   context@Context {typeEnvironment}

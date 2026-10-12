@@ -9,6 +9,7 @@ import qualified Data.Vector as Vector
 import Data.Void (Void)
 import qualified Semantic.Index.Evidence as Evidence
 import qualified Semantic.Index.Evidence0 as Evidence0
+import qualified Semantic.Index.Term as Term
 import qualified Semantic.Scope as Scope
 import qualified Semantic.Shift as Shift
 import Semantic.Shift0 (shift)
@@ -26,6 +27,12 @@ data EvidenceF logical scope
       { base :: !(EvidenceF logical scope),
         index :: !Int
       }
+  | -- | Evidence that a value holds, and that a match on the value's
+    -- constructor names: a constructor that requires something of its types
+    -- keeps the evidence for it with what it holds.
+    Held
+      { term :: !(Term.Index scope)
+      }
 
 instance (Show logical) => Show (EvidenceF logical scope) where
   showsPrec d = \case
@@ -42,6 +49,7 @@ instance (Show logical) => Show (EvidenceF logical scope) where
         . showString ", index = "
         . showsPrec 11 index
         . showString " }"
+    Held {term} -> showParen (d > 10) $ showString "Held " . showsPrec 11 term
 
 instance (Show logical) => Scope.Show (EvidenceF logical) where
   showsPrec = showsPrec
@@ -62,6 +70,7 @@ instance Shift.Functor (EvidenceF logical) where
         { base = Shift.map category base,
           index
         }
+    Held {term} -> Held {term = Shift.map category term}
 
 instance (logical ~ Void) => Substitute.Functor (EvidenceF logical) where
   map category = Substitute.mapEvidence (Substitute.anyType category)
@@ -99,6 +108,7 @@ instance Substitute.EvidenceFunctor EvidenceF where
         { base = Substitute.mapEvidence category base,
           index
         }
+    Held {term} -> Held {term = Shift.map (Substitute.general category) term}
 
 instance Core.Functor EvidenceF where
   map f = \case
@@ -113,3 +123,4 @@ instance Core.Functor EvidenceF where
         { base = Core.map f base,
           index
         }
+    Held {term} -> Held {term}
