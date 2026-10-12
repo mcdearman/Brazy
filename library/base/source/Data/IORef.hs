@@ -10,9 +10,11 @@ where
 
 import Hazy.Prelude (placeholder)
 import System.IO (IO)
-import Prelude (error)
+import Prelude (Eq, error)
 
 data IORef a
+
+instance Eq (IORef a)
 
 newIORef :: a -> IO (IORef a)
 newIORef = placeholder

@@ -299,6 +299,30 @@ equatedHidden Context {equalities} logical =
     [] -> Nothing
 
 -- |
+-- Take in what a match tells of a type its own constructor hides, if this
+-- is that, and say whether it was. Such a type is only ever met inside the
+-- match, and there it is what the match says it is: it need not be kept
+-- as something known for the branch, and is made to be that type for good.
+-- The type may then be part of the types that are seen from outside, as
+-- the type it is.
+--
+-- > Reach :: Collected s scopes -> Collected s (scope ':+ scopes)
+--
+-- matched against a @Collected s (a ':+ b)@ hides nothing: its @scopes@ is
+-- @b@.
+absorb :: [Type s scope] -> Local.Equality s scope -> ST s Bool
+absorb own = \case
+  Local.Hidden logical@(Box reference) typex
+    | any (is logical) own -> do
+        writeSTRef reference $! Solved typex
+        pure True
+  _ -> pure False
+  where
+    is logical = \case
+      Logical other -> same logical other
+      _ -> False
+
+-- |
 -- Whether two unknowns are the one unknown.
 same :: Logical s scope -> Logical s scope -> Bool
 same (Box reference) (Box reference') = reference == reference'
@@ -638,11 +662,20 @@ constrainWith context_ position classx_ term_ arguments_ = constrainWith context
       Type s scope ->
       [Type s scope] ->
       ST s (Evidence s scope)
-    constrainWith context@Context {equalities} classx term arguments = do
-      -- What a match that this is inside says holds, holds.
+    constrainWith context@Context {equalities, localEnvironment} classx term arguments = do
+      -- What a match that this is inside says holds, holds. So does what
+      -- is known of a type variable that a match says is this type: what
+      -- was required of the variable is had of the type.
       let whole = foldl (#) term arguments
           known = [(subject, evidence) | Local.Given classx' subject evidence <- equalities, classx' == classx]
-      given <- firstM (\(subject, _) -> compared False subject whole) known
+          told =
+            [ (foldl (#) typex (logicalType <$> toList arguments'), logicalEvidence evidence)
+            | Local.Equality index typex <- equalities,
+              Local.Rigid {constraints} <- [localEnvironment Local.Table.! index],
+              Just candidates <- [Map.lookup classx constraints],
+              Local.Constraint {arguments = arguments', evidence} <- candidates
+            ]
+      given <- firstM (\(subject, _) -> compared False subject whole) (known ++ told)
       case given of
         Just (_, evidence) -> pure evidence
         Nothing ->
@@ -704,7 +737,8 @@ constrainWith context_ position classx_ term_ arguments_ = constrainWith context
         candidates@(_ : _) <-
           [ ([logicalType argument | argument <- toList arguments'], evidence)
           | Local.Constraint {arguments = arguments', evidence} <- known,
-            length arguments' == length arguments
+            length arguments' == length arguments,
+            not (everywhere (toList arguments'))
           ] = do
           -- What is known of the variable may be known for several lists of
           -- arguments. The one that is meant is the one these arguments can
@@ -722,6 +756,22 @@ constrainWith context_ position classx_ term_ arguments_ = constrainWith context
                 (first : _, _) -> use first
                 ([], [only]) -> use only
                 _ -> quit
+    -- What is known of the variable may be known of it given every type
+    -- that has the class: then it is known of it given this type, if this
+    -- type has the class, and the evidence is made of the evidence for
+    -- that.
+    plainly context@Context {localEnvironment} classx (Variable index) arguments@(_ : _)
+      | Local.Rigid {constraints} <- localEnvironment Local.Table.! index,
+        Just known <- Map.lookup classx constraints,
+        (before, evidence) : _ <-
+          [ ([logicalType argument | argument <- init (toList arguments')], evidence)
+          | Local.Constraint {arguments = arguments', evidence} <- known,
+            length arguments' == length arguments,
+            everywhere (toList arguments')
+          ] = do
+          traverse_ (uncurry $ unify context position) (zip (init arguments) before)
+          given <- constrainWith context classx (last arguments) []
+          pure Evidence.Applied {function = logicalEvidence evidence, arguments = [given]}
     -- A variable that is known here to be some type is asked as that type.
     plainly context classx (Variable index) arguments
       | Just known <- equated context index = constrainWith context classx known arguments
@@ -771,6 +821,16 @@ constrainWith context_ position classx_ term_ arguments_ = constrainWith context
       where
         constrain classx typex = constrainWith context classx typex []
         quit = abort position (Constrain context_ classx_ term_ arguments_)
+
+-- |
+-- Whether what a class is required of is something given every type: the
+-- last thing it is given is the type that stands for them all.
+everywhere :: [Simple.Type scope] -> Bool
+everywhere = \case
+  [] -> False
+  arguments -> case last arguments of
+    Constructor Type2.Every -> True
+    _ -> False
 
 reconstrain ::
   Context s scope ->
@@ -920,6 +980,10 @@ unshift ::
   ST s (Type s scopes)
 unshift context position typex = unshift typex
   where
+    -- Its type is said, because it takes apart an unknown that says what
+    -- scope it is of: Hazy has to know what is taken apart before it looks
+    -- at how.
+    unshift :: Type s (scope ':+ scopes) -> ST s (Type s scopes)
     unshift = \case
       Logical (Box reference) ->
         readSTRef reference >>= \case

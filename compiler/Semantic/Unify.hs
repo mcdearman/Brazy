@@ -15,6 +15,7 @@ module Semantic.Unify
     mark,
     unify,
     refine,
+    absorb,
     lowerEquality,
     alike,
     constrain,
@@ -73,6 +74,7 @@ import {-# SOURCE #-} Semantic.Unify.Type
     mark,
     unify,
     refine,
+    absorb,
     lowerEquality,
     alike,
   )

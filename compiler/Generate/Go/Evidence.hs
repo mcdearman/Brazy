@@ -6,6 +6,7 @@ import Core.Tree.Instanciation (InstanciationF (Instanciation))
 import qualified Core.Tree.Instanciation as Instanciation
 import Data.Foldable (toList)
 import qualified Data.Map as Map
+import qualified Data.Vector as Vector
 import qualified Generate.Binding.Evidence as Evidence (Binding (..))
 import qualified Generate.Binding.Term as Term
 import qualified Generate.Binding.Type as Type
@@ -290,6 +291,18 @@ generate context = \case
         }
   -- What a value holds is like anything else it holds: not evaluated yet,
   -- unless what named it says it is.
+  Abstract {count, body} -> do
+    names <- Vector.replicateM count (Context.fresh context)
+    body <- generate (Context.evidenceBindings names context) body
+    pure
+      Javascript.Arrow
+        { parameters = toList names,
+          body = [Javascript.Return body]
+        }
+  Applied {function, arguments} -> do
+    function <- generate context function
+    arguments <- traverse (generate context) arguments
+    pure Javascript.Call {function, arguments}
   Held {term} -> do
     let Term.Binding {name, strict} = context !- term
     name <- Context.symbol context name

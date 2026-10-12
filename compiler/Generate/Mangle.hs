@@ -110,6 +110,7 @@ mangleInstance run brand name target = Text.Lazy.toStrict $ Builder.toLazyText b
       Type2.Read -> fromString "Hazy.Read"
       Type2.Lazy -> fromString "Hazy.Lazy"
       Type2.Strict -> fromString "Hazy.Strict"
+      Type2.Every -> fromString "Hazy.Every"
     qualify :: FullyQualifiedConstructorIdentifier -> Builder
     qualify (Local :.. root :.=. name) =
       mconcat

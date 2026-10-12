@@ -113,6 +113,12 @@ class (Canonical variable) => CanonicalWrapped variable where
 
 instance CanonicalWrapped VariableIdentifier where
   parseWrapped = try $ betweenTicks parse
+  printWrapped name =
+    mconcat
+      [ Printer.token "`",
+        print name,
+        Printer.token "`"
+      ]
 
 instance CanonicalWrapped VariableSymbol where
   parseWrapped = try $ betweenParens parse
@@ -154,6 +160,12 @@ instance Canonical QualifiedVariableIdentifier where
 
 instance CanonicalWrapped QualifiedVariableIdentifier where
   parseWrapped = try $ betweenTicks parse
+  printWrapped name =
+    mconcat
+      [ Printer.token "`",
+        print name,
+        Printer.token "`"
+      ]
 
 data QualifiedVariableSymbol = !Qualifiers :-: !VariableSymbol
   deriving (Show, Eq, Ord)
@@ -188,6 +200,12 @@ instance Canonical QualifiedConstructorIdentifier where
 
 instance CanonicalWrapped QualifiedConstructorIdentifier where
   parseWrapped = try $ betweenTicks parse
+  printWrapped name =
+    mconcat
+      [ Printer.token "`",
+        print name,
+        Printer.token "`"
+      ]
 
 data QualifiedConstructorSymbol = !Qualifiers :=: !ConstructorSymbol
   deriving (Show, Eq, Ord)
@@ -198,9 +216,16 @@ instance Canonical QualifiedConstructorSymbol where
   parse = satifyBind Strings.qualifiedConstructorSymbol $ \case
     Lex _ (qualifiers Lexer.:=: name) lexer _ -> Parse (qualifiers :=: name) lexer
     _ -> Fail
+  print (qualifiers :=: name) = Printer.token' (qualifiers Lexer.:=: name)
 
 instance CanonicalWrapped QualifiedConstructorSymbol where
   parseWrapped = try $ betweenParens parse
+  printWrapped name =
+    mconcat
+      [ Printer.token "(",
+        print name,
+        Printer.token ")"
+      ]
 
 data Variable
   = VariableIdentifier !VariableIdentifier

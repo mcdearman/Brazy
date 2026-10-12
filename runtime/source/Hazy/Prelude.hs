@@ -6,6 +6,7 @@ module Hazy.Prelude
   ( module Hazy.Prelude,
     module Hazy.PreludeList,
     module Hazy.PreludeText,
+    Every,
     module Hazy.PreludeIO,
     module Hazy.PreludeChar,
     module Hazy.PreludeRatio,

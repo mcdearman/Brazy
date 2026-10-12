@@ -842,16 +842,41 @@ The order to take it in:
       (test `derive-context`). The kinds of `Logical` and `Box` in
       `Semantic.Unify.Type` are written out, as the kind of `Expression`
       was, for the same reason
-- [ ] `Show` for something inside a type variable. The check now stops at
-      the instances written by hand for the trees that are given a functor,
-      such as `Show (InstanceDefinition2 solve loeb ...)` from
-      `(Show1 solve, Show1 loeb)`. They show a `loeb (solve x)` with
-      `showsPrec1`, which wants `Show (solve x)`, and GHC has that from
-      `Show1 solve`: in its library `Show1 f` requires `Show (f a)` for
-      every `a` that has `Show`. Hazy has no way to say a class requires
-      something for every type. Either it learns to, for this, or those
-      instances are written with `liftShowsPrec` twice over, or the trees
-      do without `Show`
+- [x] `Show` for something inside a type variable. The instances written
+      by hand for the trees that are given a functor show a `loeb x` from
+      `Show1 loeb` alone, and GHC lets them: in its library `Show1 f`
+      requires `Show (f a)` for every `a` that has `Show`. A class can now
+      require that of its parameter, in that one shape: it is written as
+      the class of the parameter given `Every`, a type that is built in
+      and stands for every type, `class (Show (f Every)) => Show1 f`. An
+      instance of such a class has, for that, evidence that is a function
+      of the evidence for the type (`Abstract`, in `Core.Tree.Evidence`),
+      found for a type nothing is known of but that it has the class.
+      Where the class is known of a type variable, the class it requires
+      is had of the variable given any type that has it, by giving that
+      function the evidence (`Applied`) (test `class-every`)
+- [x] The last of what the check stopped on (test `gadt-beside`):
+  - What is required of a type variable is had of the type a match says
+    the variable is: `IsResolve stage` is `IsResolve Check` once a
+    constructor says the stage is `Check`
+  - Two patterns side by side that each tell something of the same type.
+    What one pattern tells is known for the ones after it
+  - A type a constructor's index settles is not hidden. What a match
+    tells of the types its own constructor hides is so wherever they are,
+    and they are made to be that for good, so that what is made of them
+    can be seen from outside the match
+  - In the source: the kinds of two more types of the unifier written
+    out; three definitions in `Semantic.Shift` that picked a shift by
+    looking at a shift, whose type depends on which, done where they are
+    used; a type for the local `unshift` of the unifier; a record that is
+    built and not updated where two records have a field of one name; and
+    two methods for printing a name that the compiler had never needed
+- [x] **Hazy checks its own source.** `hazy -XStableImports --check
+      compiler` goes through all 464 modules in about seven seconds, and
+      the tests on every system now run it
+- [ ] Compile it. Nothing has yet been made of the compiler's source but
+      checked trees: the back ends have to take it, and the library it is
+      checked against is still mostly placeholders
 - [x] The type variables of an instance, in its methods. A type written
       after an expression in a method meant the wrong variable, or none:
       the method's own type variables were put outside the instance's where

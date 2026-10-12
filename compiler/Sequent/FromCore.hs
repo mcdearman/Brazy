@@ -500,6 +500,20 @@ generateEvidence context = \case
       pure $ Primitive (Field index) [base] (MuTilde (byValue name) body)
   -- What a value holds is like anything else it holds: not evaluated yet,
   -- unless what named it says it is.
+  Evidence.Abstract {count, body} -> \continue -> do
+    names <- Vector.replicateM count (fresh context)
+    result <- fresh context
+    body <- generateEvidence (Context.evidenceBindings names context) body $ \evidence ->
+      pure $ Cut evidence (Covariable result)
+    name <- fresh context
+    rest <- continue (Variable name)
+    pure $ Cut (Function (byValue <$> toList names) result body) (MuTilde (byValue name) rest)
+  Evidence.Applied {function, arguments} -> \continue ->
+    generateEvidence context function $ \function ->
+      generateEvidences context arguments $ \arguments -> do
+        name <- fresh context
+        body <- continue (Variable name)
+        pure $ Cut function (Apply arguments (MuTilde (byValue name) body))
   Evidence.Held {term} -> \continue -> do
     let (producer, strict) = variable context term
     if strict

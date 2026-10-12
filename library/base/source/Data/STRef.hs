@@ -13,6 +13,8 @@ import Hazy.Prelude (placeholder)
 
 data STRef s a
 
+instance Eq (STRef s a)
+
 newSTRef :: a -> ST s (STRef s a)
 newSTRef = placeholder
 

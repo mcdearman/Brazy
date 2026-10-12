@@ -1,0 +1,4 @@
+(Tree 'x' (Just 3),Tree True [4],Tree () (Two 5 6))
+Just [True](Just [True])[Just 'x'][Just 'x']
+Wrap (Just 3)Wrap [4]
+Two 'a' 'b''i'
