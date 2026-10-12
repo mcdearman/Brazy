@@ -1,4 +1,4 @@
-module Semantic.Check.Go.Scheme (Scheme (..), augment) where
+module Semantic.Check.Go.Scheme (Scheme (..), augment, augmentNeeding) where
 
 import Control.Monad.ST (ST)
 import qualified Core.Tree.Constraints as Simple.Constraints
@@ -15,6 +15,24 @@ import Semantic.Tree.TypePattern (TypePattern (TypePattern))
 import qualified Semantic.Tree.TypePattern as TypePattern
 import Syntax.Position (Position)
 import Prelude hiding (head)
+
+-- |
+-- The same, when what is required is not something that was written.
+augmentNeeding ::
+  Position ->
+  Strict.Vector (TypePattern Position Check scope) ->
+  Simple.Constraints.Constraints scope ->
+  Mask ->
+  Context s scope ->
+  ST s (Context s (Local ':+ scope))
+augmentNeeding position parameters =
+  augmentNamed
+    name
+    position
+    (TypePattern.typex' <$> parameters)
+  where
+    name i = case parameters Strict.Vector.! i of
+      TypePattern {name} -> name
 
 augment ::
   Position ->

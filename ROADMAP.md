@@ -829,13 +829,29 @@ The order to take it in:
       type are a functor and a monad by instances that are built in, as the
       one that makes them a semigroup is, since both the classes and the
       type are (test `function-monad`). `ExitCode` can be thrown
-- [ ] What a `deriving` clause requires. The check now stops at
-      `Semantic.Tree.Declarations`, whose `deriving (Show)` needs
-      `Show1 solve` and more: what the derived instance requires is not the
-      class of each parameter, which is all Hazy asks, but whatever showing
-      what the type holds requires, worked out from the instances for what
-      it holds. GHC works that out. Hazy has to as well, or the clause has
-      to be written out with what it requires
+- [x] What a `deriving` clause requires. It is not the class of each
+      parameter, which is what Hazy asked, but whatever it takes to have the
+      class for everything the type holds. That is worked out now
+      (`requirements`, in `Semantic.Check.Go.InstanceDefinition2`): where
+      the type holds something of a parameter's type, given anything or
+      nothing, the class is required of that; where it holds another type,
+      what the instance for that type requires is gone through in turn, or
+      what that type holds is, if its instance comes from a clause too,
+      since two types may each hold the other. A header keeps what the
+      instance requires as it is worked out, apart from what was written
+      (test `derive-context`). The kinds of `Logical` and `Box` in
+      `Semantic.Unify.Type` are written out, as the kind of `Expression`
+      was, for the same reason
+- [ ] `Show` for something inside a type variable. The check now stops at
+      the instances written by hand for the trees that are given a functor,
+      such as `Show (InstanceDefinition2 solve loeb ...)` from
+      `(Show1 solve, Show1 loeb)`. They show a `loeb (solve x)` with
+      `showsPrec1`, which wants `Show (solve x)`, and GHC has that from
+      `Show1 solve`: in its library `Show1 f` requires `Show (f a)` for
+      every `a` that has `Show`. Hazy has no way to say a class requires
+      something for every type. Either it learns to, for this, or those
+      instances are written with `liftShowsPrec` twice over, or the trees
+      do without `Show`
 - [x] The type variables of an instance, in its methods. A type written
       after an expression in a method meant the wrong variable, or none:
       the method's own type variables were put outside the instance's where

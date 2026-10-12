@@ -59,9 +59,22 @@ data TypeBinding s scope = TypeBinding
     content :: ST s (Simple.TypeDeclaration scope),
     extra :: ST s (Unify.Solve s (Simple.TypeDeclarationExtra scope)),
     synonym :: ST s (Type.Synonym Check scope),
-    dataInstances :: Map (Type2.Index scope) (ST s (Prerequisites scope)),
-    classInstances :: Map (Type2.Index scope) (ST s (Prerequisites scope))
+    dataInstances :: Map (Type2.Index scope) (Requires s scope),
+    classInstances :: Map (Type2.Index scope) (Requires s scope)
   }
+
+-- |
+-- An instance, as much of it as finding one needs: what it requires, and
+-- whether that was written or is worked out, as it is for an instance that
+-- a @deriving@ clause asks for.
+data Requires s scope = Requires
+  { clause :: !Bool,
+    prerequisites :: ST s (Prerequisites scope)
+  }
+
+mapRequires :: Shift.Category scope scope' -> Requires s scope -> Requires s scope'
+mapRequires category Requires {clause, prerequisites} =
+  Requires {clause, prerequisites = fmap (Shift.map category) prerequisites}
 
 instance Shift0.Functor (TypeBinding s) where
   map category0 TypeBinding {label, kind, synonym, extra, content, dataInstances, classInstances} =
@@ -71,8 +84,8 @@ instance Shift0.Functor (TypeBinding s) where
         synonym = fmap (Shift.map category) synonym,
         content = fmap (Shift.map category) content,
         extra = fmap (Shift.map category) <$> extra,
-        dataInstances = Map.map (fmap $ Shift.map category) $ Shift.mapInstances category dataInstances,
-        classInstances = Map.map (fmap $ Shift.map category) $ Shift.mapInstances category classInstances
+        dataInstances = Map.map (mapRequires category) $ Shift.mapInstances category dataInstances,
+        classInstances = Map.map (mapRequires category) $ Shift.mapInstances category classInstances
       }
     where
       category = Shift.lift category0
@@ -127,9 +140,12 @@ global
         classInstances = bindInstance <$> classInstances
       }
     where
-      bindInstance :: (Monad m) => Semantic.Instance solve m layout Check scope -> m (Prerequisites scope)
-      bindInstance Semantic.Instance {prerequisites} =
-        prerequisites >>= \case Solved prerequisites -> pure prerequisites
+      bindInstance :: Semantic.Instance solve (ST s) layout Check scope -> Requires s scope
+      bindInstance Semantic.Instance {clause, prerequisites} =
+        Requires
+          { clause,
+            prerequisites = prerequisites >>= \case Solved prerequisites -> pure prerequisites
+          }
 
 local ::
   ( Type.Link Locality.Local ->
@@ -177,9 +193,12 @@ local
         classInstances = bindInstance <$> classInstances
       }
     where
-      bindInstance :: (Monad m) => Semantic.Instance solve m layout Check scope -> m (Prerequisites scope)
-      bindInstance Semantic.Instance {prerequisites} =
-        prerequisites >>= \case Solved prerequisites -> pure prerequisites
+      bindInstance :: Semantic.Instance solve (ST s) layout Check scope -> Requires s scope
+      bindInstance Semantic.Instance {clause, prerequisites} =
+        Requires
+          { clause,
+            prerequisites = prerequisites >>= \case Solved prerequisites -> pure prerequisites
+          }
 
 group :: Position -> Label.TypeBinding scope -> Unify.Type s scopes -> TypeBinding s (GroupType ':+ scopes)
 group position Label.TypeBinding {name, constructorNames} binding =

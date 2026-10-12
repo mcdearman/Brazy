@@ -1,0 +1,7 @@
+(Wrap (Just 'x'),True)
+(Tagged 'x',True)
+Both (Pair (Just 'x') "yz") (Just ('a','b'))
+(Cons 'x' (Cons 'y' Nil),True)
+Even 'a' (Odd 'b' Zero)
+(Box Red,True,[Red,Green],Box [Just 1])
+(Identity 'x')Just [1]

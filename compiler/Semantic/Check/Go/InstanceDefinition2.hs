@@ -7,7 +7,13 @@ import Core.Substitute (Category (Substitute), logicalType)
 import qualified Core.Substitute as Substitute
 import qualified Core.Tree.Class as Core.Class
 import Core.Tree.ClassExtra (ClassExtra (..))
-import qualified Core.Tree.Constraint as Core (ConstraintF (..))
+import Core.Substitute (substituteType)
+import qualified Core.Tree.Constraint as Core (Constraint, ConstraintF (..))
+import qualified Core.Tree.Constraint as Core.Constraint (argument)
+import qualified Core.Tree.Constraints as Core.Constraints (ConstraintsF (..), Prerequisites (..), simplify)
+import qualified Core.Tree.Constructor as Core.Constructor (Constructor (..), Shape (..))
+import qualified Core.Tree.Data as Core.Data (Data (..))
+import qualified Core.Tree.Entry as Core.Entry (Entry (..))
 import qualified Core.Tree.Data as Core (Data)
 import qualified Core.Tree.Evidence as Core (Evidence)
 import qualified Core.Tree.Evidence as Core.Evidence
@@ -24,6 +30,8 @@ import qualified Core.Tree.TypeDeclarationExtra as Extra
 import qualified Core.Tree.TypeLambda as Core (TypeLambdaOver (..))
 import Core.Type.Functor (shiftLogical)
 import Data.Foldable (toList)
+import qualified Data.Map as Map
+import Data.STRef (modifySTRef, newSTRef, readSTRef)
 import Data.Functor.Identity (Identity (..))
 import Data.Traversable (for)
 import qualified Data.Vector as Vector
@@ -66,6 +74,7 @@ import Semantic.Stage (Check, Resolve)
 import Semantic.Tree.Combinators.Implicit (Implicit (Resolve))
 import qualified Semantic.Tree.Combinators.Implicit as Implicit
 import Semantic.Tree.Combinators.Inferred (Inferred (Solved))
+import qualified Semantic.Tree.Combinators.Inferred as Inferred (get)
 import qualified Semantic.Tree.Constraint as Semantic (Constraint (..))
 import Semantic.Tree.Constraints (Constraints (Constraints, None))
 import Semantic.Tree.InstanceDefinition (InstanceDefinition (..))
@@ -74,6 +83,7 @@ import Semantic.Tree.MethodConcrete (Auto, MethodConcrete (..))
 import qualified Semantic.Tree.Type as Type (Synonym (..), Type (..))
 import Semantic.Tree.TypePattern (TypePattern (..))
 import qualified Semantic.Unify as Unify
+import qualified Semantic.Unify.Builtin as Unify.Builtin (constrain)
 import Syntax.Position (Position)
 import qualified Syntax.Printer as Printer
 import qualified Syntax.Tree.Type as Syntax.Type
@@ -100,6 +110,127 @@ keyHead = \case
   Class {head2} -> head2
 
 -- |
+-- What an instance of a class for a type requires, when nothing says: when
+-- it is asked for in a @deriving@ clause. It requires what it takes to have
+-- the class for everything the type holds. That is found by going through
+-- what the type holds: where that is a type variable of the type's, given
+-- anything or nothing, the class is required of it; where it is another
+-- type, what the instance for that type requires is gone through in turn;
+-- and the type itself is passed over, since what it requires is what is
+-- being found.
+--
+-- Nothing is found for a type with a constructor that says what type it
+-- makes, whose types are in variables of its own.
+requirements ::
+  forall s scope.
+  Context s (Local ':+ scope) ->
+  Type2.Index scope ->
+  Type2.Index scope ->
+  Core.Data.Data scope ->
+  ST s (Maybe [Core.Constraint scope])
+requirements Context {typeEnvironment} derived self datax
+  | indexed datax = pure Nothing
+  | otherwise = do
+      found <- within [(shift derived, shift self)] (shift derived) (held datax)
+      pure (Just (foldr once [] found))
+  where
+    indexed :: Core.Data.Data scope' -> Bool
+    indexed Core.Data.Data {constructors} = any telling constructors
+    telling Core.Constructor.Constructor {shape} = case shape of
+      Core.Constructor.Ordinary -> False
+      Core.Constructor.Indexed {} -> True
+    -- The types of what a type holds, in the type's own parameters.
+    held :: Core.Data.Data scope' -> [Core.Type (Local ':+ scope')]
+    held Core.Data.Data {constructors} =
+      [ Shift.map (Shift.Unshift $ error "a type variable that nothing binds") result
+      | Core.Constructor.Constructor {entries} <- toList constructors,
+        Core.Entry.Entry {entry = Core.ForallOver {parameters, constraints = Core.Constraints.None, result}} <- toList entries,
+        null parameters
+      ]
+    once constraint rest
+      | any (same constraint) rest = rest
+      | otherwise = constraint : rest
+    same
+      Core.Constraint {classx = class1, head = head1, arguments = arguments1}
+      Core.Constraint {classx = class2, head = head2, arguments = arguments2} =
+        class1 == class2 && head1 == head2 && arguments1 == arguments2
+    spine typex arguments = case typex of
+      Core.Type.Call function argument -> spine function (argument : arguments)
+      _ -> (typex, arguments)
+    -- What having a class for each of some types requires. The pairs of a
+    -- class and a type are the instances that are being worked out: one of
+    -- them requires nothing more than is found already.
+    within ::
+      [(Type2.Index (Local ':+ scope), Type2.Index (Local ':+ scope))] ->
+      Type2.Index (Local ':+ scope) ->
+      [Core.Type (Local ':+ scope)] ->
+      ST s [Core.Constraint scope]
+    within visiting asked types = concat <$> traverse (simplify visiting asked) types
+    simplify ::
+      [(Type2.Index (Local ':+ scope), Type2.Index (Local ':+ scope))] ->
+      Type2.Index (Local ':+ scope) ->
+      Core.Type (Local ':+ scope) ->
+      ST s [Core.Constraint scope]
+    simplify visiting asked typex = case spine typex [] of
+      (Core.Type.Variable (Local.Local head), arguments) ->
+        pure [Core.Constraint {classx = Type2.unlocal asked, head, arguments = Strict.Vector.fromList arguments}]
+      (Core.Type.Constructor head, arguments)
+        | (asked, head) `elem` visiting -> pure []
+        | Just TypeBinding.Requires {clause, prerequisites} <- instanceOf asked head -> do
+            -- An instance that a deriving clause asks for requires what
+            -- its own type holds requires, and that is gone through here
+            -- rather than asked of it: two types may each hold the other.
+            other <- if clause then content head else pure Nothing
+            case other of
+              Just datax | not (indexed datax) ->
+                within
+                  ((asked, head) : visiting)
+                  asked
+                  (substituteType (Vector.fromList arguments) <$> held datax)
+              _ -> do
+                Core.Constraints.Prerequisites {required} <- prerequisites
+                case required of
+                  Core.Constraints.None -> pure []
+                  Core.Constraints.Constraints wanted ->
+                    fmap concat $ for (toList wanted) $ \constraint@Core.Constraint {classx = next} ->
+                      simplify
+                        visiting
+                        next
+                        (substituteType (Vector.fromList arguments) (Core.Constraint.argument constraint))
+        | otherwise -> do
+            -- An instance that is built in says what it requires by asking
+            -- for it.
+            collected <- newSTRef []
+            let unused :: Unify.Evidence s (Local ':+ scope)
+                unused =
+                  Core.Evidence.Variable
+                    { variable = Evidence.Direct asked head,
+                      instanciation = Core.Instanciation.Mono
+                    }
+                record next typex = do
+                  more <- simplify visiting next typex
+                  modifySTRef collected (++ more)
+                  pure unused
+            _ <- Unify.Builtin.constrain (pure unused) record asked head arguments
+            readSTRef collected
+      _ -> pure []
+    -- The declaration of a type, if it is one a program declares.
+    content :: Type2.Index (Local ':+ scope) -> ST s (Maybe (Core.Data.Data (Local ':+ scope)))
+    content = \case
+      Type2.Index index -> Just . assumeData <$> TypeBinding.content (typeEnvironment Table.Type.! index)
+      _ -> pure Nothing
+    instanceOf asked head
+      | Type2.Index index <- asked,
+        TypeBinding.TypeBinding {classInstances} <- typeEnvironment Table.Type.! index,
+        Just instancex <- Map.lookup head classInstances =
+          Just instancex
+      | Type2.Index index <- head,
+        TypeBinding.TypeBinding {dataInstances} <- typeEnvironment Table.Type.! index,
+        Just instancex <- Map.lookup asked dataInstances =
+          Just instancex
+      | otherwise = Nothing
+
+-- |
 -- A parameter that an instance requires to be a type, by its place, with
 -- the type. The parameter may be on either side.
 equality ::
@@ -123,6 +254,7 @@ checkHeader position key information Header {parameters, prerequisites, lenient}
     { cycle = cyclicalTypeChecking position,
       run = \declarations -> do
         let context = information declarations
+            outer = context
             fresh TypePattern {name, position} = do
               level <- Unify.fresh Core.universe
               typex <- Unify.fresh (Core.typeWith level)
@@ -180,7 +312,30 @@ checkHeader position key information Header {parameters, prerequisites, lenient}
         equated <- Unify.runSolve $ for equated $ \(index, typex) -> do
           typex <- Unsolved.Type.solve context typex
           pure (index, typex)
-        pure Header {parameters, prerequisites, equated = Strict.Vector.fromList equated, lenient}
+        -- An instance from a deriving clause requires what it takes to
+        -- have the class for everything the type holds, if that can be
+        -- found.
+        found <-
+          if lenient
+            then do
+              let Context {typeEnvironment} = outer
+              datax <- do
+                let get index = assumeData <$> TypeBinding.content (typeEnvironment Table.Type.! index)
+                Builtin.index pure get (keyHead key)
+              requirements context (keyIndex key) (keyHead key) datax
+            else pure Nothing
+        let needed = case found of
+              Just [] -> Core.Constraints.None
+              Just constraints -> Core.Constraints.Constraints (Strict.Vector.fromList constraints)
+              Nothing -> Core.Constraints.simplify prerequisites
+        pure
+          Header
+            { parameters,
+              prerequisites,
+              equated = Strict.Vector.fromList equated,
+              needed = Solved needed,
+              lenient
+            }
     }
 
 data Source origin scope where
@@ -312,9 +467,10 @@ checkBody position key Solve {solve} reflection information lookup members =
         let context@Context {typeEnvironment} = information declarations
             index = keyIndex key
             head = keyHead key
-        Header {parameters, prerequisites, equated} <- case reflection declarations of
+        Header {parameters, needed, equated} <- case reflection declarations of
           Standard header ::: _ -> header
           DerivedInstance header ::: _ -> header
+        let prerequisites = Inferred.get needed
         Core.Class.Class {constraints, methods} <- do
           let get index = assumeClass <$> TypeBinding.content (typeEnvironment Table.Type.! index)
           Builtin.index pure get index
@@ -333,15 +489,15 @@ checkBody position key Solve {solve} reflection information lookup members =
                   Data {index1, head1} -> Evidence.Direct index1 (Type2.Index head1)
                   Class {index2, head2} -> Evidence.Direct (Type2.Index index2) head2
                 instanciation = case prerequisites of
-                  Semantic.Tree.Constraints.None -> Core.Mono
-                  Constraints prerequisites -> Core.Instanciation $ Strict.Vector.fromList $ do
+                  Core.Constraints.None -> Core.Mono
+                  Core.Constraints.Constraints prerequisites -> Core.Instanciation $ Strict.Vector.fromList $ do
                     i <- [0 .. length prerequisites - 1]
                     pure
                       Core.Evidence.Variable
                         { variable = Evidence.Index (Evidence0.Assumed i),
                           instanciation = Core.Instanciation.Mono
                         }
-        context <- Scheme.augment position parameters prerequisites Mask.Runtime context
+        context <- Scheme.augmentNeeding position parameters prerequisites Mask.Runtime context
         -- Inside the instance, a parameter that is required to be a type
         -- is known to be it.
         context <- pure $ case context of
