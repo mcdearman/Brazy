@@ -91,9 +91,83 @@ data Builtin a = Builtin
     readRatio ::
       a
   }
-  deriving (Functor, Foldable, Traversable)
 
 {-# UnorderedRecords Builtin #-}
+
+-- These three instances are written out. Hazy does not derive them, and
+-- this is the one type in the compiler that asked for them.
+instance Functor Builtin where
+  fmap f = build . map f . toList
+
+instance Foldable Builtin where
+  foldr f z = foldr f z . every
+
+instance Traversable Builtin where
+  traverse f builtin = build <$> traverse f (every builtin)
+
+-- |
+-- Every name, in the order they are declared.
+every :: Builtin a -> [a]
+every
+  Builtin
+    { abort, numInt, numInteger, numRatio, enumBool, enumChar, enumInt, enumInteger, enumOrdering,
+      enumUnit, enumRatio, boundedBool, boundedChar, boundedInt, boundedOrdering, boundedTuple,
+      eqBool, eqChar, eqTuple, eqInt, eqInteger, eqList, eqNonEmpty, eqOrdering, eqRatio, ordChar,
+      ordTuple, ordInt, ordInteger, ordBool, ordList, ordNonEmpty, ordOrdering, ordRatio, realInt,
+      realInteger, realRatio, integralInt, integralInteger, fractionalRatio, functorList,
+      functorNonEmpty, applicativeList, applicativeNonEmpty, monadList, monadNonEmpty,
+      monadFailList, functorST, applicativeST, monadST, functorArrow, applicativeArrow, monadArrow,
+      semigroupArrow, semigroupList, semigroupNonEmpty, semigroupOrdering, semigroupST,
+      semigroupTuple, monoidArrow, monoidList, monoidOrdering, monoidST, monoidTuple, showBool,
+      showOrdering, showChar, showInt, showInteger, showTuple, showList, showNonEmpty, showRatio,
+      readBool, readOrdering, readChar, readInt, readInteger, readTuple, readList, readNonEmpty,
+      readRatio
+    } =
+    [ abort, numInt, numInteger, numRatio, enumBool, enumChar, enumInt, enumInteger, enumOrdering,
+      enumUnit, enumRatio, boundedBool, boundedChar, boundedInt, boundedOrdering, boundedTuple,
+      eqBool, eqChar, eqTuple, eqInt, eqInteger, eqList, eqNonEmpty, eqOrdering, eqRatio, ordChar,
+      ordTuple, ordInt, ordInteger, ordBool, ordList, ordNonEmpty, ordOrdering, ordRatio, realInt,
+      realInteger, realRatio, integralInt, integralInteger, fractionalRatio, functorList,
+      functorNonEmpty, applicativeList, applicativeNonEmpty, monadList, monadNonEmpty,
+      monadFailList, functorST, applicativeST, monadST, functorArrow, applicativeArrow, monadArrow,
+      semigroupArrow, semigroupList, semigroupNonEmpty, semigroupOrdering, semigroupST,
+      semigroupTuple, monoidArrow, monoidList, monoidOrdering, monoidST, monoidTuple, showBool,
+      showOrdering, showChar, showInt, showInteger, showTuple, showList, showNonEmpty, showRatio,
+      readBool, readOrdering, readChar, readInt, readInteger, readTuple, readList, readNonEmpty,
+      readRatio
+    ]
+
+-- |
+-- The names, from a list of every one in the order they are declared.
+build :: [a] -> Builtin a
+build
+  [ abort, numInt, numInteger, numRatio, enumBool, enumChar, enumInt, enumInteger, enumOrdering,
+    enumUnit, enumRatio, boundedBool, boundedChar, boundedInt, boundedOrdering, boundedTuple,
+    eqBool, eqChar, eqTuple, eqInt, eqInteger, eqList, eqNonEmpty, eqOrdering, eqRatio, ordChar,
+    ordTuple, ordInt, ordInteger, ordBool, ordList, ordNonEmpty, ordOrdering, ordRatio, realInt,
+    realInteger, realRatio, integralInt, integralInteger, fractionalRatio, functorList,
+    functorNonEmpty, applicativeList, applicativeNonEmpty, monadList, monadNonEmpty, monadFailList,
+    functorST, applicativeST, monadST, functorArrow, applicativeArrow, monadArrow, semigroupArrow,
+    semigroupList, semigroupNonEmpty, semigroupOrdering, semigroupST, semigroupTuple, monoidArrow,
+    monoidList, monoidOrdering, monoidST, monoidTuple, showBool, showOrdering, showChar, showInt,
+    showInteger, showTuple, showList, showNonEmpty, showRatio, readBool, readOrdering, readChar,
+    readInt, readInteger, readTuple, readList, readNonEmpty, readRatio
+    ] =
+    Builtin
+      { abort, numInt, numInteger, numRatio, enumBool, enumChar, enumInt, enumInteger, enumOrdering,
+        enumUnit, enumRatio, boundedBool, boundedChar, boundedInt, boundedOrdering, boundedTuple,
+        eqBool, eqChar, eqTuple, eqInt, eqInteger, eqList, eqNonEmpty, eqOrdering, eqRatio, ordChar,
+        ordTuple, ordInt, ordInteger, ordBool, ordList, ordNonEmpty, ordOrdering, ordRatio, realInt,
+        realInteger, realRatio, integralInt, integralInteger, fractionalRatio, functorList,
+        functorNonEmpty, applicativeList, applicativeNonEmpty, monadList, monadNonEmpty,
+        monadFailList, functorST, applicativeST, monadST, functorArrow, applicativeArrow,
+        monadArrow, semigroupArrow, semigroupList, semigroupNonEmpty, semigroupOrdering,
+        semigroupST, semigroupTuple, monoidArrow, monoidList, monoidOrdering, monoidST, monoidTuple,
+        showBool, showOrdering, showChar, showInt, showInteger, showTuple, showList, showNonEmpty,
+        showRatio, readBool, readOrdering, readChar, readInt, readInteger, readTuple, readList,
+        readNonEmpty, readRatio
+      }
+build _ = error "not every builtin name"
 
 instance Applicative Builtin where
   pure a = fromList (replicate length a)

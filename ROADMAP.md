@@ -828,8 +828,14 @@ The order to take it in:
       it needs the runtime's help and is a placeholder. Functions from one
       type are a functor and a monad by instances that are built in, as the
       one that makes them a semigroup is, since both the classes and the
-      type are (test `function-monad`). The check now stops at the one
-      `deriving (Functor, Foldable, Traversable)` in the compiler's source
+      type are (test `function-monad`). `ExitCode` can be thrown
+- [ ] What a `deriving` clause requires. The check now stops at
+      `Semantic.Tree.Declarations`, whose `deriving (Show)` needs
+      `Show1 solve` and more: what the derived instance requires is not the
+      class of each parameter, which is all Hazy asks, but whatever showing
+      what the type holds requires, worked out from the instances for what
+      it holds. GHC works that out. Hazy has to as well, or the clause has
+      to be written out with what it requires
 - [x] The type variables of an instance, in its methods. A type written
       after an expression in a method meant the wrong variable, or none:
       the method's own type variables were put outside the instance's where
@@ -849,7 +855,11 @@ The order to take it in:
   - A name for a type that is defined by way of the types the name is used
     in: `Environment` in `AxCut.Machine` is written out where that is so
   - `Functor`, `Foldable` and `Traversable` for a pair, which the library
-    cannot give because both the classes and the type are built in
+    cannot give because both the classes and the type are built in. Two
+    uses were written another way
+  - Derive `Functor`, `Foldable` and `Traversable`. One type derived them,
+    the record of builtin names in `Generate.Mangle.Builtin`, and its
+    instances are now written out
 - [ ] Run the check again after each of these and count what stops it next.
       Each of the items below is a guess until then
 

@@ -1,10 +1,14 @@
 module System.Exit where
 
+import Control.Exception (Exception)
 import Hazy.Prelude (placeholder)
 
 data ExitCode
   = ExitSuccess
   | ExitFailure Int
+  deriving (Eq, Ord, Show)
+
+instance Exception ExitCode
 
 exitWith :: ExitCode -> IO a
 exitWith = placeholder
