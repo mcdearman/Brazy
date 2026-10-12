@@ -13,7 +13,7 @@ import qualified Semantic.Label.Binding.Local as Label
 import qualified Semantic.Index.Local as Local (Index)
 import Semantic.Scope (Environment (..))
 import qualified Semantic.Shift0 as Shift0
-import qualified Semantic.Unify as Unify (Logical, Type)
+import qualified Semantic.Unify as Unify (Evidence, Logical, Type)
 
 type LocalBinding :: Data.Kind.Type -> Environment -> Data.Kind.Type
 data LocalBinding s scope
@@ -62,11 +62,17 @@ instance Shift0.Functor (LocalBinding s) where
 data Equality s scope
   = Equality !(Local.Index scope) !(Unify.Type s scope)
   | Hidden !(Unify.Logical s scope) !(Unify.Type s scope)
+  | -- | Something that is known to hold of a type, with the evidence for
+    -- it: a constructor that was matched on requires it of its types, and
+    -- the value that was matched holds the evidence.
+    Given !(Type2.Index scope) !(Unify.Type s scope) !(Unify.Evidence s scope)
 
 shiftEquality :: Equality s scope -> Equality s (scope' ':+ scope)
 shiftEquality = \case
   Equality index typex -> Equality (Shift0.map Shift0.Shift index) (Core.shiftLogical typex)
   Hidden logical typex -> Hidden (Shift0.map Shift0.Shift logical) (Core.shiftLogical typex)
+  Given classx subject evidence ->
+    Given (Shift0.map Shift0.Shift classx) (Core.shiftLogical subject) (Core.shiftLogical evidence)
 
 data Constraint scope = Constraint
   { arguments :: !(Strict.Vector (Simple.Type scope)),

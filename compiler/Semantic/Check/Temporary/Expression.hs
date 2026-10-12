@@ -187,10 +187,10 @@ check
       let instancex = constructors Strict.Vector.! constructorIndex
           base = DataInstance.constructed instancex typeIndex
           entries = ConstructorInstance.types instancex
-          constructorInfo = ConstructorInstance.info instancex
           lookup index = entries Strict.Vector.! index
       ConstructorInstance.mark context instancex
       Unify.unify context constructorPosition typex base
+      constructorInfo <- ConstructorInstance.built context instancex
       fields <- traverse (Field.check context lookup) fields
       pure $ Record {constructorPosition, constructor, fields, constructorInfo}
 check context typex Semantic.List {startPosition, items} = do

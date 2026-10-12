@@ -355,6 +355,8 @@ lowerEquality = \case
   Local.Equality index typex -> Local.Equality <$> Shift.partialUnshift Nothing index <*> lower typex
   Local.Hidden (Shift logical) typex -> Local.Hidden logical <$> lower typex
   Local.Hidden (Box _) _ -> Nothing
+  -- The evidence is named by the match, and there is no match further out.
+  Local.Given {} -> Nothing
   where
     lower :: Type s (scope' ':+ scope) -> Maybe (Type s scope)
     lower = \case
@@ -629,14 +631,21 @@ constrainWith context_ position classx_ term_ arguments_ = constrainWith context
       Type s scope ->
       [Type s scope] ->
       ST s (Evidence s scope)
-    constrainWith context classx term arguments =
-      hidden term >>= \case
-        -- Of a type that stands for itself alone, only what is known of it
-        -- where this is can be had.
-        Just logical
-          | Just known <- equatedHidden context logical -> constrainWith context classx known arguments
-          | otherwise -> abort position (Constrain context_ classx_ term_ arguments_)
-        Nothing -> plainly context classx term arguments
+    constrainWith context@Context {equalities} classx term arguments = do
+      -- What a match that this is inside says holds, holds.
+      let whole = foldl (#) term arguments
+          known = [(subject, evidence) | Local.Given classx' subject evidence <- equalities, classx' == classx]
+      given <- firstM (\(subject, _) -> compared False subject whole) known
+      case given of
+        Just (_, evidence) -> pure evidence
+        Nothing ->
+          hidden term >>= \case
+            -- Of a type that stands for itself alone, only what is known
+            -- of it where this is can be had.
+            Just logical
+              | Just known <- equatedHidden context logical -> constrainWith context classx known arguments
+              | otherwise -> abort position (Constrain context_ classx_ term_ arguments_)
+            Nothing -> plainly context classx term arguments
     plainly ::
       forall scope.
       Context s scope ->

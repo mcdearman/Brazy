@@ -498,6 +498,16 @@ generateEvidence context = \case
       name <- fresh context
       body <- continue (Variable name)
       pure $ Primitive (Field index) [base] (MuTilde (byValue name) body)
+  -- What a value holds is like anything else it holds: not evaluated yet,
+  -- unless what named it says it is.
+  Evidence.Held {term} -> \continue -> do
+    let (producer, strict) = variable context term
+    if strict
+      then continue producer
+      else do
+        name <- fresh context
+        body <- continue (Variable name)
+        pure $ Cut producer (Force (MuTilde (byValue name) body))
 
 lambda :: Context s scope -> Expression (Scope.SimpleDeclaration ':+ scope) -> ST s Producer
 lambda context body = do
@@ -617,6 +627,8 @@ evaluate context expression consumer = case expression of
   Core.Join {statements} ->
     named context consumer $ \consumer -> attempt context statements consumer Abort
   Core.Newtype {argument} -> evaluate context argument consumer
+  Core.Dictionary {evidence} -> generateEvidence context evidence $ \dictionary ->
+    pure $ Cut dictionary consumer
 
 letRec :: [(Text, Producer)] -> Statement -> Statement
 letRec [] body = body

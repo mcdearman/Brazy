@@ -724,11 +724,46 @@ The order to take it in:
       lambda is now told what type it is to be before its parameter is
       looked at, since a match tells nothing of a type that is not known
       yet (tests `gadt-syntax`, `gadt-expression`, `gadt-indexed`)
-- [ ] What that leaves of GADTs: constructors that require something of
-      their types, records, deriving, and refusing what should be refused
-      (a hidden type that gets out, a branch that cannot be reached). None
-      of the 156 constructors of this kind in the compiler's own source
-      requires anything of its types, so none of this is in the way
+- [x] The rest of GADTs, as GHC's extension has them. None of this was in
+      the way of the compiler's own source, whose 156 constructors of this
+      kind require nothing of their types and are not records.
+  - [x] A match anywhere, not only at the parameters of a function: on a
+        variable from further out in a `case`, and after another parameter.
+        An unknown that has been worked out is taken as what it is where it
+        is met, so that what a match told is not lost by stepping out to
+        the scope the unknown came from (test `gadt-case`)
+  - [x] The types a constructor hides. A variable of the constructor that
+        the type it makes does not settle is an unknown where a value is
+        made, and where a value is taken apart it is a type that stands for
+        itself alone (`Skolem`, in `Semantic.Unify.Type`): the same as
+        itself and nothing else, never worked out, though a further match
+        may tell what it is for a branch. It may not be part of the type of
+        what is matched or of what the match makes, nor of an unknown from
+        further out, and a binding may not match a constructor that hides a
+        type or tells something of one. A variable given bare to the type
+        made, as in `C :: a -> T a`, is what the matched type has there, so
+        a type that is only written with `where` is matched as it always
+        was (test `gadt-hidden`)
+  - [x] What else the declaration may say: names for what a constructor
+        holds, the kind of the type in place of some or all of its
+        parameters, with or without constructors, and a `deriving` clause.
+        Instances are derived by looking at each constructor as a match
+        does (test `gadt-record`)
+  - [x] A constructor that requires something of its types. For a class, a
+        value holds the evidence after everything else it holds
+        (`Dictionary`, an expression, and `Held`, evidence that a match
+        names). It is asked for where the constructor is used and is there
+        to use where the constructor is matched on, with what the class
+        requires in turn: the context of checking holds what is given
+        beside what is known of types. That two types are the same is
+        required without evidence, and means what saying so in the type
+        made means (test `gadt-context`)
+  - [ ] What is not done. An instance is not derived for a type with a
+        constructor that requires a class. A branch that cannot be reached
+        is taken without a word, where GHC warns. Types required to be the
+        same in the type of a function, a class or an instance are not
+        read: that is its own feature, and needs a type with a `forall` to
+        carry what is required to be the same
 - [x] The kind of `Core.Tree.Expression`. The check stopped there with
       "cyclical type checking". Types defined by each other across modules
       that import each other are checked without trouble in the small
@@ -755,7 +790,7 @@ The order to take it in:
 
 `hazy.cabal` gives the working list:
 
-- [ ] Language features Hazy lacks: `GADTs`, `PolymorphicComponents`,
+- [ ] Language features Hazy lacks: `PolymorphicComponents`,
       `DeriveFunctor`, `DeriveFoldable`, `DeriveTraversable`,
       `StandaloneKindSignatures`, `RoleAnnotations`, `MonoLocalBinds`,
       `DisambiguateRecordFields`, and full `TypeOperators`
@@ -844,7 +879,7 @@ Missing:
       through the ordinary instance lookup. That gives `default`
       declarations and classes of a program's own. When it is done, the
       `Fallback` in `Semantic.Unify.Evidence` goes. Not now
-- [x] GADTs, in the part the compiler's own source needs first: see M6
+- [x] GADTs: see M6
 - [ ] Polymorphic components
 - [ ] Strict functions
 - [ ] Remaining builtin instances

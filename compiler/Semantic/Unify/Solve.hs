@@ -125,6 +125,7 @@ instance SolveEvidence EvidenceF where
     Evidence.Super base index -> do
       base <- solveEvidenceWith category position base
       pure $ Evidence.Super {base, index}
+    Evidence.Held term -> pure Evidence.Held {term}
     Evidence.Logical (Evidence.Shift evidence) ->
       solveEvidenceWith (category Shift0.:. Shift0.Shift) position (Evidence.Logical evidence)
     Evidence.Logical (Evidence.Box reference) ->

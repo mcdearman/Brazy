@@ -96,7 +96,7 @@ updateInfo DataInstance {constructors, selectors} =
     }
   where
     update :: Int -> ConstructorInstance s scope -> UpdateInfo.Update s scope
-    update constructorIndex constructorInstance@ConstructorInstance {entries} =
+    update constructorIndex constructorInstance@ConstructorInstance {entries, asked} =
       UpdateInfo.Update
         { constructorInfo = ConstructorInstance.info constructorInstance,
           selectorIndexes =
@@ -112,7 +112,8 @@ updateInfo DataInstance {constructors, selectors} =
                   [index] -> Strict.Just index
                   [] -> Strict.Nothing
                   _ -> error "duplicate selector"
-             in orderListInt' combine (length entries) (zip selections selections)
+             in -- The evidence a value holds is kept as it is.
+                orderListInt' combine (length entries + length asked) (zip selections selections)
         }
 
 mark :: Context s scope -> DataInstance s scope -> ST s ()

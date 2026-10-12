@@ -7,8 +7,9 @@ import qualified Core.Tree.Instanciation as Instanciation
 import Data.Foldable (toList)
 import qualified Data.Map as Map
 import qualified Generate.Binding.Evidence as Evidence (Binding (..))
+import qualified Generate.Binding.Term as Term
 import qualified Generate.Binding.Type as Type
-import Generate.Context (Context, (!=.))
+import Generate.Context (Context, (!-), (!=.))
 import qualified Generate.Context as Context
 import {-# SOURCE #-} Generate.Go.Expression (force)
 import qualified Generate.Mangle as Mangle
@@ -281,6 +282,13 @@ generate context = \case
         { object = base,
           field = Mangle.fields !! index
         }
+  -- What a value holds is like anything else it holds: not evaluated yet,
+  -- unless what named it says it is.
+  Held {term} -> do
+    let Term.Binding {name, strict} = context !- term
+    name <- Context.symbol context name
+    let value = Javascript.Variable {name}
+    pure $ if strict then value else force value
 
 packTuple :: Int -> Javascript.Expression
 packTuple number =

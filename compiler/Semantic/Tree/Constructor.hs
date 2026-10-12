@@ -4,6 +4,7 @@ module Semantic.Tree.Constructor where
 
 import qualified Data.Vector.Strict as Strict (Vector)
 import Semantic.FreeVariables (FreeTypeVariables (freeTypeVariables))
+import qualified Semantic.Index.Type2 as Type2
 import qualified Semantic.Shift as Shift
 import qualified Semantic.Shift0 as Shift0
 import Semantic.Tree.Entry (Entry)
@@ -31,8 +32,22 @@ data Shape stage scope
     -- parameters.
     Indexed
       { variables :: !Int,
+        -- | What it requires of its types. The evidence for each is held
+        -- by a value it makes, after everything else the value holds.
+        asked :: !(Strict.Vector (Asked stage scope)),
+        -- | Pairs of types that it requires to be the same.
+        equated :: !(Strict.Vector (Type Position stage scope, Type Position stage scope)),
         arguments :: !(Strict.Vector (Type Position stage scope))
       }
+  deriving (Show)
+
+-- |
+-- Something a constructor requires of its types: a class, and the type it
+-- is required of.
+data Asked stage scope = Asked
+  { classx :: !(Type2.Index scope),
+    subject :: !(Type Position stage scope)
+  }
   deriving (Show)
 
 data Constructor stage scope
@@ -58,12 +73,25 @@ instance Shift.Functor (Constructor stage) where
           entries = fmap (Shift.map category) entries,
           shape = case shape of
             Ordinary -> Ordinary
-            Indexed {variables, arguments} ->
-              Indexed {variables, arguments = fmap (Shift.map category) arguments}
+            Indexed {variables, asked, equated, arguments} ->
+              Indexed
+                { variables,
+                  asked = fmap (mapAsked category) asked,
+                  equated = fmap (\(left, right) -> (Shift.map category left, Shift.map category right)) equated,
+                  arguments = fmap (Shift.map category) arguments
+                }
         }
+    where
+      mapAsked category Asked {classx, subject} =
+        Asked {classx = Shift.map category classx, subject = Shift.map category subject}
 
 instance FreeTypeVariables Constructor where
   freeTypeVariables target (Constructor {entries, shape}) =
     foldMap (freeTypeVariables target) entries ++ case shape of
       Ordinary -> []
-      Indexed {arguments} -> foldMap (freeTypeVariables target) arguments
+      Indexed {asked, equated, arguments} ->
+        concat
+          [ foldMap (freeTypeVariables target . subject) asked,
+            foldMap (\(left, right) -> freeTypeVariables target left ++ freeTypeVariables target right) equated,
+            foldMap (freeTypeVariables target) arguments
+          ]

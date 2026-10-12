@@ -115,6 +115,8 @@ unify (Logical (Shift logical)) evidence' = do
 unify evidence (Logical (Shift logical')) = do
   evidence <- unshift evidence
   unify evidence (Logical logical')
+unify (Held term) (Held term')
+  | term == term' = pure ()
 unify _ _ = error "unify evidence can't fail"
 
 unshift :: Evidence s (scope ':+ scopes) -> ST s (Evidence s scopes)
@@ -134,3 +136,6 @@ unshift = \case
   Super evidence index -> do
     evidence <- unshift evidence
     pure $ Super evidence index
+  Held term -> do
+    let fail = error "unshift can't fail"
+    pure $ Held (Shift.map (Shift.Unshift fail) term)

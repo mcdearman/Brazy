@@ -274,6 +274,7 @@ bind Pattern.Match {match, irrefutable} check thenx = case match of
               | otherwise -> Bind {constructor, constructorInfo, check, thenx}
               where
                 constructorInfo = ConstructorInfo {entries}
+            Semantic.Holding {} -> error "a pattern holds nothing"
       where
         wildcard Pattern.Wildcard {} = True
         wildcard _ = False
