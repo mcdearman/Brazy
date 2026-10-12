@@ -1,0 +1,4 @@
+[W {names = [0,1]},C {names = [0,2], other = 3},I {names = [0,4], irrefutable = False, k = 5},L {irrefutable = False, names = [0,6]}]
+[W {names = [1]},C {names = [2], other = 3},I {names = [4], irrefutable = True, k = 5},L {irrefutable = True, names = [6]}]
+(I {names = [7], irrefutable = True, k = 1},[7,1])
+(I {names = [], irrefutable = False, k = 9},L {irrefutable = True, names = [4]})
