@@ -293,9 +293,13 @@ generateImpure context expression = case expression of
     pure ([], value)
   -- An action is a function of nothing, and what it gives may be yet to be
   -- evaluated.
+  -- What it gives is named before it is evaluated: to evaluate something
+  -- is to write it out more than once, and the action is run once.
   Run {imperative} -> do
     (statements, function) <- generateImpure context imperative
-    pure (statements, force Javascript.Call {function, arguments = []})
+    name <- Context.fresh context
+    let ran = Javascript.Const name Javascript.Call {function, arguments = []}
+    pure (statements ++ [ran], force Javascript.Variable {name})
   Generalized {definition = definition@TypeLambdaOver {constraints, result}} -> case constraints of
     None -> generateImpure (Context.evidenceBindings Vector.empty context) result
     Constraints {} -> do

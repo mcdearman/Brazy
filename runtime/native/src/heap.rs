@@ -184,6 +184,9 @@ struct Heap {
     pending: Vec<*mut u64>,
     /// The thunks at the top of the program that have been forced.
     roots: Vec<*mut u64>,
+    /// What catches a thrown value, the last begun last: a handler and where
+    /// to go on with what it gives. The program holds these through here.
+    catching: Vec<(Value, Value)>,
     /// How many bytes are in blocks.
     live: usize,
     /// After how many allocations every count is checked, if they are.
@@ -228,6 +231,7 @@ fn heap() -> &'static mut Heap {
                 large: Vec::new(),
                 pending: Vec::new(),
                 roots: Vec::new(),
+                catching: Vec::new(),
                 live: 0,
                 check: setting("HAZY_CHECK").map(|value| value.parse().unwrap_or(1).max(1)),
                 since: 0,
@@ -349,6 +353,10 @@ impl Heap {
         for &thunk in &self.roots {
             reach(*thunk.add(1), &mut stack);
         }
+        for &(handler, resume) in &self.catching {
+            reach(handler, &mut stack);
+            reach(resume, &mut stack);
+        }
         while let Some(block) = stack.pop() {
             for &child in children(block) {
                 reach(child, &mut stack);
@@ -400,6 +408,10 @@ impl Heap {
         for &thunk in &self.roots {
             refer(*thunk.add(1), "a definition");
         }
+        for &(handler, resume) in &self.catching {
+            refer(handler, "a catch");
+            refer(resume, "a catch");
+        }
         for &block in blocks {
             let counted = references(*block);
             let found = expected.get(&block).copied().unwrap_or(0);
@@ -427,6 +439,25 @@ fn wrong(message: &str) -> ! {
     let _ = std::io::stdout().flush();
     eprintln!("the heap is wrong: {message}");
     std::process::exit(2)
+}
+
+/// One more reference to a value, for a primitive that keeps what it was
+/// only lent, or gives back what something else still holds.
+pub fn share(value: Value) -> Value {
+    if let Some(block) = counted(value) {
+        unsafe { *block += ONE };
+    }
+    value
+}
+
+/// A reference to a value is given up by a primitive that held it.
+pub fn release(value: Value) {
+    unsafe { heap().erase(value) }
+}
+
+/// What catches a thrown value.
+pub fn catching() -> &'static mut Vec<(Value, Value)> {
+    &mut heap().catching
 }
 
 /// A new block of some words with a header, and one reference to it.

@@ -271,7 +271,31 @@ definitions =
             ("primTextDrop", wrap TextDrop),
             ("primTextIsPrefixOf", wrap TextIsPrefixOf),
             ("primSTPure", primSTPure),
-            ("primSTBind", primSTBind)
+            ("primSTBind", primSTBind),
+            ("primUnsafeCoerce", identity),
+            ("primNewRef", newRef),
+            ("primReadRef", effect "read_ref"),
+            ("primWriteRef", writeRef),
+            ("primSameRef", wrap (outside "same_ref")),
+            ("primArgCount", effect "arg_count"),
+            ("primArg", effect "arg"),
+            ("primGetEnv", effect "get_env"),
+            ("primExecutablePath", effect "executable_path"),
+            ("primExit", effect "exit"),
+            ("primOpen", effect "open"),
+            ("primClose", effect "close"),
+            ("primWrite", effect "write"),
+            ("primReadAll", effect "read_all"),
+            ("primReadLine", effect "read_line"),
+            ("primIsTerminal", effect "is_terminal"),
+            ("primListDirectory", effect "list_directory"),
+            ("primCreateDirectory", effect "create_directory"),
+            ("primPathKind", effect "path_kind"),
+            ("primCallProcess", effect "call_process"),
+            ("primClock", effect "clock"),
+            ("primOS", Thunk (pack "k") (Primitive (outside "os") [] (covariable "k"))),
+            ("primThrow", throw),
+            ("primCatch", catch)
           ]
     ]
 
@@ -280,6 +304,118 @@ definitions =
 -- which is not forced.
 action :: String -> Statement -> Producer
 action result = Function [] (pack result)
+
+-- |
+-- A primitive the runtime has under a name of its own.
+outside :: String -> Primitive
+outside name = case lookup name Primitive.outside of
+  Just count -> Foreign (pack name) count
+  Nothing -> error $ "no such primitive: " ++ name
+
+-- |
+-- A primitive that does something, as an action: a function of what it is
+-- given, which are evaluated when the action is run and not before.
+--
+-- > effect f = \x y -> \() -> f (force x) (force y)
+effect :: String -> Producer
+effect name = go 0
+  where
+    primitive = outside name
+    count = Primitive.arity primitive
+    argument, value, result :: Int -> String
+    argument index = "x" ++ show index
+    value index = "v" ++ show index
+    result index = "k" ++ show index
+    go index
+      | index == count = action "done" call
+      | otherwise =
+          function (argument index) (result index) $
+            Cut (go (index + 1)) (covariable (result index))
+    call =
+      foldr
+        (\index -> force (argument index) (value index))
+        (Primitive primitive (variable . value <$> indexes) (covariable "done"))
+        indexes
+    indexes = [0 .. count - 1]
+
+-- A reference holds whatever it was given, evaluated or not.
+--
+-- > primNewRef value = \() -> new value
+newRef :: Producer
+newRef =
+  function "value" "k" $
+    Cut
+      (action "done" $ Primitive (outside "new_ref") [variable "value"] (covariable "done"))
+      (covariable "k")
+
+-- > primWriteRef reference value = \() -> write (force reference) value
+writeRef :: Producer
+writeRef =
+  function "reference" "k" $
+    Cut
+      ( function "value" "k1" $
+          Cut
+            ( action "done" $
+                force "reference" "place" $
+                  Primitive (outside "write_ref") [variable "place", variable "value"] (covariable "done")
+            )
+            (covariable "k1")
+      )
+      (covariable "k")
+
+-- To catch is to leave with the runtime what handles a thrown value and
+-- where to go on from, run the action, and take them back. Where to go on
+-- from is whatever was waiting for the action's result, as a function.
+--
+-- > primCatch action handler = \() -> push handler resume; result = force action (); pop; result
+catch :: Producer
+catch =
+  function "action" "k" $
+    Cut
+      ( function "handler" "k1" $
+          Cut
+            ( action "done" $
+                LetRec
+                  [ ( pack "resume",
+                      Function [byNeed "given"] (pack "unused") $
+                        Cut (variable "given") (covariable "done")
+                    )
+                  ]
+                  $ Primitive (outside "catch_push") [variable "handler", variable "resume"]
+                  $ MuTilde (byValue "pushed")
+                  $ Cut (variable "action")
+                  $ Force
+                  $ Apply []
+                  $ MuTilde (byNeed "result")
+                  $ Primitive (outside "catch_pop") []
+                  $ MuTilde (byValue "popped")
+                  $ Cut (variable "result") (covariable "done")
+            )
+            (covariable "k1")
+      )
+      (covariable "k")
+
+-- To throw is to take back the catch begun last, run its handler on the
+-- value, and go on from where that catch was begun. Whatever was waiting
+-- for what is thrown never gets anything.
+--
+-- > primThrow value = (handler, resume) = pop; resume (force handler value ())
+throw :: Producer
+throw =
+  function "value" "k" $
+    Primitive (outside "catch_pop") [] $
+      Case
+        [ Alternative 0 [byNeed "handler", byNeed "resume"] $
+            Cut (variable "handler") $
+              Force $
+                Apply [variable "value"] $
+                  Apply [] $
+                    MuTilde (byNeed "result") $
+                      Cut (variable "resume") $
+                        Force $
+                          Apply [variable "result"] (covariable "k")
+        ]
+        Nothing
 
 -- > putStrLnText text = \() -> print (force text)
 putStrLnText :: Producer

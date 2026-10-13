@@ -116,6 +116,7 @@ running known consumers = \case
   Primitive primitive _ result -> case primitive of
     Primitive.Error -> Everything
     Primitive.PutStrLn -> none
+    Primitive.Foreign {} -> none
     _ -> given known consumers result
   Cut producer consumer -> case (producer, consumer) of
     (Variable name, Force inner) -> then' (Only (Set.singleton name)) (given known consumers inner)

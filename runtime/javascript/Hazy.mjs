@@ -873,10 +873,10 @@ export const primIsTerminal = {
   b: (descriptor) => () => done(+tty.isatty(force(descriptor))),
 };
 
-// The names in a directory, each on a line.
+// The names in a directory, in order, each on a line.
 export const primListDirectory = {
   a: 0,
-  b: (path) => () => done(fs.readdirSync(force(path)).join("\n")),
+  b: (path) => () => done(fs.readdirSync(force(path)).sort().join("\n")),
 };
 
 export const primCreateDirectory = {
