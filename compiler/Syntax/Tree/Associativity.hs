@@ -20,7 +20,7 @@ data Associativity
     --
     -- > infix
     None
-  deriving (Show, Eq)
+  deriving (Show, Read, Eq)
 
 parse :: Parser Associativity
 parse =

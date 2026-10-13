@@ -71,10 +71,6 @@ import qualified Semantic.Tree.Statements as Semantic.Statements
 import qualified Syntax.StringLiteral as StringLiteral
 import Prelude hiding (compare, fail)
 
--- The kind is written out, as it is in the file that stands for this
--- module to the modules it is defined together with. Hazy does not read
--- that file, and cannot work the kind out round the whole circle.
-type Expression :: Environment -> Data.Kind.Type
 data Expression scope
   = Variable
       { variable :: !(Term.Index scope),

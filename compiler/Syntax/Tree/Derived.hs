@@ -39,7 +39,7 @@ import Syntax.Tree.Type (Type)
 import qualified Syntax.Tree.Type as Type (Type (..))
 import Syntax.Tree.TypePattern (TypePattern)
 import qualified Syntax.Tree.TypePattern as TypePattern (TypePattern (..))
-import Syntax.Variable (CanonicalVariable, VariableIdentifier, printLiteral')
+import Syntax.Variable (VariableIdentifier, printLiteral')
 
 -- |
 -- A constructor as the instances see it: how it is written before what it
@@ -129,7 +129,6 @@ made = \case
         _ :@ field <- toList names
         pure (field, entry held)
   where
-    literal :: (CanonicalVariable variable) => variable -> String
     literal variable = Lazy.unpack (toLazyText (printLiteral' variable))
     entry held = case Entry.entry held of
       Scheme.Explicit {result} -> result

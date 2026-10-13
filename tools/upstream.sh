@@ -6,9 +6,9 @@
 # The compiler that makes then builds Hazy's packages and runs Hazy's tests.
 #
 # Hazy's source is fetched as it was at one commit and is changed only by
-# tools/upstream.patch: the few places where it does what Brazy cannot do
-# yet. What is in that file is what is left to do, and the day it is empty
-# Brazy compiles Hazy as Hazy is written.
+# tools/upstream.patch, which is for the places where it does what Brazy
+# cannot do. That file is empty: Brazy compiles Hazy as Hazy is written. It
+# is kept for the day a later commit of Hazy asks for more.
 
 set -euo pipefail
 

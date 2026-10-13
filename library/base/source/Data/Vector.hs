@@ -542,7 +542,7 @@ zipWith4 :: (a -> b -> c -> d -> e) -> Vector a -> Vector b -> Vector c -> Vecto
 zipWith4 f a b c d = fromList (zipLists4 f (toList a) (toList b) (toList c) (toList d))
 
 zipWith5 :: (a -> b -> c -> d -> e -> f) -> Vector a -> Vector b -> Vector c -> Vector d -> Vector e -> Vector f
-zipWith5 = placeholder
+zipWith5 f a b c d e =fromList (zipLists5 f (toList a) (toList b) (toList c) (toList d) (toList e))
 
 zipWith6 ::
   (a -> b -> c -> d -> e -> f -> g) ->
@@ -553,7 +553,8 @@ zipWith6 ::
   Vector e ->
   Vector f ->
   Vector g
-zipWith6 = placeholder
+zipWith6 f a b c d e g =
+  fromList (zipLists6 f (toList a) (toList b) (toList c) (toList d) (toList e) (toList g))
 
 izipWith :: (Int -> a -> b -> c) -> Vector a -> Vector b -> Vector c
 izipWith f a b = fromList (Prelude.zipWith3 f [0 ..] (toList a) (toList b))
@@ -983,3 +984,11 @@ build count xs
 zipLists4 :: (a -> b -> c -> d -> e) -> [a] -> [b] -> [c] -> [d] -> [e]
 zipLists4 f (a : as) (b : bs) (c : cs) (d : ds) = f a b c d : zipLists4 f as bs cs ds
 zipLists4 _ _ _ _ _ = []
+
+zipLists5 :: (a -> b -> c -> d -> e -> f) -> [a] -> [b] -> [c] -> [d] -> [e] -> [f]
+zipLists5 f (a : as) (b : bs) (c : cs) (d : ds) (e : es) = f a b c d e : zipLists5 f as bs cs ds es
+zipLists5 _ _ _ _ _ _ = []
+
+zipLists6 :: (a -> b -> c -> d -> e -> f -> g) -> [a] -> [b] -> [c] -> [d] -> [e] -> [f] -> [g]
+zipLists6 f (a : as) (b : bs) (c : cs) (d : ds) (e : es) (g : gs) = f a b c d e g : zipLists6 f as bs cs ds es gs
+zipLists6 _ _ _ _ _ _ _ = []

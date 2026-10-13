@@ -78,9 +78,9 @@ data World = World
 data Cell
   = -- | A function or a consumer: its method, the method's parameters and
     -- body, and what was captured.
-    Closure !Method [Text] Statement [(Text, Value)]
+    Closure !Method [Text] Statement Environment
   | -- | A thunk that has not been forced.
-    Delayed [Text] Statement [(Text, Value)]
+    Delayed [Text] Statement Environment
   | -- | A thunk that is being forced.
     Working
   | -- | A thunk that has been forced.
@@ -91,8 +91,7 @@ data Cell
 
 -- |
 -- The row of values. The last value is last. What a closure or a thunk
--- captured is one, written out there: Hazy cannot check a name for a type
--- that is defined by way of the types the name is used in.
+-- captured is one.
 type Environment = [(Text, Value)]
 
 type Globals = Map Global (IORef Cell)
