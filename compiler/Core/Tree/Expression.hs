@@ -838,10 +838,13 @@ simplifyWith expression [] = case expression of
           )
       )
       (simplify elsex)
+  -- A case with no alternatives still evaluates what it is a case of, and
+  -- whatever that does is what the case does: there is nothing it could be.
+  -- It is matched against a constructor only so as to be evaluated.
   Semantic.Case {scrutinee, cases}
     | null cases ->
         Join
-          { statements = Statements.Bottom
+          { statements = Statements.bind Statements.true (simplify scrutinee) Statements.Bottom
           }
     | otherwise ->
         Call
@@ -855,7 +858,7 @@ simplifyWith expression [] = case expression of
         Lambda
           { body =
               Join
-                { statements = Statements.Bottom
+                { statements = Statements.bind Statements.true lambdaVariable Statements.Bottom
                 }
           }
     | otherwise ->
