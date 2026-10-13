@@ -198,6 +198,22 @@ Not a milestone of the native backend, but built alongside it.
       Javascript), coloured by shape. Tab turns the page. The pages come from
       one table in `compiler/Repl.hs`, and the viewer is
       `viewer/Viewer.hs`, over the `brick` package
+- [x] The files a session loaded are parsed once, and their errors looked
+      for once. Every entry used to read, parse, resolve and check all of
+      them again, so an entry cost as much as compiling whatever was
+      loaded: with one small file, a tenth of a second where it is now a
+      third of that. A file is still read at each entry and parsed again if
+      its text changed, so a change to it is seen (test `test/repl/loaded`)
+- [ ] Keep what is resolved and checked from one entry to the next. An
+      entry still resolves again what it uses of the packages, which is
+      most of what it costs: about 40 ms where parsing it takes 3.
+      `--resolve` of a module of one line takes 75 ms and `--parse` 3.
+      Resolving, grouping and checking each work on every module at once
+      (`Semantic.Resolve.Temporary.Complete.Module.resolve` is one fixed
+      point over all of them, and `Module.connect` finds the groups of the
+      whole program), so each needs a way to take one more module given
+      what was made of the rest. Nothing of the rest depends on the
+      session's module, so what was made of it would stay as it is
 - [x] What the compiler says while it works, in the manner of Cargo and of
       Meadow (`compiler/Status.hs`): a bold green verb for each thing done, a
       bar that is drawn over itself while modules are built, and how long it
