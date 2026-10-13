@@ -1,13 +1,14 @@
 -- |
 -- Sequent programs as text, for reading.
-module Sequent.Printer (print, printDefinitions, global, literal) where
+module Sequent.Printer (print, printDefinitions, global, parts, literal) where
 
 import Data.Foldable (toList)
 import Data.List (intersperse)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Text (pack)
-import qualified Data.Text as Text (map)
+import Data.Text (Text)
+import qualified Data.Text as Text (map, split)
 import Data.Text.Lazy.Builder (Builder, fromString, fromText)
 import qualified Generate.Global as Global (Global (..))
 import qualified Generate.Mangle as Mangle
@@ -47,6 +48,15 @@ global Global.Global {path, name} =
       -- A definition that was inside another is shown under its name.
       fromText (Text.map (\character -> if character == separator then '.' else character) name)
     ]
+
+-- |
+-- The name of a definition in parts: the definition at the top of a module
+-- that it is or was inside, as that is shown, and what it is called from
+-- there, one name for each definition it was inside.
+parts :: Global.Global -> (Builder, [Text])
+parts whole@Global.Global {name} = case Text.split (== separator) name of
+  first : inside -> (global whole {Global.name = first}, inside)
+  [] -> (global whole, [])
 
 literal :: Literal -> Builder
 literal = \case

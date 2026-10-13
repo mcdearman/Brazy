@@ -51,7 +51,7 @@ import qualified Semantic.Scope as Scope
 import qualified Semantic.Stage as Stage
 import qualified Semantic.Tree.Module as Module (connect, seperate)
 import qualified Semantic.Tree.Module as Semantic (Module, name)
-import qualified Sequent.FromCore as Sequent (Unit (..), Unshared (..), complete, start, unit)
+import qualified Sequent.FromCore as Sequent (Unit (..), Unshared (..), complete, reached, start, unit)
 import qualified Sequent.Printer as Sequent (print)
 import qualified Sequent.Tree as Sequent (Program (..))
 import qualified AxCut.Tree as AxCut (Program (..))
@@ -517,7 +517,8 @@ main'' args = case getOpt order options args of
                     ++ strip
                     ++ ["-o", executable target]
               Separate -> do
-                Sequent.Unit {own, shared, lends, unshared} <- unit all
+                Sequent.Unit {own, shared, lends, unshared} <-
+                  Sequent.reached (Sequent.start Runtime.main) <$> unit all
                 warn unshared
                 emit (target ++ ".ll") $
                   LLVM.generateUnit

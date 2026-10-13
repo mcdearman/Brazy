@@ -25,6 +25,13 @@
 -- named is evaluated first. A function that is written where it is called
 -- is its body. And one thing in a @let@ that does not refer to itself is
 -- only named, which lets the rest of this see it.
+--
+-- A thunk that does nothing but construct a value is the value, and so is
+-- one that first names things that are only made, which are then named
+-- outside it. The translation delays everything a constructor is given and
+-- everything that is named, and a value that is written out has nothing to
+-- delay: each letter of a name that a derived @Show@ writes was a thunk,
+-- and a function for the thunk, to make one cell of a list.
 module Sequent.Simplify (simplify) where
 
 import Data.List (nub)
@@ -77,7 +84,7 @@ instance (Simplify a) => Simplify (Maybe a) where
 
 instance Simplify Producer where
   simplify = \case
-    Constructor tag fields -> Constructor tag (simplify fields)
+    Constructor tag fields -> Constructor tag (map settle (simplify fields))
     Mu covariable body -> Mu covariable (simplify body)
     Function parameters covariable body -> Function parameters covariable (simplify body)
     Thunk covariable body -> Thunk covariable (simplify body)
@@ -116,7 +123,7 @@ instance Simplify Consumer where
     Covariable name -> Covariable name
     MuTilde binder body -> MuTilde binder (simplify body)
     Case alternatives otherwise -> Case (simplify alternatives) (simplify otherwise)
-    Apply arguments result -> Apply (simplify arguments) (simplify result)
+    Apply arguments result -> Apply (map settle (simplify arguments)) (simplify result)
     Force result -> Force (simplify result)
   count name = \case
     Covariable other -> if other == name then 1 else 0
@@ -225,6 +232,11 @@ cut producer consumer = case (producer, consumer) of
   (Thunk result body, MuTilde binder@Binder {name} (Cut (Variable other) (Force inner)))
     | other == name ->
         cut (Mu result body) (MuTilde binder (Cut (Variable name) inner))
+  -- A thunk that only constructs a value is the value. What it named on
+  -- the way is named first.
+  (Thunk _ _, MuTilde _ _)
+    | Just (named, made) <- floated producer ->
+        foldr (\(binder, given) rest -> Cut given (MuTilde binder rest)) (cut made consumer) named
   -- A value that is constructed and taken apart.
   (Constructor tag fields, Case alternatives otherwise) -> case choice tag alternatives of
     Just index
@@ -262,6 +274,58 @@ value = \case
   Constructor _ _ -> True
   Function {} -> True
   _ -> False
+
+-- |
+-- A thunk that does nothing but construct a value, as the value. Anything
+-- else is itself.
+settle :: Producer -> Producer
+settle = \case
+  Thunk result (Cut made (Covariable given))
+    | given == result,
+      built made ->
+        made
+  other -> other
+
+-- |
+-- A thunk that names some things that are only made and then constructs a
+-- value: what it names, and the value.
+floated :: Producer -> Maybe ([(Binder, Producer)], Producer)
+floated = \case
+  Thunk result body -> go result body
+  _ -> Nothing
+  where
+    go result = \case
+      Cut made (Covariable given)
+        | given == result,
+          built made,
+          count result made == 0 ->
+            Just ([], made)
+      Cut made (MuTilde binder@Binder {strategy = ByNeed} rest)
+        | given <- settle made,
+          allocated given,
+          count result given == 0 -> do
+            (named, final) <- go result rest
+            Just ((binder, given) : named, final)
+      _ -> Nothing
+    allocated = \case
+      Thunk {} -> True
+      other -> built other
+
+-- |
+-- Whether to make a producer is only to construct it: nothing is evaluated,
+-- so it may as well be made now as when it is asked for.
+built :: Producer -> Bool
+built = \case
+  Literal _ -> True
+  Constructor _ fields -> all inert fields
+  Function {} -> True
+  _ -> False
+  where
+    inert = \case
+      Variable _ -> True
+      Global _ -> True
+      Thunk {} -> True
+      other -> built other
 
 -- |
 -- Whether a producer is no more to write than a name for it would be.

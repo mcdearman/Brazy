@@ -1082,6 +1082,40 @@ The order to take it in:
     now keeps it in a `Word64`
 - [ ] Run the check again after each of these and count what stops it next.
       Each of the items below is a guess until then
+- [x] Less LLVM. The compiler's own source came to 366 MB of it, in 242
+      thousand functions. It comes to 130 MB in 109 thousand, the
+      executable is 43 MB where it was 59, and making it takes three
+      minutes where it took four and a half. What it was made of, and what
+      was done:
+  - Two fifths was never run. A program had every definition of its
+    modules, and all of them seen from outside, so that nothing could be
+    left out. A program now has what is reached from where it starts
+    (`reached`, in `Sequent.FromCore`), and nothing in it is seen from
+    outside. Most of what went was instances that are derived and never
+    asked for
+  - A quarter of what was left was the second entry of a definition, the
+    one that takes lent what it only reads, made for every definition that
+    could have one and called for few. It is the whole definition over
+    again, with every object inside it. In a program it is now made when
+    something calls it
+  - Over a third was the names of values, numbered through the whole
+    program, so that most were seven digits. Each function now counts from
+    nothing
+  - Over a fifth was the names of functions. What is inside a definition is
+    called by the whole path to it, which gets to be dozens of names. A
+    path of more than two names is now the definition, twelve letters worked
+    out from the path, and the last name (`render`, in `LLVM.FromAxCut`)
+  - A third of the functions were a derived `Show`. Each letter of a name
+    it writes was a thunk, and a function for the thunk, to make one cell
+    of a list: a thunk that only constructs a value is now the value, in
+    all code (`floated`, in `Sequent.Simplify`). And what a constructor
+    holds was written twice, with brackets and without: it is written
+    once, between two brackets that each find out whether they are wanted
+    (`Semantic.Check.Derive.Show`). It was 136 MB and is 17
+- [ ] What is left of it. A quarter of the text is the address of a field,
+      worked out on a line of its own before every read and write, and
+      another quarter is calls. A package is compiled as before: every
+      definition, every second entry
 
 `hazy.cabal` gives the working list:
 

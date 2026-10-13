@@ -108,22 +108,36 @@ showsPrec context position typeIndex datax = do
         pure $ do
           evidence <- traverse (Unify.solveEvidence position) evidence
           info <- ConstructorInfo.solve $ ConstructorInstance.info constructor
-          let letter character =
+          let before character =
+                Expression.simplifyConstructorExact
+                  Constructor.cons
+                  ConstructorInfo
+                    { entries =
+                        Strict.Vector.fromList
+                          [ EntryInfo {strict = Type.Constructor Type2.Lazy},
+                            EntryInfo {strict = Type.Constructor Type2.Lazy}
+                          ]
+                    }
+                  ( Strict.Vector.fromList
+                      [ Expression.Character {character},
+                        Expression.lambdaVariable
+                      ]
+                  )
+              letter character = Expression.Lambda $ before character
+              -- A bracket, which is written when the constructor is where
+              -- it needs brackets. Each of the two finds that out for
+              -- itself, so that what is between them is written once: it
+              -- was written twice, with brackets and without, and that was
+              -- half of every instance.
+              bracket character =
                 Expression.Lambda $
-                  Expression.simplifyConstructorExact
-                    Constructor.cons
-                    ConstructorInfo
-                      { entries =
-                          Strict.Vector.fromList
-                            [ EntryInfo {strict = Type.Constructor Type2.Lazy},
-                              EntryInfo {strict = Type.Constructor Type2.Lazy}
-                            ]
-                      }
-                    ( Strict.Vector.fromList
-                        [ Expression.Character {character},
-                          Expression.lambdaVariable
-                        ]
+                  Expression.ifx
+                    ( Expression.lessThenEqualInt
+                        (shift $ shift Expression.patternVariable)
+                        (Expression.int precedence)
                     )
+                    Expression.lambdaVariable
+                    (before character)
               space = letter ' '
               identifier infixed =
                 map letter $ unpack $ toStrict $ toLazyText $ printConstructor infixed name
@@ -194,14 +208,7 @@ showsPrec context position typeIndex datax = do
 
               branch
                 | null entries = show [] []
-                | otherwise =
-                    Expression.ifx
-                      ( Expression.lessThenEqualInt
-                          (shift Expression.patternVariable)
-                          (Expression.int precedence)
-                      )
-                      (show [] [])
-                      (show [letter '('] [letter ')'])
+                | otherwise = show [bracket '('] [bracket ')']
               mainPattern =
                 Match
                   { irrefutable = False,
