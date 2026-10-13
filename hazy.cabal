@@ -489,6 +489,7 @@ executable hazy
     Syntax.Tree.Constructor
     Syntax.Tree.Data
     Syntax.Tree.Declaration
+    Syntax.Tree.Derived
     Syntax.Tree.Declarations
     Syntax.Tree.Entry
     Syntax.Tree.Exports

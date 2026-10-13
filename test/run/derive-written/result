@@ -1,0 +1,14 @@
+(Pair 2 3,7,"ab")
+Node (Node Leaf "1" [] Nothing 0) "2" [Node Leaf "3" [Leaf] (Just "4") 0,Leaf] (Just "5") 9
+([1,2,3,4,5],15,5,5,True)
+Node (Node Leaf 2 [] Nothing 0) 4 [Node Leaf 6 [Leaf] (Just 8) 0,Leaf] (Just 10) 9
+Just (Node (Node Leaf 1 [] Nothing 0) 2 [Node Leaf 3 [Leaf] (Just 4) 0,Leaf] (Just 5) 9)
+Nothing
+[Pair 1 3,Pair 2 3]
+(Named {key = "k", value = -1, others = [Just (-2),Nothing,Just (-3)]},6,Named {key = "k", value = (), others = [Just (),Nothing,Just ()]})
+(Blue,Green,[])
+([Red,Green],(Red,Blue))
+(Circle 3,Rectangle 1 (-2),Empty)
+Named' {label = "a b", colour = Green, sides = [1,2]}
+([Circle 1,Empty,Rectangle 2 3],Just (Circle 1))
+True

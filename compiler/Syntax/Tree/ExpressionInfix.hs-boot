@@ -10,4 +10,5 @@ instance (Show position) => Show (Infix position)
 
 parse :: Parser (Infix Position)
 parseLeftSection :: Parser (Expression Position)
+parseOpen :: Parser (Either (Expression Position) (Infix Position))
 toExpression :: Infix position -> Expression position

@@ -976,7 +976,7 @@ The order to take it in:
 - [x] **Brazy compiles Hazy.** `tools/upstream.sh` fetches Hazy's source as
       it was at one commit, has Brazy make its compiler, and has what that
       makes build Hazy's packages and run Hazy's tests, which pass. The
-      tests on Linux run it. Hazy's source is changed for it in nine files,
+      tests on Linux run it. Hazy's source is changed for it in five files,
       by `tools/upstream.patch`, where it does what Brazy cannot do yet
 - [ ] Compile Hazy as Hazy is written: empty `tools/upstream.patch`. These
       are the same things Brazy's own source was changed to get past:
@@ -986,15 +986,34 @@ The order to take it in:
     is checked by itself and the types as a group, and each waits for the
     other (`Semantic.Check.Go.TypeDefinition2`). Five types have their
     kinds written instead
-  - Derive `Functor`, `Foldable` and `Traversable`, for the record of
-    builtin names. The last two are classes of the library and not built
-    in
   - A definition inside another, with no type written, that requires a
     class of its type and is used at two types: `parse` in `Main`
-  - Derive `Read`. Three types derive it and nothing reads them
   - A definition inside another, with no type written, whose value depends
     on which constructor of an indexed type is matched: `general` three
     times in `Semantic.Shift`, and `unshift` in `Semantic.Unify.Type`
+- [x] Derive `Functor`, `Foldable`, `Traversable` and `Read`, in a clause
+      on a type. These are derived by writing the instance out as a
+      programmer would and reading it as any instance is
+      (`Syntax.Tree.Derived`), so a class of the library can be derived,
+      which the compiler knows nothing of. What is not done:
+  - The instance is written with `fmap`, `foldr`, `traverse`, `pure`,
+    `(<*>)`, `readsPrec`, `readParen` and `lex` by those names, so a module
+    that derives one has to have them from the Prelude
+  - The last parameter has to be the type of what a constructor holds, or
+    inside the last argument of a type that does not mention it otherwise.
+    A function of it or a pair with it is refused
+  - What an instance requires of the other parameters is not found: a
+    `Functor` of `data T f a = T (f a)` is not derived
+  - `deriving instance` on a line of its own is not taken for these, and a
+    constructor or a field that is an operator is not read
+  - Brazy's own source still has what it was changed to: the instances
+    written out, and no `Read`
+- [x] Brackets inside brackets took twice as long to read for each pair: a
+      section was tried first, and when what was inside was no section it
+      was read again. Twenty pairs took four seconds, and an instance
+      derived for a record of eighty fields did not end. A section and an
+      expression are read together now (`parseOpen`, test `brackets`)
+- [ ] `- 1 + 2` is refused as an illegal fixity. It is `(- 1) + 2`
 - [ ] What a compiler made by Hazy does not do as well as the one GHC
       builds:
   - It is slow: about eighteen times as long to compile the compiler to
