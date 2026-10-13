@@ -30,6 +30,13 @@ data Declarations scope = Declarations
   }
   deriving (Show)
 
+-- |
+-- Whether some definitions are none at all: what a @where@ that was not
+-- written comes to.
+none :: Declarations scope -> Bool
+none Declarations {terms, types, typeExtras, classInstances, dataInstances} =
+  null terms && null types && null typeExtras && null classInstances && null dataInstances
+
 instance Shift0.Functor Declarations where
   map = Shift.mapDefault
 

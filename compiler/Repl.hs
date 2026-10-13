@@ -25,6 +25,7 @@ import Control.Exception
     throw,
   )
 import Control.Monad (unless, when)
+import qualified Core.Eta as Eta (standing)
 import Core.Tree.Declaration (Declaration (..))
 import Core.Tree.Declarations (Declarations (..))
 import qualified Core.Tree.Module as Core (Module (..))
@@ -42,6 +43,7 @@ import qualified Data.Text.Lazy as Lazy.Text (length, pack, toStrict, unpack)
 import qualified Data.Text.Lazy.Builder as Builder
 import qualified Data.Text.Lazy.IO as Text.Lazy.IO
 import Data.Vector (Vector)
+import qualified Data.Vector as Vector ((!))
 import qualified Diagnostics
 import Error (HazyError (HazyError))
 import qualified Error (report)
@@ -424,12 +426,19 @@ named text modules = case filter matches (Set.toList mentioned) of
       '(' : operator | not (null operator), last operator == ')' -> init operator
       name -> name
     matches Global.Global {name} = unpack name == wanted
-    -- A use of a name compiles to a mention of its definition.
-    mentioned = case Map.lookup entry definitions of
-      Just definition | single -> globals definition
-      _ -> Set.empty
+    -- A use of a name is the definition of that name. What was asked is
+    -- looked at as it is in Core: by the time it is compiled, a small
+    -- definition has been put where it is used and is not mentioned.
+    mentioned
+      | single = Set.fromList $ do
+          Core.Module {name = path, declarations = Declarations {terms}} <- toList modules
+          asked@Declaration {name} <- if path == Global.path entry then toList terms else []
+          (home, place) <- if Mangle.mangle name == pack entryName then toList (Eta.standing asked) else []
+          let Core.Module {name = found, declarations = Declarations {terms = others}} = modules Vector.! home
+              Declaration {name = called} = others Vector.! place
+          pure Global.Global {path = found, name = Mangle.mangle called}
+      | otherwise = Set.empty
     single = length (tokens (trim text)) == 1 || take 1 (trim text) == "("
-    Sequent.Program {definitions} = Sequent.generate entry modules
 
 forms :: [Form]
 forms =
@@ -531,7 +540,14 @@ forms =
       ]
     -- The program for the entry, with only the definitions that are wanted.
     chosen selection modules =
-      let Sequent.Program {definitions, entry = starting} = Sequent.generate entry modules
+      let -- A definition that was asked for is looked for from itself:
+          -- what was typed may have it put where it is used, and not
+          -- mention it.
+          from = case selection of
+            Definition wanted -> wanted
+            Asked -> entry
+          Sequent.Program {definitions} = Sequent.generate from modules
+          Sequent.Program {entry = starting} = Sequent.generate entry modules
           -- A definition is shown with the functions that were taken out of
           -- it, which are called by its name and then their own.
           mine global@Global.Global {path, name} _ = case selection of

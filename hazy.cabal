@@ -88,6 +88,7 @@ executable hazy
     Builtin.Tuple
     Core.Arity
     Core.Builtin
+    Core.Eta
     Core.Index.Table.Term
     Core.Substitute
     Core.Temporary.Definition

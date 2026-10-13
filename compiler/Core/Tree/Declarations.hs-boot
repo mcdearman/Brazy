@@ -29,3 +29,4 @@ instance Substitute.Functor Declarations
 
 simplify :: Semantic.Declarations Identity Void locality Identity Normal Check scope -> Declarations scope
 single :: Declaration scope -> Declarations scope
+none :: Declarations scope -> Bool

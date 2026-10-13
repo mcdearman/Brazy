@@ -1147,12 +1147,25 @@ The order to take it in:
     call gives what the definition takes, and does not ask the definition
     where its code is. Fourteen thousand calls in the compiler do, a
     quarter of the ones that asked, and some of them are of a package
-- [ ] What it does not find yet. A definition that is another given some of
-      its arguments, as `f = g x` is, takes what is left of the other's,
-      and is counted as taking none. The sequent calculus still works out
-      for itself how deep a definition's functions go, since it sees ones
-      that Core has no definition for: a method, and a function that was
-      taken out of another
+- [x] A definition that is another given some of its arguments, as
+      `f = g x` is, takes what is left of the other's, and is written out
+      as a function of them (`Core.Eta`), so that it is counted as taking
+      them and a call of it goes on to a call of the other with everything.
+      It is only done where nothing would be worked out a second time: the
+      other is known to be that many functions, and what it is given is a
+      name, a number, a character, a constructor of nothing or a method of
+      evidence that is there already
+  - The functions a definition is made of are counted through what the
+    check wraps them in: the one way out of a match that matches nothing,
+    the definitions of a `where` that has none, and a name for an argument
+    that was written as a variable. A definition written with no arguments
+    before its `=`, as  = \x y -> ... is, was counted as taking none
+- [ ] What that does not find. A definition inside another is not looked
+      at, nor one that is a method given arguments, as `total = foldr (+) 0`
+      is. One that is one that is another is followed three deep. The
+      sequent calculus still works out for itself how deep a definition's
+      functions go, since it sees ones that Core has no definition for: a
+      method, and a function that was taken out of another
 - [ ] What that leaves. A method of a class and a function that is not
       written as functions inside functions are called as before. A call
       that is the last thing a thunk does is not the last thing the thunk's
