@@ -10,6 +10,7 @@ import qualified Core.Tree.Module as Module (simplify)
 import Data.Char (toLower, toUpper)
 import Data.Foldable (for_, toList, traverse_)
 import Data.Functor.Identity (Identity (..))
+import Data.List (sort)
 import Data.List.Reverse (List (..))
 import qualified Data.Map as Map
 import Data.Text (Text, intercalate, pack, unpack)
@@ -128,7 +129,9 @@ loadModules extensions = loadModules []
     loadModules :: [FilePath] -> FilePath -> IO [Loaded]
     loadModules modulePath file = case takeExtension file of
       "" -> do
-        children <- listDirectory file
+        -- In order, so that what is made of a program does not depend on
+        -- the order a system happens to keep its files in.
+        children <- sort <$> listDirectory file
         let normalize (h : t) = dropExtension (toUpper h : t)
             normalize [] = error "empty path"
             recurse name = loadModules (normalize name : modulePath) (file </> name)
