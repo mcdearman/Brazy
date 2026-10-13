@@ -9,6 +9,8 @@ import qualified Core.Tree.Module as Core (Module, name)
 import qualified Core.Tree.Module as Module (simplify)
 import Data.Char (toLower, toUpper)
 import Data.Foldable (for_, toList, traverse_)
+import Data.IORef (newIORef, readIORef, writeIORef)
+import Data.Traversable (for)
 import Data.Functor.Identity (Identity (..))
 import Data.List.Reverse (List (..))
 import qualified Data.Map as Map
@@ -456,7 +458,10 @@ main'' args = case getOpt order options args of
         all = headers <> modules
         help = putStr $ usageInfo "hazy [options] folders..." options
         run = case mode of
-          Repl -> repl session (toList given)
+          Repl -> do
+            parsed <- newIORef Map.empty
+            verified <- newIORef Nothing
+            repl (session parsed verified) (toList given)
           _ | null modules -> help
           Help -> help
           Parse -> do
@@ -693,7 +698,7 @@ main'' args = case getOpt order options args of
           hClose handle
         -- What an interactive session asks of the compiler. The session's
         -- module comes after the packages and the files that were loaded.
-        session =
+        session parsed verified =
           Compiler
             { parses = \text -> unsafePerformIO $ do
                 -- A parse error is thrown from pure code, so it has to be
@@ -701,25 +706,50 @@ main'' args = case getOpt order options args of
                 parsed <- stage1 Normal (Vector.singleton (entered text))
                 succeeded <$> attempt (pure $! length (Prelude.show parsed)),
               check = \files text -> do
-                _ <- checked files text
+                _ <- checked parsed verified files text
                 pure (),
-              core = checked,
+              core = checked parsed verified,
               stable = split
             }
         -- The Core of everything, with the errors of what is not a package's
         -- found: the same hack as forceModules, showing a module finds them.
-        checked files text = do
-          all <- together files text
-          () <- pure $! seq (length (Prelude.show (Vector.drop split all))) ()
+        --
+        -- The files that were loaded are the same from one entry to the
+        -- next unless someone changed them. Their errors are looked for when
+        -- they are first seen and when their text changes, and after that
+        -- only the session's own module is gone through: of the rest, an
+        -- entry pays for what it uses.
+        checked parsed verified files text = do
+          (texts, all) <- together parsed files text
+          before <- readIORef verified
+          let wanted
+                | before == Just texts = Vector.drop (length all - 1) all
+                | otherwise = Vector.drop split all
+          () <- pure $! seq (length (Prelude.show wanted)) ()
+          writeIORef verified (Just texts)
           pure all
         entered text = Root {extensions, name = Repl.source, contents = text}
-        together files text = do
-          loaded <- Vector.fromList . concat <$> traverse (loadModules extensions) files
-          rest <- stage1 debug (loaded <> Vector.singleton (entered text))
-          all <- pure (parsedHeaders <> rest)
+        -- A file is read at every entry, so that a change to it is seen, but
+        -- it is parsed again only if what was read is not what was parsed.
+        together parsed files text = do
+          loaded <- concat <$> traverse (loadModules extensions) files
+          known <- readIORef parsed
+          modules <- for loaded $ \file -> case Map.lookup (label file) known of
+            Just (contents, modulex) | contents == source file -> pure modulex
+            _ -> Vector.head <$> stage1 debug (Vector.singleton file)
+          writeIORef parsed $ Map.fromList [(label file, (source file, modulex)) | (file, modulex) <- zip loaded modules]
+          rest <- stage1 debug (Vector.singleton (entered text))
+          all <- pure (parsedHeaders <> Vector.fromList modules <> rest)
           all <- stage2 debug all
           all <- stage3 debug all
-          stage4 debug all
+          all <- stage4 debug all
+          pure (map source loaded, all)
+        label = \case
+          Root {name} -> name
+          Inner {name} -> name
+        source = \case
+          Root {contents} -> contents
+          Inner {contents} -> contents
         -- The packages are parsed once for a whole session. Nothing of a
         -- module is parsed until it is looked at, and then it stays parsed.
         parsedHeaders = unsafePerformIO (stage1 Normal headers)

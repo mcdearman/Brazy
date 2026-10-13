@@ -1,0 +1,7 @@
+:load test/repl/loaded/source/Shapes.hs
+import Shapes
+area (Square 3)
+map area [Circle 1, Square 2]
+bigger shape = area shape > 5
+filter bigger [Circle 1, Circle 2, Square 2]
+Circle (area (Square 2))
