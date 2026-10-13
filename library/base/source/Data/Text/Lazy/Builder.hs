@@ -10,39 +10,48 @@ module Data.Text.Lazy.Builder
   )
 where
 
+import qualified Data.Text as Strict (unpack)
+import qualified Data.Text.Lazy as Lazy (pack, unpack)
 import Data.Text (Text)
 import qualified Data.Text.Lazy as Lazy (Text)
 import Hazy.Prelude (placeholder)
 
-data Builder
+-- A builder is what it puts before whatever comes after it, so that two
+-- are joined without either being gone over again.
+newtype Builder = Builder ([Char] -> [Char])
 
-instance Eq Builder
+instance Eq Builder where
+  a == b = toLazyText a == toLazyText b
 
-instance Ord Builder
+instance Ord Builder where
+  compare a b = compare (toLazyText a) (toLazyText b)
 
-instance Show Builder
+instance Show Builder where
+  showsPrec d builder = showsPrec d (toLazyText builder)
 
-instance Semigroup Builder
+instance Semigroup Builder where
+  Builder a <> Builder b = Builder (a . b)
 
-instance Monoid Builder
+instance Monoid Builder where
+  mempty = Builder id
 
 toLazyText :: Builder -> Lazy.Text
-toLazyText = placeholder
+toLazyText (Builder build) = Lazy.pack (build [])
 
 toLazyTextWith :: Int -> Builder -> Lazy.Text
-toLazyTextWith = placeholder
+toLazyTextWith _ = toLazyText
 
 singleton :: Char -> Builder
-singleton = placeholder
+singleton c = Builder (c :)
 
 fromText :: Text -> Builder
-fromText = placeholder
+fromText text = Builder (Strict.unpack text ++)
 
 fromLazyText :: Lazy.Text -> Builder
-fromLazyText = placeholder
+fromLazyText text = Builder (Lazy.unpack text ++)
 
 fromString :: String -> Builder
-fromString = placeholder
+fromString characters = Builder (characters ++)
 
 flush :: Builder
-flush = placeholder
+flush = Builder id

@@ -137,7 +137,15 @@ definition global@Global.Global {path, name}
   | Text.any (== separator) name = Nothing
   | Just producer <- Map.lookup name definitions = Just producer
   | Just producer <- generated global = Just producer
-  | otherwise = error $ "missing primitive: " ++ unpack name
+  | otherwise = Just (missing name)
+
+-- |
+-- A primitive that this runtime does not have. A program that uses it fails
+-- when it does, and one that only could have is compiled all the same.
+missing :: Text -> Producer
+missing name =
+  Thunk (pack "k") $
+    Primitive Error [Literal (Text (pack "missing primitive: " <> name))] (covariable "k")
 
 -- |
 -- The definitions of the @Hazy@ module that are written out here. They are
@@ -251,6 +259,17 @@ definitions =
             ("primIntegerSignum", wrap IntegerSignum),
             ("primIntegerQuot", wrap IntegerQuot),
             ("primIntegerRem", wrap IntegerRem),
+            ("primTextNull", wrap TextNull),
+            ("primTextHead", wrap TextHead),
+            ("primTextTail", wrap TextTail),
+            ("primTextSnoc", wrap TextSnoc),
+            ("primTextAppend", wrap TextAppend),
+            ("primTextEqual", wrap TextEqual),
+            ("primTextCompare", wrap TextCompare),
+            ("primTextLength", wrap TextLength),
+            ("primTextTake", wrap TextTake),
+            ("primTextDrop", wrap TextDrop),
+            ("primTextIsPrefixOf", wrap TextIsPrefixOf),
             ("primSTPure", primSTPure),
             ("primSTBind", primSTBind)
           ]

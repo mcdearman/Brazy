@@ -6,18 +6,19 @@ module System.IO.Unsafe
   )
 where
 
-import Hazy.Prelude (placeholder)
-import System.IO (IO)
-import Prelude (error)
+import Hazy (primUnsafeCoerce)
+import Hazy.Prelude (IO (..), placeholder, runST)
 
+-- An action run where its result is wanted, as if it were no action.
 unsafePerformIO :: IO a -> a
-unsafePerformIO = placeholder
+unsafePerformIO (IO action) = runST (primUnsafeCoerce action)
 
 unsafeDupablePerformIO :: IO a -> a
-unsafeDupablePerformIO = placeholder
+unsafeDupablePerformIO = unsafePerformIO
 
+-- An action that is not run until its result is wanted.
 unsafeInterleaveIO :: IO a -> IO a
-unsafeInterleaveIO = placeholder
+unsafeInterleaveIO action = pure (unsafePerformIO action)
 
 unsafeFixIO :: (a -> IO a) -> IO a
 unsafeFixIO = placeholder

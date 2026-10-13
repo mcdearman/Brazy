@@ -106,20 +106,23 @@ updateInfo DataInstance {constructors, selectors} =
       UpdateInfo.Update
         { constructorInfo = ConstructorInstance.info constructorInstance,
           selectorIndexes =
+            -- Where each selector's field is in this constructor, with which
+            -- selector it is. A field need not be in the same place in every
+            -- constructor that has it.
             let selections = do
-                  Selector {index, uniform} <- toList selectors
+                  (selector, Selector {index, uniform}) <- zip [0 :: Int ..] (toList selectors)
                   case uniform of
-                    Selector.Uniform -> [index]
+                    Selector.Uniform -> [(index, selector)]
                     Selector.Disjoint {indexes} ->
                       case indexes Strict.Vector.! constructorIndex of
                         Strict.Nothing -> []
-                        Strict.Just index -> [index]
+                        Strict.Just index -> [(index, selector)]
                 combine = \case
                   [index] -> Strict.Just index
                   [] -> Strict.Nothing
                   _ -> error "duplicate selector"
              in -- The evidence a value holds is kept as it is.
-                orderListInt' combine (length entries + length asked) (zip selections selections)
+                orderListInt' combine (length entries + length asked) selections
         }
 
 mark :: Context s scope -> DataInstance s scope -> ST s ()

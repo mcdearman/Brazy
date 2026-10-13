@@ -24,7 +24,8 @@ module Status
 where
 
 import Control.Monad (when)
-import GHC.Clock (getMonotonicTime)
+import Data.Word (Word64)
+import GHC.Clock (getMonotonicTimeNSec)
 import System.Environment (lookupEnv)
 import System.IO (hFlush, hIsTerminalDevice, hPutStr, hPutStrLn, stderr)
 
@@ -34,8 +35,8 @@ data Status = Status
     -- | Whether stderr is a terminal, where a bar can be drawn.
     terminal :: !Bool,
     colour :: !Bool,
-    -- | When the work started, in seconds.
-    started :: !Double
+    -- | When the work started, in billionths of a second.
+    started :: !Word64
   }
 
 -- |
@@ -44,7 +45,7 @@ start :: Bool -> IO Status
 start enabled = do
   terminal <- hIsTerminalDevice stderr
   noColour <- lookupEnv "NO_COLOR"
-  started <- getMonotonicTime
+  started <- getMonotonicTimeNSec
   pure
     Status
       { enabled,
@@ -120,8 +121,8 @@ barLine colour word done total current =
 -- The work is over: @    Finished base in 0.42s@.
 finished :: Status -> String -> IO ()
 finished state@Status {started} text = do
-  now <- getMonotonicTime
-  let hundredths = round ((now - started) * 100) :: Int
+  now <- getMonotonicTimeNSec
+  let hundredths = fromIntegral ((now - started + 5000000) `div` 10000000) :: Int
       (seconds, part) = hundredths `divMod` 100
       elapsed = show seconds ++ "." ++ (if part < 10 then "0" else "") ++ show part ++ "s"
   status state "Finished" (text ++ " in " ++ elapsed)

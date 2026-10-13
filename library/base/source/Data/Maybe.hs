@@ -12,28 +12,39 @@ module Data.Maybe
   )
 where
 
-import Hazy.Prelude (placeholder)
 
 isJust :: Maybe a -> Bool
-isJust = placeholder
+isJust = \case
+  Just _ -> True
+  Nothing -> False
 
 isNothing :: Maybe a -> Bool
-isNothing = placeholder
+isNothing = \case
+  Just _ -> False
+  Nothing -> True
 
 fromJust :: Maybe a -> a
-fromJust = placeholder
+fromJust = \case
+  Just a -> a
+  Nothing -> error "Maybe.fromJust: Nothing"
 
 fromMaybe :: a -> Maybe a -> a
-fromMaybe = placeholder
+fromMaybe fallback = \case
+  Just a -> a
+  Nothing -> fallback
 
 listToMaybe :: [a] -> Maybe a
-listToMaybe = placeholder
+listToMaybe = \case
+  a : _ -> Just a
+  [] -> Nothing
 
 maybeToList :: Maybe a -> [a]
-maybeToList = placeholder
+maybeToList = \case
+  Just a -> [a]
+  Nothing -> []
 
 catMaybes :: [Maybe a] -> [a]
-catMaybes = placeholder
+catMaybes xs = [a | Just a <- xs]
 
 mapMaybe :: (a -> Maybe b) -> [a] -> [b]
-mapMaybe = placeholder
+mapMaybe f xs = [b | Just b <- map f xs]

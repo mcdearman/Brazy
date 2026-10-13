@@ -151,23 +151,66 @@ isAlphaNum char = case generalCategory char of
   OtherNumber -> True
   _ -> False
 
+-- A character as it is written inside a literal, as the Haskell report has
+-- it. What follows an escape is kept from being read as part of it.
 showLitChar :: Char -> ShowS
-showLitChar char =
-  if isAlphaNum char || char == ' '
-    then \string -> char : string
-    else \string -> '\\' : showInt (fromEnum char) string
+showLitChar char
+  | code > 127 = \rest -> '\\' : showInt code (protect rest)
+  | code == 127 = showString "\\DEL"
+  | code == 92 = showString "\\\\"
+  | code >= 32 = \rest -> char : rest
+  | code == 14 = \rest -> case rest of
+      'H' : _ -> "\\SO\\&" ++ rest
+      _ -> "\\SO" ++ rest
+  | otherwise = \rest -> '\\' : (names !! code ++ rest)
+  where
+    code = fromEnum char
+    protect rest = case rest of
+      digit : _ | isDigit digit -> '\\' : '&' : rest
+      _ -> rest
+    names =
+      [ "NUL", "SOH", "STX", "ETX", "EOT", "ENQ", "ACK", "a", "b", "t", "n", "v", "f", "r", "SO", "SI",
+        "DLE", "DC1", "DC2", "DC3", "DC4", "NAK", "SYN", "ETB", "CAN", "EM", "SUB", "ESC", "FS", "GS", "RS", "US"
+      ]
+
+-- The escapes that are names, each with the character it stands for. One
+-- that begins another comes after it.
+escapes :: [(String, Int)]
+escapes =
+  [ ("NUL", 0), ("SOH", 1), ("STX", 2), ("ETX", 3), ("EOT", 4), ("ENQ", 5), ("ACK", 6), ("a", 7), ("b", 8),
+    ("t", 9), ("n", 10), ("v", 11), ("f", 12), ("r", 13), ("SO", 14), ("SI", 15), ("DLE", 16), ("DC1", 17),
+    ("DC2", 18), ("DC3", 19), ("DC4", 20), ("NAK", 21), ("SYN", 22), ("ETB", 23), ("CAN", 24), ("EM", 25),
+    ("SUB", 26), ("ESC", 27), ("FS", 28), ("GS", 29), ("RS", 30), ("US", 31), ("SP", 32), ("DEL", 127),
+    ("\\", 92), ("'", 39), ("\"", 34)
+  ]
+
+-- The named escape some text begins with, after its backslash: the name,
+-- the character and what follows.
+escaped :: String -> [(String, Char, String)]
+escaped string = case [(name, toEnum code, rest) | (name, code) <- escapes, Just rest <- [after name string]] of
+  found : _ -> [found]
+  [] -> []
+  where
+    after [] rest = Just rest
+    after (a : as) (b : bs) | a == b = after as bs
+    after _ _ = Nothing
 
 readLitChar :: ReadS Char
 readLitChar = \case
-  '\\' : string -> do
-    (code, string) <- readDec string
-    [(toEnum code, string)]
+  '\\' : string -> case escaped string of
+    (_, char, rest) : _ -> [(char, rest)]
+    [] -> do
+      (code, string) <- readDec string
+      [(toEnum code, string)]
   c : string -> [(c, string)]
+  [] -> []
 
 lexLitChar :: ReadS String
 lexLitChar = \case
-  '\\' : string -> do
-    (digits, string) <- lexDigits string
-    [('\\' : digits, string)]
+  '\\' : string -> case escaped string of
+    (name, _, rest) : _ -> [('\\' : name, rest)]
+    [] -> do
+      (digits, string) <- lexDigits string
+      [('\\' : digits, string)]
   char : string -> [(char : [], string)]
   _ -> []

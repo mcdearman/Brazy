@@ -8,25 +8,23 @@ module Data.IORef
   )
 where
 
-import Hazy.Prelude (placeholder)
-import System.IO (IO)
-import Prelude (Eq, error)
+import Data.STRef (STRef, modifySTRef, modifySTRef', newSTRef, readSTRef, writeSTRef)
+import Hazy.Prelude (IO (..), RealWorld)
 
-data IORef a
-
-instance Eq (IORef a)
+newtype IORef a = IORef (STRef RealWorld a)
+  deriving (Eq)
 
 newIORef :: a -> IO (IORef a)
-newIORef = placeholder
+newIORef value = IO (fmap IORef (newSTRef value))
 
 readIORef :: IORef a -> IO a
-readIORef = placeholder
+readIORef (IORef reference) = IO (readSTRef reference)
 
 writeIORef :: IORef a -> a -> IO ()
-writeIORef = placeholder
+writeIORef (IORef reference) value = IO (writeSTRef reference value)
 
 modifyIORef :: IORef a -> (a -> a) -> IO ()
-modifyIORef = placeholder
+modifyIORef (IORef reference) f = IO (modifySTRef reference f)
 
 modifyIORef' :: IORef a -> (a -> a) -> IO ()
-modifyIORef' = placeholder
+modifyIORef' (IORef reference) f = IO (modifySTRef' reference f)

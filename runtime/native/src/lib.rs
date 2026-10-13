@@ -141,6 +141,63 @@ pub extern "C" fn hazy_prim_text_tail(value: Value) -> Value {
     }
 }
 
+#[no_mangle]
+pub extern "C" fn hazy_prim_text_append(left: Value, right: Value) -> Value {
+    let mut longer = String::with_capacity(text(left).len() + text(right).len());
+    longer.push_str(text(left));
+    longer.push_str(text(right));
+    from_text(&longer)
+}
+
+#[no_mangle]
+pub extern "C" fn hazy_prim_text_equal(left: Value, right: Value) -> Value {
+    boolean(text(left) == text(right))
+}
+
+/// Which of two texts comes first. The bytes of UTF-8 are in the order of
+/// the characters they stand for.
+#[no_mangle]
+pub extern "C" fn hazy_prim_text_compare(left: Value, right: Value) -> Value {
+    from_int(match text(left).cmp(text(right)) {
+        std::cmp::Ordering::Less => -1,
+        std::cmp::Ordering::Equal => 0,
+        std::cmp::Ordering::Greater => 1,
+    })
+}
+
+#[no_mangle]
+pub extern "C" fn hazy_prim_text_length(value: Value) -> Value {
+    from_int(text(value).chars().count() as i32)
+}
+
+/// Where in a text so many characters end, in bytes.
+fn after(string: &str, count: i32) -> usize {
+    if count <= 0 {
+        return 0;
+    }
+    match string.char_indices().nth(count as usize) {
+        Some((index, _)) => index,
+        None => string.len(),
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn hazy_prim_text_take(count: Value, value: Value) -> Value {
+    let string = text(value);
+    from_text(&string[..after(string, int(count))])
+}
+
+#[no_mangle]
+pub extern "C" fn hazy_prim_text_drop(count: Value, value: Value) -> Value {
+    let string = text(value);
+    from_text(&string[after(string, int(count))..])
+}
+
+#[no_mangle]
+pub extern "C" fn hazy_prim_text_is_prefix_of(prefix: Value, value: Value) -> Value {
+    boolean(text(value).starts_with(text(prefix)))
+}
+
 /// The general category of a character, as a constructor of
 /// `GeneralCategory`, whose constructors are in the order of the Haskell
 /// report.

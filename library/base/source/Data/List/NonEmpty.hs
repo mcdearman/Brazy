@@ -64,11 +64,41 @@ module Data.List.NonEmpty
   )
 where
 
+import qualified Data.List as List (sort, sortBy, sortOn)
+import Prelude hiding
+  ( break,
+    cycle,
+    drop,
+    dropWhile,
+    filter,
+    head,
+    init,
+    iterate,
+    last,
+    length,
+    map,
+    repeat,
+    reverse,
+    scanl,
+    scanl1,
+    scanr,
+    scanr1,
+    span,
+    splitAt,
+    tail,
+    take,
+    takeWhile,
+    unzip,
+    zip,
+    zipWith,
+    (!!),
+  )
+import qualified Prelude
 import Control.Applicative (Alternative (..))
 import Hazy.Prelude (NonEmpty (..), placeholder)
 
 map :: (a -> b) -> NonEmpty a -> NonEmpty b
-map = placeholder
+map f (a :| as) = f a :| Prelude.map f as
 
 intersperse :: a -> NonEmpty a -> NonEmpty a
 intersperse = placeholder
@@ -89,51 +119,61 @@ transpose :: NonEmpty (NonEmpty a) -> NonEmpty (NonEmpty a)
 transpose = placeholder
 
 sortBy :: (a -> a -> Ordering) -> NonEmpty a -> NonEmpty a
-sortBy = placeholder
+sortBy order (a :| as) = case List.sortBy order (a : as) of
+  b : bs -> b :| bs
+  [] -> a :| []
 
 sortWith :: (Ord o) => (a -> o) -> NonEmpty a -> NonEmpty a
 sortWith = placeholder
 
 length :: NonEmpty a -> Int
-length = placeholder
+length (_ :| as) = 1 Prelude.+ Prelude.length as
 
 head :: NonEmpty a -> a
-head = placeholder
+head (a :| _) = a
 
 tail :: NonEmpty a -> [a]
-tail = placeholder
+tail (_ :| as) = as
 
 last :: NonEmpty a -> a
-last = placeholder
+last (a :| as) = Prelude.foldl (\_ x -> x) a as
 
 init :: NonEmpty a -> [a]
-init = placeholder
+init (a :| as) = case as of
+  [] -> []
+  _ -> a : Prelude.init as
 
 singleton :: a -> NonEmpty a
-singleton = placeholder
+singleton a = a :| []
 
 infixr 5 <|
 
 (<|) :: a -> NonEmpty a -> NonEmpty a
-(<|) = placeholder
+a <| (b :| bs) = a :| b : bs
 
 cons :: a -> NonEmpty a -> NonEmpty a
-cons = placeholder
+cons a (b :| bs) = a :| b : bs
 
 uncons :: NonEmpty a -> (a, Maybe (NonEmpty a))
-uncons = placeholder
+uncons (a :| as) = (a, nonEmpty as)
 
 unfoldr :: (a -> (b, Maybe a)) -> a -> NonEmpty b
 unfoldr = placeholder
 
 sort :: (Ord a) => NonEmpty a -> NonEmpty a
-sort = placeholder
+sort (a :| as) = case List.sort (a : as) of
+  b : bs -> b :| bs
+  [] -> a :| []
 
 sortOn :: (Ord b) => (a -> b) -> NonEmpty a -> NonEmpty a
-sortOn = placeholder
+sortOn f (a :| as) = case List.sortOn f (a : as) of
+  b : bs -> b :| bs
+  [] -> a :| []
 
 reverse :: NonEmpty a -> NonEmpty a
-reverse = placeholder
+reverse (a :| as) = case Prelude.reverse (a : as) of
+  b : bs -> b :| bs
+  [] -> a :| []
 
 inits :: (Foldable f) => f a -> NonEmpty [a]
 inits = placeholder
@@ -142,10 +182,10 @@ tails :: (Foldable f) => f a -> NonEmpty [a]
 tails = placeholder
 
 append :: NonEmpty a -> NonEmpty a -> NonEmpty a
-append = placeholder
+append (a :| as) (b :| bs) = a :| (as ++ b : bs)
 
 appendList :: NonEmpty a -> [a] -> NonEmpty a
-appendList = placeholder
+appendList (a :| as) bs = a :| (as ++ bs)
 
 prependList :: [a] -> NonEmpty a -> NonEmpty a
 prependList = placeholder
@@ -232,22 +272,26 @@ nubBy = placeholder
 (!!) = placeholder
 
 zip :: NonEmpty a -> NonEmpty b -> NonEmpty (a, b)
-zip = placeholder
+zip (a :| as) (b :| bs) = (a, b) :| Prelude.zip as bs
 
 zipWith :: (a -> b -> c) -> NonEmpty a -> NonEmpty b -> NonEmpty c
-zipWith = placeholder
+zipWith f (a :| as) (b :| bs) = f a b :| Prelude.zipWith f as bs
 
 unzip :: (Functor f) => f (a, b) -> (f a, f b)
 unzip = placeholder
 
 fromList :: [a] -> NonEmpty a
-fromList = placeholder
+fromList = \case
+  a : as -> a :| as
+  [] -> error "NonEmpty.fromList: empty list"
 
 toList :: NonEmpty a -> [a]
-toList = placeholder
+toList (a :| as) = a : as
 
 nonEmpty :: [a] -> Maybe (NonEmpty a)
-nonEmpty = placeholder
+nonEmpty = \case
+  a : as -> Just (a :| as)
+  [] -> Nothing
 
 xor :: NonEmpty Bool -> Bool
 xor = placeholder

@@ -96,29 +96,38 @@ module System.IO
 where
 
 import Data.Text (pack)
-import qualified Data.Text.IO as Text
+import Data.Text (unpack)
+import System.IO.Internal (Handle (..))
+import qualified System.IO.Internal as Internal
 import Foreign.Ptr (Ptr)
 import Hazy.Prelude (placeholder)
 
 fixIO :: (a -> IO a) -> IO a
 fixIO = placeholder
 
-data Handle
 
 stdin :: Handle
-stdin = placeholder
+stdin = Handle 0
 
 stdout :: Handle
-stdout = placeholder
+stdout = Handle 1
 
 stderr :: Handle
-stderr = placeholder
+stderr = Handle 2
 
 withFile :: FilePath -> IOMode -> (Handle -> IO r) -> IO r
-withFile = placeholder
+withFile path mode action = do
+  handle <- openFile path mode
+  result <- action handle
+  hClose handle
+  pure result
 
 openFile :: FilePath -> IOMode -> IO Handle
-openFile = placeholder
+openFile path mode = Internal.open path $ case mode of
+  ReadMode -> 0
+  WriteMode -> 1
+  AppendMode -> 2
+  ReadWriteMode -> error "System.IO.openFile: a file is not opened to read and write at once"
 
 data IOMode
   = ReadMode
@@ -127,10 +136,10 @@ data IOMode
   | ReadWriteMode
 
 hClose :: Handle -> IO ()
-hClose = placeholder
+hClose = Internal.close
 
 readFile' :: FilePath -> IO String
-readFile' = placeholder
+readFile' = readFile
 
 hFileSize :: Handle -> IO Integer
 hFileSize = placeholder
@@ -150,13 +159,13 @@ data BufferMode
   | BlockBuffering (Maybe Int)
 
 hSetBuffering :: Handle -> BufferMode -> IO ()
-hSetBuffering = placeholder
+hSetBuffering _ _ = pure ()
 
 hGetBuffering :: Handle -> IO BufferMode
 hGetBuffering = placeholder
 
 hFlush :: Handle -> IO ()
-hFlush = placeholder
+hFlush _ = pure ()
 
 hGetPosn :: Handle -> IO HandlePosn
 hGetPosn = placeholder
@@ -193,10 +202,10 @@ hIsSeekable :: Handle -> IO Bool
 hIsSeekable = placeholder
 
 hIsTerminalDevice :: Handle -> IO Bool
-hIsTerminalDevice = placeholder
+hIsTerminalDevice = Internal.terminal
 
 hSetEcho :: Handle -> Bool -> IO ()
-hSetEcho = placeholder
+hSetEcho _ _ = pure ()
 
 hGetEcho :: Handle -> IO Bool
 hGetEcho = placeholder
@@ -214,40 +223,44 @@ hGetChar :: Handle -> IO Char
 hGetChar = placeholder
 
 hGetLine :: Handle -> IO String
-hGetLine = placeholder
+hGetLine handle = do
+  found <- Internal.line handle
+  case found of
+    Just text -> pure (unpack text)
+    Nothing -> error "System.IO.hGetLine: end of file"
 
 hLookAhead :: Handle -> IO Char
 hLookAhead = placeholder
 
 hGetContents :: Handle -> IO String
-hGetContents = placeholder
+hGetContents handle = fmap unpack (Internal.contents handle)
 
 hGetContents' :: Handle -> IO String
-hGetContents' = placeholder
+hGetContents' = hGetContents
 
 hPutChar :: Handle -> Char -> IO ()
-hPutChar = placeholder
+hPutChar handle c = Internal.put handle (pack [c])
 
 hPutStr :: Handle -> String -> IO ()
-hPutStr = placeholder
+hPutStr handle characters = Internal.put handle (pack characters)
 
 hPutStrLn :: Handle -> String -> IO ()
-hPutStrLn = placeholder
+hPutStrLn handle characters = Internal.put handle (pack (characters ++ "\n"))
 
 hPrint :: (Show a) => Handle -> a -> IO ()
-hPrint = placeholder
+hPrint handle value = hPutStrLn handle (show value)
 
 getContents' :: IO String
-getContents' = placeholder
+getContents' = getContents
 
 withBinaryFile :: FilePath -> IOMode -> (Handle -> IO r) -> IO r
-withBinaryFile = placeholder
+withBinaryFile = withFile
 
 openBinaryFile :: FilePath -> IOMode -> IO Handle
-openBinaryFile = placeholder
+openBinaryFile = openFile
 
 hSetBinaryMode :: Handle -> Bool -> IO ()
-hSetBinaryMode = placeholder
+hSetBinaryMode _ _ = pure ()
 
 hPutBuf :: Handle -> Ptr a -> Int -> IO ()
 hPutBuf = placeholder
@@ -277,58 +290,59 @@ openBinaryTempFileWithDefaultPermissions :: FilePath -> String -> IO (FilePath, 
 openBinaryTempFileWithDefaultPermissions = placeholder
 
 hSetEncoding :: Handle -> TextEncoding -> IO ()
-hSetEncoding = placeholder
+hSetEncoding _ _ = pure ()
 
 hGetEncoding :: Handle -> IO (Maybe TextEncoding)
 hGetEncoding = placeholder
 
-data TextEncoding
+-- Text is read and written as UTF-8, whichever of these is asked for.
+newtype TextEncoding = TextEncoding String
 
 latin1 :: TextEncoding
-latin1 = placeholder
+latin1 = TextEncoding "ISO-8859-1"
 
 utf8 :: TextEncoding
-utf8 = placeholder
+utf8 = TextEncoding "UTF-8"
 
 utf8_bom :: TextEncoding
-utf8_bom = placeholder
+utf8_bom = TextEncoding "UTF-8BOM"
 
 utf16 :: TextEncoding
-utf16 = placeholder
+utf16 = TextEncoding "UTF-16"
 
 utf16le :: TextEncoding
-utf16le = placeholder
+utf16le = TextEncoding "UTF-16LE"
 
 utf16be :: TextEncoding
-utf16be = placeholder
+utf16be = TextEncoding "UTF-16BE"
 
 utf32 :: TextEncoding
-utf32 = placeholder
+utf32 = TextEncoding "UTF-32"
 
 utf32le :: TextEncoding
-utf32le = placeholder
+utf32le = TextEncoding "UTF-32LE"
 
 utf32be :: TextEncoding
-utf32be = placeholder
+utf32be = TextEncoding "UTF-32BE"
 
 localeEncoding :: TextEncoding
-localeEncoding = placeholder
+localeEncoding = utf8
 
 char8 :: TextEncoding
-char8 = placeholder
+char8 = TextEncoding "binary"
 
 mkTextEncoding :: String -> IO TextEncoding
-mkTextEncoding = placeholder
+mkTextEncoding name = pure (TextEncoding name)
 
 hSetNewlineMode :: Handle -> NewlineMode -> IO ()
-hSetNewlineMode = placeholder
+hSetNewlineMode _ _ = pure ()
 
 data Newline
   = LF
   | CRLF
 
 nativeNewline :: Newline
-nativeNewline = placeholder
+nativeNewline = LF
 
 data NewlineMode = NewlineMode
   { inputNL :: Newline,
@@ -336,10 +350,10 @@ data NewlineMode = NewlineMode
   }
 
 noNewlineTranslation :: NewlineMode
-noNewlineTranslation = placeholder
+noNewlineTranslation = NewlineMode {inputNL = LF, outputNL = LF}
 
 universalNewlineMode :: NewlineMode
-universalNewlineMode = placeholder
+universalNewlineMode = NewlineMode {inputNL = CRLF, outputNL = LF}
 
 nativeNewlineMode :: NewlineMode
-nativeNewlineMode = placeholder
+nativeNewlineMode = NewlineMode {inputNL = LF, outputNL = LF}

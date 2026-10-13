@@ -351,7 +351,7 @@ instance Show HelperInteger where
   showsPrec n (Integer integer) = showSigned showInt n integer
 
 instance Read HelperInteger where
-  readsPrec p s = [(Integer i, t) | (i, t) <- readSigned readDec s]
+  readsPrec p s = [(Integer i, t) | (i, t) <- readWhole s]
 
 newtype HelperOrdering = Ordering Ordering
 

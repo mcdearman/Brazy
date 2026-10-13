@@ -26,25 +26,32 @@ module Numeric
   )
 where
 
+import Data.Char (intToDigit)
 import Hazy.Prelude (placeholder)
 
 showSigned :: (Real a) => (a -> ShowS) -> Int -> a -> ShowS
 showSigned = placeholder
 
 showIntAtBase :: (Integral a) => a -> (Int -> Char) -> a -> ShowS
-showIntAtBase = placeholder
+showIntAtBase base digit number rest
+  | number < 0 = error "Numeric.showIntAtBase: negative number"
+  | otherwise = go (quotRem number base) rest
+  where
+    go (n, d) text =
+      let text' = digit (fromIntegral d) : text
+       in text' `seq` if n == 0 then text' else go (quotRem n base) text'
 
 showInt :: (Integral a) => a -> ShowS
-showInt = placeholder
+showInt = showIntAtBase 10 intToDigit
 
 showBin :: (Integral a) => a -> ShowS
-showBin = placeholder
+showBin = showIntAtBase 2 intToDigit
 
 showHex :: (Integral a) => a -> ShowS
-showHex = placeholder
+showHex = showIntAtBase 16 intToDigit
 
 showOct :: (Integral a) => a -> ShowS
-showOct = placeholder
+showOct = showIntAtBase 8 intToDigit
 
 showEFloat :: (RealFloat a) => Maybe Int -> a -> ShowS
 showEFloat = placeholder

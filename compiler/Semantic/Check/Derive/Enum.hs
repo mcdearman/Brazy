@@ -153,6 +153,46 @@ toEnum context position typeIndex datax = do
     body <- body
     pure $ Generated $ Solved $ TypeLambda.mono $ body
 
+-- |
+-- Everything from a constructor on: @enumFrom x = enumFromTo x last@. What
+-- the class has by default asks for what comes after the constructor, and
+-- the last one has nothing after it.
+enumFrom ::
+  Context s (Local ':+ scope) ->
+  Position ->
+  Evidence (Local ':+ scope) ->
+  Type2.Index scope ->
+  Data scope ->
+  ST s (Unify.Solve s (MethodConcrete Auto layout Check scope))
+enumFrom context position evidence typeIndex datax = do
+  DataInstance {types, constructors} <- instanciateMark context position (shift datax)
+  let unify index typex = Unify.unify context position typex (Core.Variable $ Local.Local index)
+  sequence $ zipWith unify [0 ..] (toList types)
+  pure $ do
+    maxInfo <- ConstructorInfo.solve $ ConstructorInstance.info (Strict.Vector.last constructors)
+    let max =
+          shift $
+            Expression.simplifyConstructorExact
+              Constructor.Index
+                { typeIndex = shift typeIndex,
+                  constructorIndex = length constructors - 1
+                }
+              maxInfo
+              Strict.Vector.empty
+        body =
+          Expression.Lambda
+            { body =
+                Expression.Method
+                  { method = Method.enumFromTo,
+                    evidence = shift evidence,
+                    instanciation = Instanciation.Mono,
+                    methodInfo = Class.info $ Enum.definition
+                  }
+                  `Expression.call` Expression.lambdaVariable
+                  `Expression.call` max
+            }
+    pure $ Generated $ Solved $ TypeLambda.mono body
+
 enumFromThen ::
   Context s (Local ':+ scope) ->
   Position ->

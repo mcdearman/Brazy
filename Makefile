@@ -5,6 +5,7 @@
 #   make run             start an interactive session
 #   make run ARGS="..."  run the compiler with some arguments instead
 #   make test            run the tests
+#   make bootstrap       have Hazy compile itself twice over, and compare
 #   make clean           remove what was built, but not cabal's own cache
 
 DIST ?= .dist
@@ -19,7 +20,7 @@ SOURCES := $(shell find compiler diagnostics viewer runtime library -type f) \
 # What `make run` gives the compiler when it is told nothing else.
 ARGS ?= --repl
 
-.PHONY: all run test clean
+.PHONY: all run test bootstrap clean
 
 all: $(BUILT)
 
@@ -33,5 +34,8 @@ run: all
 test: all
 	env bash tools/test.sh $(HAZY)
 
+bootstrap: all
+	env bash tools/bootstrap.sh $(HAZY)
+
 clean:
-	rm -rf $(DIST) .test
+	rm -rf $(DIST) .test .bootstrap

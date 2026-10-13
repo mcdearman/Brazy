@@ -874,9 +874,73 @@ The order to take it in:
 - [x] **Hazy checks its own source.** `hazy -XStableImports --check
       compiler` goes through all 464 modules in about seven seconds, and
       the tests on every system now run it
-- [ ] Compile it. Nothing has yet been made of the compiler's source but
-      checked trees: the back ends have to take it, and the library it is
-      checked against is still mostly placeholders
+- [x] **Hazy compiles itself, to Javascript.** `tools/bootstrap.sh` has the
+      compiler that GHC built make the compiler from its own source (stage
+      2), has that compiler make it again (stage 3), and compares what the
+      two made: all 550 files are the same. Stage 2 also compiles every
+      program under `test/run` to what is expected of it. Stage 3 takes
+      about four minutes under Bun, which has to be let have a deep stack:
+      a program made of Haskell recurses far further than Javascript is
+      given room for. The tests on Linux run it
+- [x] The library the compiler is made against. What the compiler uses of
+      `base`, `containers`, `vector` and `text` is written in Haskell in
+      `library/base`, where almost all of it was placeholders:
+  - `Data.Map` and `Data.Set` are trees balanced by weight, as in
+    `containers`
+  - `Data.Vector` and `Data.Vector.Strict` are trees whose shape their
+    length alone gives, so an element is found in as many steps as the
+    tree is deep. They want to be arrays, which need the runtime
+  - Strict text is the runtime's, with primitives for its start, its rest,
+    its length, joining and comparing. Lazy text is its characters, and a
+    builder is what it puts before whatever comes after
+  - `Data.List`, `Data.List.NonEmpty`, `Data.Char`, `Data.Maybe`,
+    `Data.Foldable`, `Data.Traversable`, `Control.Monad`,
+    `Control.Applicative`, `Data.Int`, `Data.Word`, `Numeric`, `Text.Read`,
+    `System.FilePath` and `System.Console.GetOpt`
+  - `Diagnostics`, which the compiler that GHC builds has drawn by the
+    `diagnose` package, is drawn by hand after the look of it
+  - The tests `library-containers`, `read-bases`, `lazy-shadow` and
+    `record-update-many` print what GHC prints for the same programs
+- [x] The world outside a program, in the Javascript runtime: references
+      (`STRef`, `IORef`), arguments, the environment, exit, files and
+      handles, directories, running a program, a clock, `unsafePerformIO`
+      and `unsafeInterleaveIO`, and `throw` and `catch`. They are declared in
+      `runtime/header/Hazy.hs`. A primitive the native runtime does not have
+      is compiled to something that fails when it is used
+- [x] What was wrong with the compiler, found by its compiling itself. Each
+      was right in the compiler GHC builds, since GHC compiled that, and
+      wrong in the one Hazy made:
+  - A derived `Enum` ran past the last constructor for `[x ..]`: `enumFrom`
+    is now derived (test `derive-enum-bounded`)
+  - A newtype of a function that takes evidence was called without being
+    evaluated to the function (test `newtype-polymorphic`)
+  - A negative number as a pattern matched the positive one (test
+    `negative-pattern`)
+  - A pattern inside a lazy pattern was matched at once (test
+    `lazy-shadow`)
+  - An update of a field wrote to the place the field has in the first
+    constructor, in every constructor (test `record-update-many`)
+  - `show` of a character or a string escaped as no Haskell does, and
+    `read` took a number only in tens (tests `readshow`, `read-bases`)
+- [ ] Compile itself natively. What stands between:
+  - The primitives of the world outside, in the native runtime
+  - The rest of a text is copied each time it is taken, so going through a
+    text a character at a time takes time by the square of its length
+  - Then stage 2 as a native executable, stage 3 made by it, and the two
+    compared
+- [ ] What the library still does not do:
+  - `throw` and `catch` do not tell one type of exception from another:
+    what is thrown is caught by whichever `catch` was begun last. The
+    compiler throws one type
+  - `Double` and `Float` have no arithmetic. `Status` in the compiler now
+    counts time in whole numbers for that reason
+  - `Lambline` and `Viewer` are placeholders, so a compiler made by Hazy has
+    no interactive session
+  - `toUpper` and `toLower` change the letters of Latin-1 only
+  - An `Int` is 32 bits in both runtimes, and `Int64` is no wider
+  - Whatever is read from a handle is read at once, not as it is wanted
+  - Many functions of `Data.Map`, `Data.Vector`, `System.IO` and
+    `System.Directory` that the compiler does not use are placeholders yet
 - [x] The type variables of an instance, in its methods. A type written
       after an expression in a method meant the wrong variable, or none:
       the method's own type variables were put outside the instance's where
@@ -901,6 +965,8 @@ The order to take it in:
   - Derive `Functor`, `Foldable` and `Traversable`. One type derived them,
     the record of builtin names in `Generate.Mangle.Builtin`, and its
     instances are now written out
+  - Arithmetic of floating point. `Status` kept the time in a `Double` and
+    now keeps it in a `Word64`
 - [ ] Run the check again after each of these and count what stops it next.
       Each of the items below is a guess until then
 

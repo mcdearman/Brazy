@@ -50,70 +50,127 @@ import Hazy.Prelude
   )
 
 isControl :: Char -> Bool
-isControl = placeholder
+isControl c = case generalCategory c of
+  Control -> True
+  _ -> False
 
 isLower :: Char -> Bool
-isLower = placeholder
+isLower c = case generalCategory c of
+  LowercaseLetter -> True
+  _ -> False
 
 isUpper :: Char -> Bool
-isUpper = placeholder
+isUpper c = case generalCategory c of
+  UppercaseLetter -> True
+  TitlecaseLetter -> True
+  _ -> False
 
 isPrint :: Char -> Bool
-isPrint = placeholder
+isPrint c = case generalCategory c of
+  LineSeparator -> False
+  ParagraphSeparator -> False
+  Control -> False
+  Format -> False
+  Surrogate -> False
+  PrivateUse -> False
+  NotAssigned -> False
+  _ -> True
 
 isOctDigit :: Char -> Bool
-isOctDigit = placeholder
+isOctDigit c = c >= '0' && c <= '7'
 
 isHexDigit :: Char -> Bool
-isHexDigit = placeholder
+isHexDigit c = isDigit c || c >= 'A' && c <= 'F' || c >= 'a' && c <= 'f'
 
 isLetter :: Char -> Bool
-isLetter = placeholder
+isLetter = isAlpha
 
 isMark :: Char -> Bool
-isMark = placeholder
+isMark c = case generalCategory c of
+  NonSpacingMark -> True
+  SpacingCombiningMark -> True
+  EnclosingMark -> True
+  _ -> False
 
 isNumber :: Char -> Bool
-isNumber = placeholder
+isNumber c = case generalCategory c of
+  DecimalNumber -> True
+  LetterNumber -> True
+  OtherNumber -> True
+  _ -> False
 
 isPunctuation :: Char -> Bool
-isPunctuation = placeholder
+isPunctuation c = case generalCategory c of
+  ConnectorPunctuation -> True
+  DashPunctuation -> True
+  OpenPunctuation -> True
+  ClosePunctuation -> True
+  InitialQuote -> True
+  FinalQuote -> True
+  OtherPunctuation -> True
+  _ -> False
 
 isSymbol :: Char -> Bool
-isSymbol = placeholder
+isSymbol c = case generalCategory c of
+  MathSymbol -> True
+  CurrencySymbol -> True
+  ModifierSymbol -> True
+  OtherSymbol -> True
+  _ -> False
 
 isSeparator :: Char -> Bool
-isSeparator = placeholder
+isSeparator c = case generalCategory c of
+  Space -> True
+  LineSeparator -> True
+  ParagraphSeparator -> True
+  _ -> False
 
 isAscii :: Char -> Bool
-isAscii = placeholder
+isAscii c = ord c < 128
 
 isLatin1 :: Char -> Bool
-isLatin1 = placeholder
+isLatin1 c = ord c < 256
 
 isAsciiUpper :: Char -> Bool
-isAsciiUpper = placeholder
+isAsciiUpper c = c >= 'A' && c <= 'Z'
 
 isAsciiLower :: Char -> Bool
-isAsciiLower = placeholder
+isAsciiLower c = c >= 'a' && c <= 'z'
 
 toUpper :: Char -> Char
-toUpper = placeholder
+toUpper c
+  | c >= 'a' && c <= 'z' = chr (ord c - 32)
+  | code >= 224 && code <= 254 && code /= 247 = chr (code - 32)
+  | otherwise = c
+  where
+    code = ord c
 
 toLower :: Char -> Char
-toLower = placeholder
+toLower c
+  | c >= 'A' && c <= 'Z' = chr (ord c + 32)
+  | code >= 192 && code <= 222 && code /= 215 = chr (code + 32)
+  | otherwise = c
+  where
+    code = ord c
 
 toTitle :: Char -> Char
-toTitle = placeholder
+toTitle = toUpper
 
 digitToInt :: Char -> Int
-digitToInt = placeholder
+digitToInt c
+  | isDigit c = ord c - ord '0'
+  | c >= 'a' && c <= 'f' = ord c - ord 'a' + 10
+  | c >= 'A' && c <= 'F' = ord c - ord 'A' + 10
+  | otherwise = error "Char.digitToInt: not a digit"
 
 intToDigit :: Int -> Char
-intToDigit = placeholder
+intToDigit n
+  | n >= 0 && n <= 9 = chr (ord '0' + n)
+  | n >= 10 && n <= 15 = chr (ord 'a' + n - 10)
+  | otherwise = error "Char.intToDigit: not a digit"
 
 ord :: Char -> Int
-ord = placeholder
+ord = fromEnum
 
 chr :: Int -> Char
-chr = placeholder
+chr = toEnum

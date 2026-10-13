@@ -16,6 +16,7 @@ module Text.Read
   )
 where
 
+import Data.Char (isSpace)
 import Hazy.Prelude (placeholder)
 import Text.ParserCombinators.ReadPrec (ReadPrec)
 import Text.Read.Lex (Lexeme (..))
@@ -33,7 +34,12 @@ readListPrecDefault :: (Read a) => ReadPrec [a]
 readListPrecDefault = placeholder
 
 readEither :: (Read a) => String -> Either String a
-readEither = placeholder
+readEither text = case [value | (value, rest) <- reads text, all isSpace rest] of
+  [value] -> Right value
+  [] -> Left "Prelude.read: no parse"
+  _ -> Left "Prelude.read: ambiguous parse"
 
 readMaybe :: (Read a) => String -> Maybe a
-readMaybe = placeholder
+readMaybe text = case readEither text of
+  Right value -> Just value
+  Left _ -> Nothing

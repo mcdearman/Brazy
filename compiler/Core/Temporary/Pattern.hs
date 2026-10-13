@@ -105,7 +105,14 @@ data Field scope = Field !Int !(Pattern scope)
   deriving (Show)
 
 simplify :: Semantic.Pattern Check scope -> Pattern scope
-simplify = \case
+simplify = within False
+
+-- |
+-- A pattern, which may be inside one that is lazy. Nothing of what a lazy
+-- pattern is matched against is looked at until something it binds is
+-- wanted, and that goes for the patterns inside it: they are lazy too.
+within :: Prelude.Bool -> Semantic.Pattern Check scope -> Pattern scope
+within outer = \case
   Semantic.Wildcard {} -> Wildcard
   patternx ->
     Match
@@ -113,18 +120,18 @@ simplify = \case
           Semantic.Constructor {constructor, patterns, constructorInfo = Solved constructorInfo} ->
             Constructor
               { constructor,
-                patterns = simplify <$> patterns,
+                patterns = within irrefutable <$> patterns,
                 constructorInfo
               }
           Semantic.Record {constructor, fields, constructorInfo = Solved constructorInfo} ->
             Record
               { constructor,
-                fields = resolveField <$> fields,
+                fields = resolveField irrefutable <$> fields,
                 constructorInfo
               }
           Semantic.List {items} ->
             List
-              { items = simplify <$> items
+              { items = within irrefutable <$> items
               }
           Semantic.Integer {integer, evidence = Solved evidence, equal = Solved equal} ->
             Integer
@@ -140,8 +147,10 @@ simplify = \case
               }
           Semantic.Character {character} -> Character {character}
           Semantic.String {string} -> String {string},
-        irrefutable = Semantic.irrefutable patternx
+        irrefutable
       }
+    where
+      irrefutable = outer || Semantic.irrefutable patternx
 
-resolveField :: Semantic.Field.Field Check scope -> Field scope
-resolveField (Semantic.Field.Field index patternx) = Field index (simplify patternx)
+resolveField :: Prelude.Bool -> Semantic.Field.Field Check scope -> Field scope
+resolveField irrefutable (Semantic.Field.Field index patternx) = Field index (within irrefutable patternx)

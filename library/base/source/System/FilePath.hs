@@ -55,16 +55,30 @@ module System.FilePath
   )
 where
 
+import Data.Char (isAlpha)
+import Data.List (dropWhileEnd)
+import System.Info (os)
 import Hazy.Prelude (placeholder)
 
+-- Whether paths are those of Windows, where either stroke parts a path.
+windows :: Bool
+windows = os == "mingw32"
+
+-- A path cut after its last separator: what comes before with the
+-- separator, and the name after.
+cut :: FilePath -> (FilePath, FilePath)
+cut path = (reverse directory, reverse name)
+  where
+    (name, directory) = break isPathSeparator (reverse path)
+
 pathSeparator :: Char
-pathSeparator = placeholder
+pathSeparator = if windows then '\\' else '/'
 
 pathSeparators :: [Char]
-pathSeparators = placeholder
+pathSeparators = if windows then "\\/" else "/"
 
 isPathSeparator :: Char -> Bool
-isPathSeparator = placeholder
+isPathSeparator c = c `elem` pathSeparators
 
 searchPathSeparator :: Char
 searchPathSeparator = placeholder
@@ -73,10 +87,10 @@ isSearchPathSeparator :: Char -> Bool
 isSearchPathSeparator = placeholder
 
 extSeparator :: Char
-extSeparator = placeholder
+extSeparator = '.'
 
 isExtSeparator :: Char -> Bool
-isExtSeparator = placeholder
+isExtSeparator c = c == '.'
 
 splitSearchPath :: String -> [FilePath]
 splitSearchPath = placeholder
@@ -85,13 +99,17 @@ getSearchPath :: IO [FilePath]
 getSearchPath = placeholder
 
 splitExtension :: FilePath -> (String, String)
-splitExtension = placeholder
+splitExtension path = case break isExtSeparator (reverse name) of
+  (_, "") -> (path, "")
+  (extension, _ : rest) -> (directory ++ reverse rest, '.' : reverse extension)
+  where
+    (directory, name) = cut path
 
 takeExtension :: FilePath -> String
-takeExtension = placeholder
+takeExtension = snd . splitExtension
 
 replaceExtension :: FilePath -> String -> FilePath
-replaceExtension = placeholder
+replaceExtension path extension = addExtension (dropExtension path) extension
 
 infixr 7 -<.>
 
@@ -99,18 +117,21 @@ infixr 7 -<.>
 (-<.>) = placeholder
 
 dropExtension :: FilePath -> FilePath
-dropExtension = placeholder
+dropExtension = fst . splitExtension
 
 addExtension :: FilePath -> String -> FilePath
-addExtension = placeholder
+addExtension path "" = path
+addExtension path extension@(first : _)
+  | isExtSeparator first = path ++ extension
+  | otherwise = path ++ "." ++ extension
 
 hasExtension :: FilePath -> Bool
-hasExtension = placeholder
+hasExtension = not . null . takeExtension
 
 infixr 7 <.>
 
 (<.>) :: FilePath -> String -> FilePath
-(<.>) = placeholder
+(<.>) = addExtension
 
 splitExtensions :: FilePath -> (FilePath, String)
 splitExtensions = placeholder
@@ -131,36 +152,42 @@ stripExtension :: String -> FilePath -> Maybe FilePath
 stripExtension = placeholder
 
 splitFileName :: FilePath -> (String, String)
-splitFileName = placeholder
+splitFileName path = case cut path of
+  ("", name) -> ("./", name)
+  other -> other
 
 takeFileName :: FilePath -> FilePath
-takeFileName = placeholder
+takeFileName = snd . cut
 
 replaceFileName :: FilePath -> String -> FilePath
 replaceFileName = placeholder
 
 dropFileName :: FilePath -> FilePath
-dropFileName = placeholder
+dropFileName = fst . splitFileName
 
 takeBaseName :: FilePath -> String
-takeBaseName = placeholder
+takeBaseName = dropExtension . takeFileName
 
 replaceBaseName :: FilePath -> String -> FilePath
 replaceBaseName = placeholder
 
 takeDirectory :: FilePath -> FilePath
-takeDirectory = placeholder
+takeDirectory = dropTrailingPathSeparator . dropFileName
 
 replaceDirectory :: FilePath -> String -> FilePath
 replaceDirectory = placeholder
 
 combine :: FilePath -> FilePath -> FilePath
-combine = placeholder
+combine a b
+  | hasDrive b || not (null b) && isPathSeparator (head b) = b
+  | null a = b
+  | isPathSeparator (last a) = a ++ b
+  | otherwise = a ++ [pathSeparator] ++ b
 
 infixr 5 </>
 
 (</>) :: FilePath -> FilePath -> FilePath
-(</>) = placeholder
+(</>) = combine
 
 splitPath :: FilePath -> [FilePath]
 splitPath = placeholder
@@ -181,7 +208,10 @@ takeDrive :: FilePath -> FilePath
 takeDrive = placeholder
 
 hasDrive :: FilePath -> Bool
-hasDrive = placeholder
+hasDrive path = case path of
+  letter : ':' : _ | windows -> isAlpha letter
+  first : _ -> isPathSeparator first
+  [] -> False
 
 dropDrive :: FilePath -> FilePath
 dropDrive = placeholder
@@ -190,13 +220,17 @@ isDrive :: FilePath -> Bool
 isDrive = placeholder
 
 hasTrailingPathSeparator :: FilePath -> Bool
-hasTrailingPathSeparator = placeholder
+hasTrailingPathSeparator path = not (null path) && isPathSeparator (last path)
 
 addTrailingPathSeparator :: FilePath -> FilePath
-addTrailingPathSeparator = placeholder
+addTrailingPathSeparator path = if hasTrailingPathSeparator path then path else path ++ [pathSeparator]
 
 dropTrailingPathSeparator :: FilePath -> FilePath
-dropTrailingPathSeparator = placeholder
+dropTrailingPathSeparator path
+  | hasTrailingPathSeparator path = case dropWhileEnd isPathSeparator path of
+      "" -> [last path]
+      shorter -> shorter
+  | otherwise = path
 
 normalise :: FilePath -> FilePath
 normalise = placeholder
@@ -208,10 +242,10 @@ makeRelative :: FilePath -> FilePath -> FilePath
 makeRelative = placeholder
 
 isRelative :: FilePath -> Bool
-isRelative = placeholder
+isRelative = not . hasDrive
 
 isAbsolute :: FilePath -> Bool
-isAbsolute = placeholder
+isAbsolute = hasDrive
 
 isValid :: FilePath -> Bool
 isValid = placeholder

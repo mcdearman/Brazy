@@ -1,6 +1,7 @@
 module System.Info where
 
-import Hazy.Prelude (placeholder)
+import Hazy (primOS)
+import Hazy.Prelude (unpack)
 
 os :: String
-os = placeholder
+os = unpack primOS

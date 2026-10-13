@@ -108,33 +108,41 @@ module Data.Text.Lazy
   )
 where
 
+import qualified Data.Char as Char (isAlpha, isAscii, isSpace, toLower, toUpper)
+import qualified Data.List as List
+  ( dropWhileEnd, groupBy, inits, intercalate, intersperse, isInfixOf, isPrefixOf, isSuffixOf,
+    stripPrefix, tails, transpose )
+import Prelude hiding (all, any, break, concat, concatMap, cycle, drop, dropWhile, elem, filter, foldl, foldl1, foldr, foldr1, head, init, iterate, last, length, lines, map, maximum, minimum, null, repeat, replicate, reverse, scanl, scanl1, scanr, scanr1, span, splitAt, tail, take, takeWhile, unlines, unwords, words, zip, zipWith)
+import qualified Prelude
 import Data.Int (Int64)
 import Hazy.Prelude (placeholder)
-import qualified Hazy.Prelude as Strict (Text)
+import qualified Hazy.Prelude as Strict (Text, pack, unpack)
 
-data Text
+-- Lazy text is its characters, one after another, none made before it is
+-- wanted.
+newtype Text = Text [Char]
+  deriving (Eq, Ord)
 
-instance Eq Text
+instance Show Text where
+  showsPrec d (Text characters) = showsPrec d characters
 
-instance Ord Text
+instance Semigroup Text where
+  Text a <> Text b = Text (a ++ b)
 
-instance Show Text
-
-instance Semigroup Text
-
-instance Monoid Text
+instance Monoid Text where
+  mempty = Text []
 
 pack :: String -> Text
-pack = placeholder
+pack = Text
 
 unpack :: Text -> String
-unpack = placeholder
+unpack (Text characters) = characters
 
 singleton :: Char -> Text
-singleton = placeholder
+singleton c = pack [c]
 
 empty :: Text
-empty = placeholder
+empty = pack []
 
 fromChunks :: [Text] -> Text
 fromChunks = placeholder
@@ -143,10 +151,10 @@ toChunks :: Text -> [Text]
 toChunks = placeholder
 
 toStrict :: Text -> Strict.Text
-toStrict = placeholder
+toStrict (Text characters) = Strict.pack characters
 
 fromStrict :: Strict.Text -> Text
-fromStrict = placeholder
+fromStrict text = Text (Strict.unpack text)
 
 foldrChunks :: (Text -> a -> a) -> a -> Text -> a
 foldrChunks = placeholder
@@ -157,196 +165,241 @@ foldlChunks = placeholder
 infixr 5 `cons`
 
 cons :: Char -> Text -> Text
-cons = placeholder
+cons c text = pack (c : unpack text)
 
 snoc :: Text -> Char -> Text
-snoc = placeholder
+snoc text c = pack (unpack text ++ [c])
 
 append :: Text -> Text -> Text
-append = placeholder
+append a b = pack (unpack a ++ unpack b)
 
 uncons :: Text -> Maybe (Char, Text)
-uncons = placeholder
+uncons text = case unpack text of
+  c : rest -> Just (c, pack rest)
+  [] -> Nothing
 
 unsnoc :: Text -> Maybe (Text, Char)
-unsnoc = placeholder
+unsnoc text = case unpack text of
+  [] -> Nothing
+  characters -> Just (pack (Prelude.init characters), Prelude.last characters)
 
 head :: Text -> Char
-head = placeholder
+head text = Prelude.head (unpack text)
 
 last :: Text -> Char
-last = placeholder
+last text = Prelude.last (unpack text)
 
 tail :: Text -> Text
-tail = placeholder
+tail = lift Prelude.tail
 
 init :: Text -> Text
-init = placeholder
+init = lift Prelude.init
 
 null :: Text -> Bool
-null = placeholder
+null text = Prelude.null (unpack text)
 
 length :: Text -> Int64
-length = placeholder
+length text = tally (Prelude.length (unpack text))
 
 compareLength :: Text -> Int64 -> Ordering
-compareLength = placeholder
+compareLength text count = compare (length text) count
 
 map :: (Char -> Char) -> Text -> Text
-map = placeholder
+map f = lift (Prelude.map f)
 
 intercalate :: Text -> [Text] -> Text
-intercalate = placeholder
+intercalate separator texts = pack (List.intercalate (unpack separator) (Prelude.map unpack texts))
 
 intersperse :: Char -> Text -> Text
-intersperse = placeholder
+intersperse c = lift (List.intersperse c)
 
 transpose :: [Text] -> [Text]
-transpose = placeholder
+transpose texts = Prelude.map pack (List.transpose (Prelude.map unpack texts))
 
 reverse :: Text -> Text
-reverse = placeholder
+reverse = lift Prelude.reverse
 
 replace :: Text -> Text -> Text -> Text
-replace = placeholder
+replace needle with text = intercalate with (splitOn needle text)
 
 toCaseFold :: Text -> Text
-toCaseFold = placeholder
+toCaseFold = toLower
 
 toLower :: Text -> Text
-toLower = placeholder
+toLower = map Char.toLower
 
 toUpper :: Text -> Text
-toUpper = placeholder
+toUpper = map Char.toUpper
 
 toTitle :: Text -> Text
-toTitle = placeholder
+toTitle = lift title
+  where
+    title [] = []
+    title (c : rest)
+      | Char.isAlpha c = Char.toUpper c : inside rest
+      | otherwise = c : title rest
+    inside [] = []
+    inside (c : rest)
+      | Char.isAlpha c = Char.toLower c : inside rest
+      | otherwise = c : title rest
 
 justifyLeft :: Int64 -> Char -> Text -> Text
-justifyLeft = placeholder
+justifyLeft width c = lift (\characters -> characters ++ Prelude.replicate (measure width - Prelude.length characters) c)
 
 justifyRight :: Int64 -> Char -> Text -> Text
-justifyRight = placeholder
+justifyRight width c = lift (\characters -> Prelude.replicate (measure width - Prelude.length characters) c ++ characters)
 
 center :: Int64 -> Char -> Text -> Text
-center = placeholder
+center width c = lift centre
+  where
+    centre characters =
+      let missing = measure width - Prelude.length characters
+          right = missing `div` 2
+       in Prelude.replicate (missing - right) c ++ characters ++ Prelude.replicate right c
 
 foldl :: (a -> Char -> a) -> a -> Text -> a
-foldl = placeholder
+foldl f z text = Prelude.foldl f z (unpack text)
 
 foldl' :: (a -> Char -> a) -> a -> Text -> a
-foldl' = placeholder
+foldl' f z text = strictly z (unpack text)
+  where
+    strictly state [] = state
+    strictly state (c : rest) = let next = f state c in next `seq` strictly next rest
 
 foldl1 :: (Char -> Char -> Char) -> Text -> Char
-foldl1 = placeholder
+foldl1 f text = Prelude.foldl1 f (unpack text)
 
 foldl1' :: (Char -> Char -> Char) -> Text -> Char
-foldl1' = placeholder
+foldl1' f text = Prelude.foldl1 f (unpack text)
 
 foldr :: (Char -> a -> a) -> a -> Text -> a
-foldr = placeholder
+foldr f z text = Prelude.foldr f z (unpack text)
 
 foldr1 :: (Char -> Char -> Char) -> Text -> Char
-foldr1 = placeholder
+foldr1 f text = Prelude.foldr1 f (unpack text)
 
 concat :: [Text] -> Text
-concat = placeholder
+concat texts = pack (Prelude.concatMap unpack texts)
 
 concatMap :: (Char -> Text) -> Text -> Text
-concatMap = placeholder
+concatMap f = lift (Prelude.concatMap (unpack . f))
 
 any :: (Char -> Bool) -> Text -> Bool
-any = placeholder
+any p text = Prelude.any p (unpack text)
 
 all :: (Char -> Bool) -> Text -> Bool
-all = placeholder
+all p text = Prelude.all p (unpack text)
 
 maximum :: Text -> Char
-maximum = placeholder
+maximum text = Prelude.maximum (unpack text)
 
 minimum :: Text -> Char
-minimum = placeholder
+minimum text = Prelude.minimum (unpack text)
 
 isAscii :: Text -> Bool
-isAscii = placeholder
+isAscii = all Char.isAscii
 
 scanl :: (Char -> Char -> Char) -> Char -> Text -> Text
-scanl = placeholder
+scanl f z = lift (Prelude.scanl f z)
 
 scanl1 :: (Char -> Char -> Char) -> Text -> Text
-scanl1 = placeholder
+scanl1 f = lift (Prelude.scanl1 f)
 
 scanr :: (Char -> Char -> Char) -> Char -> Text -> Text
-scanr = placeholder
+scanr f z = lift (Prelude.scanr f z)
 
 scanr1 :: (Char -> Char -> Char) -> Text -> Text
-scanr1 = placeholder
+scanr1 f = lift (Prelude.scanr1 f)
 
 mapAccumL :: (a -> Char -> (a, Char)) -> a -> Text -> (a, Text)
-mapAccumL = placeholder
+mapAccumL f state text = case go state (unpack text) of
+  (final, characters) -> (final, pack characters)
+  where
+    go state [] = (state, [])
+    go state (c : rest) = case f state c of
+      (next, d) -> case go next rest of
+        (final, others) -> (final, d : others)
 
 mapAccumR :: (a -> Char -> (a, Char)) -> a -> Text -> (a, Text)
-mapAccumR = placeholder
+mapAccumR f state text = case go (unpack text) of
+  (final, characters) -> (final, pack characters)
+  where
+    go [] = (state, [])
+    go (c : rest) = case go rest of
+      (after, others) -> case f after c of
+        (final, d) -> (final, d : others)
 
 repeat :: Char -> Text
-repeat = placeholder
+repeat c = Text (Prelude.repeat c)
 
 replicate :: Int64 -> Text -> Text
-replicate = placeholder
+replicate count text = pack (Prelude.concat (Prelude.replicate (measure count) (unpack text)))
 
 cycle :: Text -> Text
-cycle = placeholder
+cycle (Text characters) = Text (Prelude.cycle characters)
 
 iterate :: (Char -> Char) -> Char -> Text
-iterate = placeholder
+iterate f c = Text (Prelude.iterate f c)
 
 unfoldr :: (a -> Maybe (Char, a)) -> a -> Text
-unfoldr = placeholder
+unfoldr f seed = pack (go seed)
+  where
+    go state = case f state of
+      Just (c, next) -> c : go next
+      Nothing -> []
 
 unfoldrN :: Int64 -> (a -> Maybe (Char, a)) -> a -> Text
-unfoldrN = placeholder
+unfoldrN count f seed = pack (go (measure count) seed)
+  where
+    go left state
+      | left <= 0 = []
+      | otherwise = case f state of
+          Just (c, next) -> c : go (left - 1) next
+          Nothing -> []
 
 take :: Int64 -> Text -> Text
-take = placeholder
+take count = lift (Prelude.take (measure count))
 
 takeEnd :: Int64 -> Text -> Text
-takeEnd = placeholder
+takeEnd count = lift (\characters -> Prelude.drop (Prelude.length characters - measure count) characters)
 
 drop :: Int64 -> Text -> Text
-drop = placeholder
+drop count = lift (Prelude.drop (measure count))
 
 dropEnd :: Int64 -> Text -> Text
-dropEnd = placeholder
+dropEnd count = lift (\characters -> Prelude.take (Prelude.length characters - measure count) characters)
 
 takeWhile :: (Char -> Bool) -> Text -> Text
-takeWhile = placeholder
+takeWhile p = lift (Prelude.takeWhile p)
 
 takeWhileEnd :: (Char -> Bool) -> Text -> Text
-takeWhileEnd = placeholder
+takeWhileEnd p = lift (Prelude.reverse . Prelude.takeWhile p . Prelude.reverse)
 
 dropWhile :: (Char -> Bool) -> Text -> Text
-dropWhile = placeholder
+dropWhile p = lift (Prelude.dropWhile p)
 
 dropWhileEnd :: (Char -> Bool) -> Text -> Text
-dropWhileEnd = placeholder
+dropWhileEnd p = lift (List.dropWhileEnd p)
 
 dropAround :: (Char -> Bool) -> Text -> Text
-dropAround = placeholder
+dropAround p = lift (List.dropWhileEnd p . Prelude.dropWhile p)
 
 strip :: Text -> Text
-strip = placeholder
+strip = dropAround Char.isSpace
 
 stripStart :: Text -> Text
-stripStart = placeholder
+stripStart = dropWhile Char.isSpace
 
 stripEnd :: Text -> Text
-stripEnd = placeholder
+stripEnd = dropWhileEnd Char.isSpace
 
 splitAt :: Int64 -> Text -> (Text, Text)
-splitAt = placeholder
+splitAt count text = case Prelude.splitAt (measure count) (unpack text) of
+  (before, after) -> (pack before, pack after)
 
 span :: (Char -> Bool) -> Text -> (Text, Text)
-span = placeholder
+span p text = case Prelude.span p (unpack text) of
+  (before, after) -> (pack before, pack after)
 
 spanM :: (Monad m) => (Char -> m Bool) -> Text -> m (Text, Text)
 spanM = placeholder
@@ -355,88 +408,135 @@ spanEndM :: (Monad m) => (Char -> m Bool) -> Text -> m (Text, Text)
 spanEndM = placeholder
 
 breakOn :: Text -> Text -> (Text, Text)
-breakOn = placeholder
+breakOn needle text = case found (unpack needle) (unpack text) of
+  (before, after) -> (pack before, pack after)
 
 breakOnEnd :: Text -> Text -> (Text, Text)
 breakOnEnd = placeholder
 
 break :: (Char -> Bool) -> Text -> (Text, Text)
-break = placeholder
+break p text = case Prelude.break p (unpack text) of
+  (before, after) -> (pack before, pack after)
 
 group :: Text -> [Text]
-group = placeholder
+group = groupBy (==)
 
 groupBy :: (Char -> Char -> Bool) -> Text -> [Text]
-groupBy = placeholder
+groupBy same text = Prelude.map pack (List.groupBy same (unpack text))
 
 inits :: Text -> [Text]
-inits = placeholder
+inits text = Prelude.map pack (List.inits (unpack text))
 
 tails :: Text -> [Text]
-tails = placeholder
+tails text = Prelude.map pack (List.tails (unpack text))
 
 splitOn :: Text -> Text -> [Text]
-splitOn = placeholder
+splitOn needle text
+  | null needle = error "Text.splitOn: empty delimiter"
+  | otherwise = Prelude.map pack (go (unpack text))
+  where
+    separator = unpack needle
+    width = Prelude.length separator
+    go characters = case found separator characters of
+      (before, []) -> [before]
+      (before, after) -> before : go (Prelude.drop width after)
 
 split :: (Char -> Bool) -> Text -> [Text]
-split = placeholder
+split p text = Prelude.map pack (go (unpack text))
+  where
+    go characters = case Prelude.break p characters of
+      (before, []) -> [before]
+      (before, _ : after) -> before : go after
 
 chunksOf :: Int64 -> Text -> [Text]
-chunksOf = placeholder
+chunksOf count text
+  | measure count <= 0 = []
+  | otherwise = Prelude.map pack (go (unpack text))
+  where
+    go [] = []
+    go characters = case Prelude.splitAt (measure count) characters of
+      (before, after) -> before : go after
 
 lines :: Text -> [Text]
-lines = placeholder
+lines text = Prelude.map pack (Prelude.lines (unpack text))
 
 words :: Text -> [Text]
-words = placeholder
+words text = Prelude.map pack (Prelude.words (unpack text))
 
 unlines :: [Text] -> Text
-unlines = placeholder
+unlines texts = pack (Prelude.unlines (Prelude.map unpack texts))
 
 unwords :: [Text] -> Text
-unwords = placeholder
+unwords texts = pack (Prelude.unwords (Prelude.map unpack texts))
 
 isPrefixOf :: Text -> Text -> Bool
-isPrefixOf = placeholder
+isPrefixOf a b = List.isPrefixOf (unpack a) (unpack b)
 
 isSuffixOf :: Text -> Text -> Bool
-isSuffixOf = placeholder
+isSuffixOf a b = List.isSuffixOf (unpack a) (unpack b)
 
 isInfixOf :: Text -> Text -> Bool
-isInfixOf = placeholder
+isInfixOf a b = List.isInfixOf (unpack a) (unpack b)
 
 stripPrefix :: Text -> Text -> Maybe Text
-stripPrefix = placeholder
+stripPrefix prefix text = case List.stripPrefix (unpack prefix) (unpack text) of
+  Just rest -> Just (pack rest)
+  Nothing -> Nothing
 
 stripSuffix :: Text -> Text -> Maybe Text
-stripSuffix = placeholder
+stripSuffix suffix text = case List.stripPrefix (Prelude.reverse (unpack suffix)) (Prelude.reverse (unpack text)) of
+  Just rest -> Just (pack (Prelude.reverse rest))
+  Nothing -> Nothing
 
 commonPrefixes :: Text -> Text -> Maybe (Text, Text, Text)
 commonPrefixes = placeholder
 
 filter :: (Char -> Bool) -> Text -> Text
-filter = placeholder
+filter p = lift (Prelude.filter p)
 
 find :: (Char -> Bool) -> Text -> Maybe Char
-find = placeholder
+find p text = case Prelude.filter p (unpack text) of
+  c : _ -> Just c
+  [] -> Nothing
 
 elem :: Char -> Text -> Bool
-elem = placeholder
+elem c text = Prelude.elem c (unpack text)
 
 breakOnAll :: Text -> Text -> [(Text, Text)]
 breakOnAll = placeholder
 
 partition :: (Char -> Bool) -> Text -> (Text, Text)
-partition = placeholder
+partition p text = (filter p text, filter (not . p) text)
 
 index :: Text -> Int64 -> Char
-index = placeholder
+index text position = unpack text !! measure position
 
 count :: Text -> Text -> Int64
-count = placeholder
+count needle text = tally (Prelude.length (splitOn needle text) - 1)
 
 zip :: Text -> Text -> [(Char, Char)]
-zip = placeholder
+zip a b = Prelude.zip (unpack a) (unpack b)
 
 zipWith :: (Char -> Char -> Char) -> Text -> Text -> Text
-zipWith = placeholder
+zipWith f a b = pack (Prelude.zipWith f (unpack a) (unpack b))
+
+lift :: ([Char] -> [Char]) -> Text -> Text
+lift f text = pack (f (unpack text))
+
+-- What comes before the first place some characters are found among
+-- others, and the rest, which begins with them or is empty.
+found :: [Char] -> [Char] -> ([Char], [Char])
+found needle = go
+  where
+    go characters
+      | List.isPrefixOf needle characters = ([], characters)
+      | otherwise = case characters of
+          [] -> ([], [])
+          c : rest -> case go rest of
+            (before, after) -> (c : before, after)
+
+measure :: Int64 -> Int
+measure count = fromIntegral count
+
+tally :: Int -> Int64
+tally count = fromIntegral count

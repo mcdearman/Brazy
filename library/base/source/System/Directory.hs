@@ -60,13 +60,15 @@ module System.Directory
   )
 where
 
+import Hazy (primCreateDirectory, primListDirectory, primPathKind)
+import Hazy.Prelude (IO (..), pack, unpack)
 import Hazy.Prelude (placeholder)
 
 createDirectory :: FilePath -> IO ()
-createDirectory = placeholder
+createDirectory path = IO (primCreateDirectory (pack path))
 
 createDirectoryIfMissing :: Bool -> FilePath -> IO ()
-createDirectoryIfMissing = placeholder
+createDirectoryIfMissing _ path = IO (primCreateDirectory (pack path))
 
 removeDirectory :: FilePath -> IO ()
 removeDirectory = placeholder
@@ -81,7 +83,7 @@ renameDirectory :: FilePath -> FilePath -> IO ()
 renameDirectory = placeholder
 
 listDirectory :: FilePath -> IO [FilePath]
-listDirectory = placeholder
+listDirectory path = IO (fmap (\names -> lines (unpack names)) (primListDirectory (pack path)))
 
 getDirectoryContents :: FilePath -> IO [FilePath]
 getDirectoryContents = placeholder
@@ -151,13 +153,13 @@ makeRelativeToCurrentDirectory :: FilePath -> IO FilePath
 makeRelativeToCurrentDirectory = placeholder
 
 doesPathExist :: FilePath -> IO Bool
-doesPathExist = placeholder
+doesPathExist path = IO (fmap (/= 0) (primPathKind (pack path)))
 
 doesFileExist :: FilePath -> IO Bool
-doesFileExist = placeholder
+doesFileExist path = IO (fmap (== 1) (primPathKind (pack path)))
 
 doesDirectoryExist :: FilePath -> IO Bool
-doesDirectoryExist = placeholder
+doesDirectoryExist path = IO (fmap (== 2) (primPathKind (pack path)))
 
 findExecutable :: String -> IO (Maybe FilePath)
 findExecutable = placeholder
