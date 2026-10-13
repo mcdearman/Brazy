@@ -733,6 +733,19 @@ export const primTextIsPrefixOf = {
   b: (prefix) => (text) => ({ a: +force(text).startsWith(force(prefix)) }),
 };
 
+export const primTextConcat = {
+  a: 0,
+  b: (list) => {
+    const texts = [];
+    let current = force(list);
+    while (current.a) {
+      texts.push(force(current.b));
+      current = force(current.c);
+    }
+    return texts.join("");
+  },
+};
+
 export const putStrLnText = {
   a: 0,
   b: (thunk) => () => {

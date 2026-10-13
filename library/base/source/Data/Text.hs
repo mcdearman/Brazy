@@ -108,7 +108,7 @@ import qualified Data.List as List
   ( dropWhileEnd, groupBy, inits, intercalate, intersperse, isInfixOf, isPrefixOf, isSuffixOf,
     stripPrefix, tails, transpose )
 import Hazy
-  ( primTextAppend, primTextDrop, primTextHead, primTextIsPrefixOf, primTextLength, primTextNull,
+  ( primTextAppend, primTextConcat, primTextDrop, primTextHead, primTextIsPrefixOf, primTextLength, primTextNull,
     primTextSnoc, primTextTail, primTextTake )
 import qualified Hazy.Prelude as Hazy (unpack)
 import Prelude hiding (all, any, break, concat, concatMap, drop, dropWhile, elem, filter, foldl, foldl1, foldr, foldr1, head, init, last, length, lines, map, maximum, minimum, null, replicate, reverse, scanl, scanl1, scanr, scanr1, span, splitAt, tail, take, takeWhile, unlines, unwords, words, zip, zipWith)
@@ -174,7 +174,7 @@ map :: (Char -> Char) -> Text -> Text
 map f = lift (Prelude.map f)
 
 intercalate :: Text -> [Text] -> Text
-intercalate separator texts = pack (List.intercalate (unpack separator) (Prelude.map unpack texts))
+intercalate separator texts = primTextConcat (List.intersperse separator texts)
 
 intersperse :: Char -> Text -> Text
 intersperse c = lift (List.intersperse c)
@@ -248,7 +248,7 @@ foldr1 :: (Char -> Char -> Char) -> Text -> Char
 foldr1 f text = Prelude.foldr1 f (unpack text)
 
 concat :: [Text] -> Text
-concat texts = pack (Prelude.concatMap unpack texts)
+concat = primTextConcat
 
 concatMap :: (Char -> Text) -> Text -> Text
 concatMap f = lift (Prelude.concatMap (unpack . f))

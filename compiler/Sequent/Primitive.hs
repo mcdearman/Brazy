@@ -82,7 +82,11 @@ outside =
     ("clock", 0),
     ("os", 0),
     ("catch_push", 2),
-    ("catch_pop", 0)
+    ("catch_pop", 0),
+    ("pack_new", 0),
+    ("pack_push", 2),
+    ("pack_append", 2),
+    ("pack_done", 1)
   ]
 
 arity :: Primitive -> Int

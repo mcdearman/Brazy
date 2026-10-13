@@ -270,6 +270,7 @@ definitions =
             ("primTextTake", wrap TextTake),
             ("primTextDrop", wrap TextDrop),
             ("primTextIsPrefixOf", wrap TextIsPrefixOf),
+            ("primTextConcat", concatx),
             ("primSTPure", primSTPure),
             ("primSTBind", primSTBind),
             ("primUnsafeCoerce", identity),
@@ -470,32 +471,50 @@ primSTBind =
       )
       (covariable "k")
 
--- > pack list = go "" list
+-- A text is built in a place the runtime keeps, which each character is
+-- added to, so that it takes time by its length and not by the square of it.
+--
+-- > pack list = go new list
 -- >   where
--- >     go text [] = text
--- >     go text (head : tail) = go (snoc text (force head)) tail
+-- >     go buffer [] = done buffer
+-- >     go buffer (head : tail) = push buffer (force head); go buffer tail
 packx :: Producer
-packx =
+packx = gathered "pack_push"
+
+-- > primTextConcat list = go new list
+-- >   where
+-- >     go buffer [] = done buffer
+-- >     go buffer (head : tail) = append buffer (force head); go buffer tail
+concatx :: Producer
+concatx = gathered "pack_append"
+
+-- |
+-- A text built of a list, each element added by a primitive.
+gathered :: String -> Producer
+gathered add =
   function "list" "k" $
     LetRec
       [ ( pack "go",
-          Function [byValue "text", byNeed "rest"] (pack "done") $
+          Function [byValue "buffer", byNeed "rest"] (pack "done") $
             Cut (variable "rest") $
               Force $
                 Case
-                  [ Alternative nil [] $ Cut (variable "text") (covariable "done"),
+                  [ Alternative nil [] $
+                      Primitive (outside "pack_done") [variable "buffer"] (covariable "done"),
                     Alternative cons [byNeed "head", byNeed "tail"] $
-                      force "head" "character" $
-                        Primitive TextSnoc [variable "text", variable "character"] $
-                          MuTilde (byValue "longer") $
+                      force "head" "element" $
+                        Primitive (outside add) [variable "buffer", variable "element"] $
+                          MuTilde (byValue "added") $
                             Cut (variable "go") $
-                              Apply [variable "longer", variable "tail"] (covariable "done")
+                              Apply [variable "buffer", variable "tail"] (covariable "done")
                   ]
                   Nothing
         )
       ]
+      $ Primitive (outside "pack_new") []
+      $ MuTilde (byValue "buffer")
       $ Cut (variable "go")
-      $ Apply [Literal (Text (pack "")), variable "list"] (covariable "k")
+      $ Apply [variable "buffer", variable "list"] (covariable "k")
 
 -- > unpack text = go (force text)
 -- >   where

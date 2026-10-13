@@ -18,7 +18,7 @@
 
 mod heap;
 
-use heap::{hazy_alloc, header, nullary, Value, DATA, INTEGER, TEXT};
+use heap::{hazy_alloc, header, nullary, Value, DATA, INTEGER, SLICE, TEXT};
 use num_bigint::BigInt;
 use num_traits::{Signed, ToPrimitive, Zero};
 use std::io::Write;
@@ -69,13 +69,49 @@ pub extern "C" fn hazy_finish() {
 // Text ------------------------------------------------------------------------
 
 fn text(value: Value) -> &'static str {
-    debug_assert!(kind(value) == TEXT, "not a Text");
     unsafe {
         let block = value as *const u64;
+        if kind(value) == SLICE {
+            let whole = *block.add(1) as *const u64;
+            let start = *block.add(2) as usize;
+            let length = *block.add(3) as usize;
+            let bytes = std::slice::from_raw_parts((whole.add(2) as *const u8).add(start), length);
+            return std::str::from_utf8_unchecked(bytes);
+        }
+        debug_assert!(kind(value) == TEXT, "not a Text");
         let length = *block.add(1) as usize;
         let bytes = std::slice::from_raw_parts(block.add(2) as *const u8, length);
         std::str::from_utf8_unchecked(bytes)
     }
+}
+
+/// A part shorter than this is copied. A longer one shares the text it is
+/// part of, which is kept for as long as the part is: so the rest of a long
+/// text is had without going over it, and a word taken from a file does not
+/// keep the file.
+const SHARED: usize = 256;
+
+/// The bytes of a text from one place to another, as a text.
+fn part(value: Value, from: usize, to: usize) -> Value {
+    let string = text(value);
+    if to - from < SHARED {
+        return from_text(&string[from..to]);
+    }
+    let (whole, start) = unsafe {
+        let block = value as *const u64;
+        if kind(value) == SLICE {
+            (*block.add(1), *block.add(2) as usize)
+        } else {
+            (value, 0)
+        }
+    };
+    let block = hazy_alloc(4, header(SLICE, 0, 0));
+    unsafe {
+        *block.add(1) = heap::share(whole);
+        *block.add(2) = (start + from) as u64;
+        *block.add(3) = (to - from) as u64;
+    }
+    block as Value
 }
 
 fn from_text(string: &str) -> Value {
@@ -134,9 +170,9 @@ pub extern "C" fn hazy_prim_text_head(value: Value) -> Value {
 
 #[no_mangle]
 pub extern "C" fn hazy_prim_text_tail(value: Value) -> Value {
-    let mut characters = text(value).chars();
-    match characters.next() {
-        Some(_) => from_text(characters.as_str()),
+    let string = text(value);
+    match string.chars().next() {
+        Some(first) => part(value, first.len_utf8(), string.len()),
         None => fail("tail of an empty Text"),
     }
 }
@@ -184,13 +220,13 @@ fn after(string: &str, count: i32) -> usize {
 #[no_mangle]
 pub extern "C" fn hazy_prim_text_take(count: Value, value: Value) -> Value {
     let string = text(value);
-    from_text(&string[..after(string, int(count))])
+    part(value, 0, after(string, int(count)))
 }
 
 #[no_mangle]
 pub extern "C" fn hazy_prim_text_drop(count: Value, value: Value) -> Value {
     let string = text(value);
-    from_text(&string[after(string, int(count))..])
+    part(value, after(string, int(count)), string.len())
 }
 
 #[no_mangle]
@@ -697,6 +733,58 @@ pub extern "C" fn hazy_prim_os() -> Value {
     } else {
         std::env::consts::OS
     })
+}
+
+/// Texts that are being built, each known by where it is here. One is
+/// begun, added to and finished, and others may be begun and finished while
+/// it waits for what it is added next.
+static mut BUILDING: Vec<Option<String>> = Vec::new();
+
+fn building() -> &'static mut Vec<Option<String>> {
+    // The program has one thread.
+    unsafe { &mut *std::ptr::addr_of_mut!(BUILDING) }
+}
+
+fn built(buffer: Value) -> &'static mut String {
+    match building().get_mut(int(buffer) as usize) {
+        Some(Some(string)) => string,
+        _ => fail("a text that is not being built"),
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn hazy_prim_pack_new() -> Value {
+    let building = building();
+    let place = match building.iter().rposition(|slot| slot.is_none()) {
+        Some(place) => place,
+        None => {
+            building.push(None);
+            building.len() - 1
+        }
+    };
+    building[place] = Some(String::new());
+    from_int(place as i32)
+}
+
+#[no_mangle]
+pub extern "C" fn hazy_prim_pack_push(buffer: Value, character: Value) -> Value {
+    // A code point that is not a character becomes the replacement character.
+    built(buffer).push(char::from_u32(int(character) as u32).unwrap_or('\u{fffd}'));
+    unit()
+}
+
+#[no_mangle]
+pub extern "C" fn hazy_prim_pack_append(buffer: Value, value: Value) -> Value {
+    built(buffer).push_str(text(value));
+    unit()
+}
+
+#[no_mangle]
+pub extern "C" fn hazy_prim_pack_done(buffer: Value) -> Value {
+    match building().get_mut(int(buffer) as usize).and_then(|slot| slot.take()) {
+        Some(string) => from_text(&string),
+        None => fail("a text that is not being built"),
+    }
 }
 
 /// Begin to catch: what handles a thrown value, and where to go on with what

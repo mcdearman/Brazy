@@ -68,7 +68,9 @@ data Value
 -- thrown value, the catch begun last first, and the files that are open.
 data World = World
   { catching :: !(IORef [(Value, Value)]),
-    files :: !(IORef (Map Int Handle))
+    files :: !(IORef (Map Int Handle)),
+    -- | The texts that are being built, each as its pieces, the last first.
+    building :: !(IORef (Map Int [Text]))
   }
 
 -- |
@@ -100,7 +102,8 @@ run Program {definitions, entry} = do
   globals <- traverse (\object -> allocate object []) definitions
   catching <- newIORef []
   files <- newIORef Map.empty
-  execute World {catching, files} globals entry []
+  building <- newIORef Map.empty
+  execute World {catching, files, building} globals entry []
 
 allocate :: Object -> Environment -> IO (IORef Cell)
 allocate Object {kind, method, parameters, body} environment = newIORef $ case kind of
@@ -313,7 +316,7 @@ apply world primitive arguments = case (primitive, arguments) of
 -- |
 -- What the runtime does under a name of its own, as the machine does it.
 outside :: World -> String -> [Value] -> IO Value
-outside World {catching, files} name arguments = case (name, arguments) of
+outside World {catching, files, building} name arguments = case (name, arguments) of
   ("new_ref", [value]) -> Box <$> newIORef value
   ("read_ref", [Box box]) -> readIORef box
   ("write_ref", [Box box, value]) -> unit <$ writeIORef box value
@@ -378,6 +381,19 @@ outside World {catching, files} name arguments = case (name, arguments) of
       [] -> do
         hPutStrLn stderr "a value was thrown and nothing catches it"
         exitFailure
+  ("pack_new", []) -> do
+    texts <- readIORef building
+    let buffer = head [number | number <- [0 ..], Map.notMember number texts]
+    writeIORef building (Map.insert buffer [] texts)
+    pure $ Int $ fromIntegral buffer
+  ("pack_push", [Int buffer, Int character]) ->
+    unit <$ modifyIORef building (Map.adjust (Text.singleton (chr (fromIntegral character)) :) (fromIntegral buffer))
+  ("pack_append", [Int buffer, Text text]) ->
+    unit <$ modifyIORef building (Map.adjust (text :) (fromIntegral buffer))
+  ("pack_done", [Int buffer]) -> do
+    texts <- readIORef building
+    writeIORef building (Map.delete (fromIntegral buffer) texts)
+    pure $ Text $ Text.concat $ reverse $ Map.findWithDefault [] (fromIntegral buffer) texts
   _ -> bug $ "the machine cannot " ++ name
   where
     known descriptor = case descriptor of

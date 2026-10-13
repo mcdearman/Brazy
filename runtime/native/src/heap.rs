@@ -22,6 +22,8 @@
 //! * `DONE`: a thunk that has been forced. Its value is where its code was.
 //! * `INTEGER`: the address of the number, which Rust keeps.
 //! * `TEXT`: its length in bytes, and then the bytes, as UTF-8.
+//! * `SLICE`: part of a text: the text, where the part starts in its bytes,
+//!   and how many bytes it is. The text is a `TEXT`, never another part.
 //!
 //! A constructor with no fields is never allocated. There is one block for
 //! each tag in `hazy_nullary`, and it is not counted.
@@ -76,6 +78,8 @@ pub const TEXT: u64 = 6;
 /// What is left of a value that was taken apart, kept for one of as many
 /// fields to be built in. It holds nothing.
 pub const HUSK: u64 = 7;
+/// Part of a text, which it holds a reference to.
+pub const SLICE: u64 = 8;
 /// A slot that holds no block.
 const FREE: u64 = 15;
 
@@ -148,6 +152,7 @@ unsafe fn words(block: *mut u64) -> usize {
         CLOSURE | THUNK | WORKING | DONE => 2 + count(head),
         INTEGER => 2,
         TEXT => 2 + (*block.add(1) as usize + 7) / 8,
+        SLICE => 4,
         kind => panic!("a block of an unknown kind: {kind}"),
     }
 }
@@ -158,7 +163,7 @@ unsafe fn children(block: *mut u64) -> &'static [Value] {
     match head & KIND {
         DATA => std::slice::from_raw_parts(block.add(1), count(head)),
         CLOSURE | THUNK => std::slice::from_raw_parts(block.add(2), count(head)),
-        DONE => std::slice::from_raw_parts(block.add(1), 1),
+        DONE | SLICE => std::slice::from_raw_parts(block.add(1), 1),
         _ => &[],
     }
 }
