@@ -180,7 +180,7 @@ execute world globals = go
               Literal.Integer integer -> Integer integer
               Literal.Text text -> Text text
          in go rest (environment ++ [(name, value)])
-      Global name global rest -> case Map.lookup global globals of
+      Global name global _ rest -> case Map.lookup global globals of
         Just cell -> go rest (environment ++ [(name, Reference cell)])
         Nothing -> bug $ "undefined global: " ++ Runtime.showGlobal global
       Primitive name primitive rest -> do

@@ -13,11 +13,12 @@
 -- A consumer that has to be passed is made into an object with the one
 -- method that takes a value. That is the only place a continuation is
 -- allocated.
-module AxCut.Lower (lower, lowerDefinitions) where
+module AxCut.Lower (lower, lowerDefinitions, lowerUnit) where
 
 import qualified AxCut.Tree as AxCut
 import Control.Monad.ST (ST, runST)
 import Data.Map (Map)
+import qualified Data.Map as Map
 import Data.STRef (STRef, newSTRef, readSTRef, writeSTRef)
 import Data.Set (Set)
 import qualified Data.Set as Set
@@ -41,21 +42,69 @@ lower' Program {definitions, entry} = do
   supply <- newSTRef 0
   definitions <- traverse (definition supply) definitions
   entry <- focus supply entry
+  let known = among definitions (const Nothing)
   pure
     AxCut.Program
-      { definitions,
-        entry = build (linearly entry) []
+      { definitions = annotate known <$> definitions,
+        entry = annotated known (build (linearly entry) [])
       }
 
 -- |
--- Definitions by themselves, as for a unit that is linked with others.
+-- Definitions by themselves. All that is known of a definition that is
+-- not one of them is that it is one.
 lowerDefinitions :: Map Global Producer -> Map Global AxCut.Object
-lowerDefinitions definitions = runST (lowerDefinitions' definitions)
+lowerDefinitions = lowerUnit (const Nothing)
 
-lowerDefinitions' :: Map Global Producer -> ST s (Map Global AxCut.Object)
-lowerDefinitions' definitions = do
+-- |
+-- Definitions by themselves, as for a unit that is linked with others,
+-- given how many arguments a definition of another unit takes.
+lowerUnit :: (Global -> Maybe Int) -> Map Global Producer -> Map Global AxCut.Object
+lowerUnit outside definitions = runST $ do
   supply <- newSTRef 0
-  traverse (definition supply) definitions
+  definitions <- traverse (definition supply) definitions
+  pure $ annotate (among definitions outside) <$> definitions
+
+-- |
+-- How many arguments a definition takes at once, if it is a function:
+-- going by what it is, if it is one of some definitions, and otherwise by
+-- what is said of it.
+among :: Map Global AxCut.Object -> (Global -> Maybe Int) -> Global -> Maybe Int
+among definitions outside global = case Map.lookup global definitions of
+  -- The last parameter is the consumer of the result.
+  Just AxCut.Object {kind = AxCut.Closure, parameters} -> Just (length parameters - 1)
+  Just _ -> Nothing
+  Nothing -> outside global
+
+-- |
+-- An object with every definition it names said to take what it takes.
+-- This is done last, when the row of values is in order: nothing before it
+-- has a use for it.
+annotate :: (Global -> Maybe Int) -> AxCut.Object -> AxCut.Object
+annotate known AxCut.Object {kind, captured, method, parameters, body} =
+  AxCut.Object {kind, captured, method, parameters, body = annotated known body}
+
+annotated :: (Global -> Maybe Int) -> AxCut.Statement -> AxCut.Statement
+annotated known = go
+  where
+    go = \case
+      AxCut.Substitute pairs rest -> AxCut.Substitute pairs (go rest)
+      AxCut.Let name tag count rest -> AxCut.Let name tag count (go rest)
+      AxCut.Switch clauses fallback ->
+        AxCut.Switch [AxCut.Clause tag names (go body) | AxCut.Clause tag names body <- clauses] (go <$> fallback)
+      AxCut.New name object rest -> AxCut.New name (annotate known object) (go rest)
+      AxCut.Invoke method -> AxCut.Invoke method
+      AxCut.Force -> AxCut.Force
+      AxCut.Literal name literal rest -> AxCut.Literal name literal (go rest)
+      AxCut.Global name global _ rest -> AxCut.Global name global (known global) (go rest)
+      AxCut.Primitive name primitive rest -> AxCut.Primitive name primitive (go rest)
+      AxCut.Rec recursives rest ->
+        AxCut.Rec
+          [ AxCut.Recursive {name, object = annotate known object, others}
+          | AxCut.Recursive {name, object, others} <- recursives
+          ]
+          (go rest)
+      AxCut.Abort -> AxCut.Abort
+      AxCut.Halt -> AxCut.Halt
 
 definition :: Supply s -> Producer -> ST s AxCut.Object
 definition supply producer = do
@@ -291,7 +340,7 @@ linearly = \case
   Cut (Literal literal) (MuTilde Binder {name} body) ->
     binding [] name (AxCut.Literal name literal) (linearly body)
   Cut (Global global) (MuTilde Binder {name} body) ->
-    binding [] name (AxCut.Global name global) (linearly body)
+    binding [] name (AxCut.Global name global Nothing) (linearly body)
   Cut (Constructor tag fields) (MuTilde Binder {name} body) ->
     binding (map named fields) name (AxCut.Let name tag (length fields)) (linearly body)
   -- What consumes the value is the rest: an object that takes the value.

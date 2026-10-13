@@ -48,8 +48,10 @@ data Statement
     -- thunk. Evaluate it and give the value to the consumer.
     Force
   | Literal !Text !Literal Statement
-  | -- | A definition at the top of the program.
-    Global !Text !Global Statement
+  | -- | A definition at the top of the program, and how many arguments it
+    -- takes at once if it is known to be a function. Where that is known,
+    -- applying the value to that many is going to the definition's code.
+    Global !Text !Global !(Maybe Int) Statement
   | -- | A primitive of the last values, as many as it takes.
     Primitive !Text !Primitive Statement
   | -- | Objects that may capture each other. The environment ends with what

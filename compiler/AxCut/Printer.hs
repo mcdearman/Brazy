@@ -132,11 +132,13 @@ statement depth = \case
         Sequent.literal literal,
         statement depth rest
       ]
-  Global name global rest ->
+  Global name global arity rest ->
     mconcat
       [ indent depth,
         fromString "global ",
         fromText name,
+        -- How many arguments it takes, if that is known.
+        foldMap (\count -> fromString "/" <> fromString (show count)) arity,
         fromString " = ",
         Sequent.global global,
         statement depth rest

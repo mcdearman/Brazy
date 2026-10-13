@@ -1133,6 +1133,26 @@ The order to take it in:
       first form is left for everything else and only calls the second,
       which a module gives out under the definition's name and ` direct`.
       Upstream makes a function for each argument of every call
+- [x] How many arguments a definition takes is worked out once and kept,
+      as Meadow keeps it, and each stage reads it where it had found it
+      again for itself:
+  - In Core it is counted when a definition is made, and is a field of
+    the definition (`Core.Arity`). The functions a definition is made of
+    are counted through a newtype. What makes Javascript reads it there
+  - In the sequent calculus a unit knows it of every definition, its own
+    and another unit's (`arities`, in `Sequent.FromCore`)
+  - In AxCut a definition is named with it (`Global`, in `AxCut.Tree`),
+    and the printed form shows it
+  - With it, native code goes to the code of a definition by name when a
+    call gives what the definition takes, and does not ask the definition
+    where its code is. Fourteen thousand calls in the compiler do, a
+    quarter of the ones that asked, and some of them are of a package
+- [ ] What it does not find yet. A definition that is another given some of
+      its arguments, as `f = g x` is, takes what is left of the other's,
+      and is counted as taking none. The sequent calculus still works out
+      for itself how deep a definition's functions go, since it sees ones
+      that Core has no definition for: a method, and a function that was
+      taken out of another
 - [ ] What that leaves. A method of a class and a function that is not
       written as functions inside functions are called as before. A call
       that is the last thing a thunk does is not the last thing the thunk's

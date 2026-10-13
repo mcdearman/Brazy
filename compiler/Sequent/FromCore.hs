@@ -167,12 +167,19 @@ data Tables = Tables
     borrowed :: Global.Global -> Maybe Lending,
     -- | The values of a definition at the top of a module that are no
     -- longer shared with themselves: see "Sequent.Hoist".
-    lost :: Global.Global -> [Unshared]
+    lost :: Global.Global -> [Unshared],
+    -- | How many arguments a definition takes at once, if it is a function.
+    taken :: Global.Global -> Maybe Int
   }
 
 tables :: Vector Core.Module -> Tables
-tables modules = Tables {members = family, borrowed = lends, lost = unshared}
+tables modules = Tables {members = family, borrowed = lends, lost = unshared, taken}
   where
+    -- A definition is asked as it is in the end, when a call of it with
+    -- every argument has been sent to the entry that takes them together.
+    taken global = case family (top global) >>= Map.lookup global of
+      Just (Function parameters _ _) -> Just (length parameters)
+      _ -> Nothing
     pre = precontext modules
     -- What each definition is as it comes from Core.
     written = Map.fromList $ do
@@ -277,7 +284,12 @@ data Unit = Unit
     -- | Which parameters a definition only reads, whether it is this
     -- unit's or another's: see "Sequent.Borrow". A unit that calls a
     -- definition and the unit that has it are told the same.
-    lends :: Global.Global -> Maybe Lending
+    lends :: Global.Global -> Maybe Lending,
+    -- | How many arguments a definition takes at once, if it is a function,
+    -- whether it is this unit's or another's. A call that gives that many
+    -- can go to the definition's code, and has no need to ask the
+    -- definition where its code is.
+    arities :: Global.Global -> Maybe Int
   }
 
 -- |
@@ -303,10 +315,16 @@ reached entry unit@Unit {own, shared} =
 -- use of other modules is left as names.
 unit :: [Int] -> Vector Core.Module -> Unit
 unit indexes modules =
-  Unit {own, shared = reach Map.empty (globals (Map.elems own)), unshared = concatMap lost names, lends}
+  Unit
+    { own,
+      shared = reach Map.empty (globals (Map.elems own)),
+      unshared = concatMap lost names,
+      lends,
+      arities
+    }
   where
     pre = precontext modules
-    Tables {members = family, borrowed = lends, lost} = tables modules
+    Tables {members = family, borrowed = lends, lost, taken = arities} = tables modules
     -- The names of every definition at the top of the unit's modules.
     names = do
       index <- indexes
