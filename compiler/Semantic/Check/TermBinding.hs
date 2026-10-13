@@ -39,5 +39,11 @@ local Declaration {typex} = TermBinding $ do
   pure $ Wobbly $ case typex of
     Solved typex -> typex
 
-group :: Unify.Type s scopes -> TermBinding s (GroupTerm ':+ scopes)
-group = TermBinding . pure . Wobbly . Core.mono . Core.shiftLogical
+-- |
+-- A definition as the definitions it is defined together with see it: of
+-- one type. Something is done whenever it is looked at, so that whoever
+-- defines them can tell that one of them was used by another.
+group :: ST s () -> Unify.Type s scopes -> TermBinding s (GroupTerm ':+ scopes)
+group used typex = TermBinding $ do
+  used
+  pure $ Wobbly $ Core.mono $ Core.shiftLogical typex

@@ -124,10 +124,11 @@ localBindings
         _ -> error "bad lookup"
 
 groupTermBindings ::
+  ST s () ->
   Vector (Unify.Type s scope) ->
   Context s scope ->
   Context s (Scope.GroupTerm ':+ scope)
-groupTermBindings declarations Context {termEnvironment, localEnvironment, typeEnvironment, equalities} =
+groupTermBindings used declarations Context {termEnvironment, localEnvironment, typeEnvironment, equalities} =
   Context
     { termEnvironment = Term.GroupTerm termBindings termEnvironment,
       localEnvironment = Local.GroupTerm localEnvironment,
@@ -135,7 +136,7 @@ groupTermBindings declarations Context {termEnvironment, localEnvironment, typeE
       equalities = shiftEquality <$> equalities
     }
   where
-    termBindings = TermBinding.group <$> declarations
+    termBindings = TermBinding.group used <$> declarations
 
 groupTypeBindings ::
   Vector Position ->

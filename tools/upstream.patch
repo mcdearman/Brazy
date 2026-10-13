@@ -10,26 +10,6 @@ index beafb11..3a58c5b 100644
  data Expression scope
    = Variable
        { variable :: !(Term.Index scope),
-diff --git a/compiler/Main.hs b/compiler/Main.hs
-index 0888eed..63aece8 100644
---- a/compiler/Main.hs
-+++ b/compiler/Main.hs
-@@ -53,6 +53,7 @@ import System.FilePath (dropExtension, dropFileName, hasDrive, pathSeparators, t
- import System.IO (IOMode (..), hClose, hSetEncoding, openFile, utf8)
- import System.IO.Unsafe (unsafeInterleaveIO)
- import Verbose (runVerbose)
-+import qualified Verbose (Debug)
- import Prelude hiding (Show (show))
- import qualified Prelude
- 
-@@ -118,6 +119,7 @@ stage1 verbose = case verbose of
-   Debug -> runVerbose . traverse parse
-   Normal -> pure . runIdentity . traverse parse
-   where
-+    parse :: (Verbose.Debug verbose) => Loaded -> verbose (Syntax.Module Position)
-     parse Root {extensions, name, contents} = Parser.parse extensions Module.parse name contents
-     parse Inner {extensions, path, name, contents} =
-       Syntax.assumeName path
 diff --git a/compiler/Semantic/Shift.hs b/compiler/Semantic/Shift.hs
 index f12b9fb..97c77ce 100644
 --- a/compiler/Semantic/Shift.hs

@@ -7,9 +7,12 @@ import qualified Semantic.Check.Temporary.Definition2 as Definition2
 import Semantic.Layout (Group)
 import Semantic.Scope (Environment (..), Local)
 import Semantic.Stage (Check, Resolve)
+import qualified Semantic.Tree.Definition as Clauses (Definition (..))
 import Semantic.Tree.Definition2 (Annotated, Inferred)
+import qualified Semantic.Tree.Definition2 as Whole (Definition2 (..))
 import Semantic.Tree.Definition3 (Info)
 import qualified Semantic.Tree.Definition3 as Semantic (Definition3 (..))
+import qualified Semantic.Tree.Function as Function (Function (..))
 import qualified Semantic.Tree.Definition3 as Solved (Definition3 (..))
 import qualified Semantic.Unify as Unify
 import Syntax.Position (Position)
@@ -34,6 +37,17 @@ checkAuto ::
 checkAuto context typex (Semantic.Label info definition) = do
   definition <- Definition2.checkAuto context typex definition
   pure $ Label info definition
+
+-- |
+-- Whether a definition is of a function: whether it is written with
+-- something it is given.
+functional :: Semantic.Definition3 mark layout stage scope -> Bool
+functional (Semantic.Label _ definition) = case definition of
+  Whole.Definition definition -> case definition of
+    Clauses.Definition {definition = Function.Bound {}} -> True
+    Clauses.Alternative {definition = Function.Bound {}} -> True
+    _ -> False
+  _ -> False
 
 solve :: Position -> Definition3 mark s scope -> Unify.Solve s (Solved.Definition3 mark Group Check scope)
 solve position (Label info definition) = do

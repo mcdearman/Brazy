@@ -1,6 +1,7 @@
 module Semantic.Check.Go.Definition4 where
 
 import Control.Monad.ST (ST)
+import Data.STRef (newSTRef, readSTRef, writeSTRef)
 import Core.Substitute (logicalType)
 import qualified Core.Tree.Constraints as Simple.Constraints (simplify)
 import qualified Core.Tree.Type as Core
@@ -132,12 +133,24 @@ check position Solve {solve, logical} reflection information = \case
         { cycle = cyclicalTypeChecking position,
           run = \declarations -> do
             let context = information declarations
-            types Unify.::: set <- Unify.generalizeBody position context $ Unify.Generalize $ \context -> do
+            -- A definition's type requires what the definition requires, as
+            -- the Haskell report has it, if every definition here is of a
+            -- function. A definition that is not is of one type, so that
+            -- it is worked out once.
+            --
+            -- A definition that uses itself, or another that is defined
+            -- with it, is of one type too: the use would have to be given
+            -- the evidence, and is not yet.
+            recursive <- newSTRef False
+            let functions = all (\Element {element} -> Definition3.functional element) set
+                requiring = (functions &&) . not <$> readSTRef recursive
+            types Unify.::: set <- Unify.generalizeBody position context requiring $ Unify.Generalize $ \context -> do
               fresh <- Vector.replicateM (length set) $ Unify.fresh Core.typex
               set <- flip Strict.Vector.imapM set $ \index Element {element, link} -> do
                 let element' = Shift.map (Shift.Over Shift) element
                     typex = fresh Vector.! index
-                element <- Definition3.checkAuto (groupTermBindings fresh context) (shiftLogical typex) element'
+                    used = writeSTRef recursive True
+                element <- Definition3.checkAuto (groupTermBindings used fresh context) (shiftLogical typex) element'
                 pure $ do
                   element <- Definition3.solve position element
                   pure Element {element, link}
