@@ -11,6 +11,7 @@ import Core.Tree.Expression (Expression (..))
 import Core.Tree.Instanciation (Instanciation, InstanciationF (Instanciation))
 import qualified Core.Tree.Instanciation as Instanciation
 import Core.Tree.MethodInfo (MethodInfo (..))
+import qualified Core.Tree.Statements as Flow (Statements (..))
 import Core.Tree.TypeLambda (TypeLambda, TypeLambdaOver (..))
 import Data.Char (ord)
 import Data.Foldable (toList)
@@ -450,6 +451,7 @@ declaration context worker TypeLambdaOver {constraints, result = expression} = d
     peel :: Context s scope' -> Int -> Expression scope' -> ST s ([Text], [Javascript.Statement 'True])
     peel context remaining = \case
       Newtype {argument} | remaining > 0 -> peel context remaining argument
+      Join {statements} | remaining > 0 -> flow context remaining statements
       Lambda {body} | remaining > 0 -> do
         name <- fresh' context
         (names, statements) <- peel (singleBinding name context) (remaining - 1) body
@@ -457,4 +459,20 @@ declaration context worker TypeLambdaOver {constraints, result = expression} = d
       body -> do
         statements <- generateInto context Return body
         pure ([], statements)
+    -- What is between one function and the next, as it is where the
+    -- functions are counted: see "Core.Arity". What it declares is declared
+    -- at the start of the one function that is made.
+    flow :: Context s scope' -> Int -> Flow.Statements scope' -> ST s ([Text], [Javascript.Statement 'True])
+    flow context remaining = \case
+      Flow.Done {done} -> peel context remaining done
+      Flow.Let {declarations, letBody} -> do
+        (context, declared) <- Declarations.generate context declarations
+        (names, statements) <- flow context remaining letBody
+        pure (names, declared ++ statements)
+      Flow.LetOne {declaration = named, body} -> do
+        value <- thunk context Done named
+        name <- fresh' context
+        (names, statements) <- flow (singleBinding name context) remaining body
+        pure (names, Javascript.Const name value : statements)
+      _ -> error "functions that were counted are not there"
     fresh' = Context.fresh

@@ -5,6 +5,7 @@ import qualified AxCut.Machine as AxCut (run)
 import qualified AxCut.Printer as AxCut (print)
 import Control.Exception (catch)
 import Control.Monad (zipWithM_)
+import qualified Core.Eta as Eta (expand)
 import qualified Core.Tree.Module as Core (Module, name)
 import qualified Core.Tree.Module as Module (simplify)
 import Data.Char (toLower, toUpper)
@@ -198,7 +199,7 @@ stage4 ::
   Debug ->
   Vector (Semantic.Module Identity Layout.Normal Stage.Check Scope.Global) ->
   IO (Vector Core.Module)
-stage4 _ = pure . Vector.map Module.simplify
+stage4 _ = pure . Eta.expand . Vector.map Module.simplify
 
 stage5 :: Debug -> Vector Core.Module -> IO (Vector Stage5.Module)
 stage5 _ = pure . Module.generate

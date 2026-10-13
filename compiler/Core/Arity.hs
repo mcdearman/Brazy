@@ -10,12 +10,25 @@
 -- send a call there.
 --
 -- What is counted is what is written: the functions a definition is made
--- of, one inside the next. A newtype is nothing when a program runs, so the
--- functions are counted through one.
-module Core.Arity (Arity (..), measure) where
+-- of, one inside the next. They are counted through what is nothing when a
+-- program runs, or next to nothing:
+--
+-- * a newtype;
+-- * the one way out of a match that matches nothing, which is how what is
+--   written after an @=@ comes from the check;
+-- * the definitions of a @where@ that has none;
+-- * and a name for a name, which is how an argument that was written as a
+--   variable is called by that variable.
+--
+-- Whatever goes by what is counted here has to get to the functions the
+-- same way: see @peel@ in "Generate.Go.Expression", and "Core.Eta".
+module Core.Arity (Arity (..), measure, alias) where
 
 import Core.Tree.Constraints (ConstraintsF (..))
+import {-# SOURCE #-} qualified Core.Tree.Declarations as Declarations (none)
 import Core.Tree.Expression (Expression (..))
+import Core.Tree.Instanciation (InstanciationF (Mono))
+import qualified Core.Tree.Statements as Flow (Statements (..))
 import Core.Tree.TypeLambda (TypeLambda, TypeLambdaOver (..))
 
 data Arity = Arity
@@ -40,4 +53,19 @@ measure TypeLambdaOver {constraints, result} =
     depth = \case
       Lambda {body} -> 1 + depth body
       Newtype {argument} -> depth argument
+      Join {statements} -> flow statements
       _ -> 0
+    flow :: Flow.Statements scope' -> Int
+    flow = \case
+      Flow.Done {done} -> depth done
+      Flow.Let {declarations, letBody} | Declarations.none declarations -> flow letBody
+      Flow.LetOne {declaration, body} | alias declaration -> flow body
+      _ -> 0
+
+-- |
+-- Whether an expression is only a name, so that a name for it is a name
+-- for a name.
+alias :: Expression scope -> Bool
+alias = \case
+  Variable {instanciation = Mono} -> True
+  _ -> False
