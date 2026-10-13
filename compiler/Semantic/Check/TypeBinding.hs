@@ -29,7 +29,7 @@ import Semantic.Scope (Environment (..), GroupType)
 import qualified Semantic.Scope as Scope
 import qualified Semantic.Shift as Shift
 import qualified Semantic.Shift0 as Shift0
-import Semantic.Stage (Check)
+import Semantic.Stage (Check, Resolve)
 import Semantic.Tree.Combinators.Inferred (Inferred (Solved))
 import qualified Semantic.Tree.Instance as Semantic
 import qualified Semantic.Tree.Synonym as Synonym
@@ -59,6 +59,10 @@ data TypeBinding s scope = TypeBinding
     content :: ST s (Simple.TypeDeclaration scope),
     extra :: ST s (Unify.Solve s (Simple.TypeDeclarationExtra scope)),
     synonym :: ST s (Type.Synonym Check scope),
+    -- | A name for a type as it was written, before it was checked. Types
+    -- that are checked together look into it: they cannot ask what it was
+    -- found to be if finding that waits for them.
+    source :: !(Maybe (Synonym.Synonym Resolve scope)),
     dataInstances :: Map (Type2.Index scope) (Requires s scope),
     classInstances :: Map (Type2.Index scope) (Requires s scope)
   }
@@ -77,11 +81,12 @@ mapRequires category Requires {clause, prerequisites} =
   Requires {clause, prerequisites = fmap (Shift.map category) prerequisites}
 
 instance Shift0.Functor (TypeBinding s) where
-  map category0 TypeBinding {label, kind, synonym, extra, content, dataInstances, classInstances} =
+  map category0 TypeBinding {label, kind, synonym, source, extra, content, dataInstances, classInstances} =
     TypeBinding
       { label,
         kind = fmap (Shift0.map category0) kind,
         synonym = fmap (Shift.map category) synonym,
+        source = fmap (Shift.map category) source,
         content = fmap (Shift.map category) content,
         extra = fmap (Shift.map category) <$> extra,
         dataInstances = Map.map (mapRequires category) $ Shift.mapInstances category dataInstances,
@@ -107,13 +112,15 @@ global ::
   Map
     (Type2.Index Scope.Global)
     (Semantic.Instance Identity (ST s) Group Check Scope.Global) ->
+  Maybe (Synonym.Synonym Resolve Scope.Global) ->
   TypeBinding s Scope.Global
 global
   lookup
   typex@TypeDeclaration {kind}
   typeExtra
   dataInstances
-  classInstances =
+  classInstances
+  source =
     TypeBinding
       { label = TypeDeclaration.labelBinding Qualifiers.Local typex,
         kind = do
@@ -136,6 +143,7 @@ global
             _ Synonym.::: Synonym.SynonymBody {parameters, synonym} <- synonym
             pure $ Type.Synonym (length parameters) $ Core.Type.simplify synonym
           _ -> pure Type.NoSynonym,
+        source,
         dataInstances = bindInstance <$> dataInstances,
         classInstances = bindInstance <$> classInstances
       }
@@ -164,13 +172,15 @@ local ::
   Map
     (Type2.Index (Scope.Declaration ':+ scope))
     (Semantic.Instance (Unify.Solve s) (ST s) Group Check (Scope.Declaration ':+ scope)) ->
+  Maybe (Synonym.Synonym Resolve (Scope.Declaration ':+ scope)) ->
   TypeBinding s (Scope.Declaration ':+ scope)
 local
   lookup
   typex@TypeDeclaration {kind}
   typeExtra
   dataInstances
-  classInstances =
+  classInstances
+  source =
     TypeBinding
       { label = TypeDeclaration.labelBinding Qualifiers.Local typex,
         kind = do
@@ -189,6 +199,7 @@ local
             _ Synonym.::: Synonym.SynonymBody {parameters, synonym} <- synonym
             pure $ Type.Synonym (length parameters) $ Core.Type.simplify synonym
           _ -> pure Type.NoSynonym,
+        source,
         dataInstances = bindInstance <$> dataInstances,
         classInstances = bindInstance <$> classInstances
       }
@@ -208,6 +219,7 @@ group position Label.TypeBinding {name, constructorNames} binding =
       content = abort,
       extra = abort,
       synonym = pure Type.NoSynonym,
+      source = Nothing,
       dataInstances = abort,
       classInstances = abort
     }

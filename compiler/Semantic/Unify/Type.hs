@@ -389,6 +389,9 @@ lowerEquality = \case
   -- The evidence is named by the match, and there is no match further out.
   Local.Given {} -> Nothing
   Local.Late waiting -> Just (Local.Late waiting)
+  Local.Grouping members ->
+    Local.Grouping <$> traverse (\(index, kind) -> (,) <$> Shift.partialUnshift Nothing index <*> lower kind) members
+  Local.Expanding index -> Local.Expanding <$> Shift.partialUnshift Nothing index
   where
     lower :: Type s (scope' ':+ scope) -> Maybe (Type s scope)
     lower = \case

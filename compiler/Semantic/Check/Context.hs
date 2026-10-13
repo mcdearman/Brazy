@@ -11,7 +11,7 @@ import Data.STRef (STRef, newSTRef, readSTRef, writeSTRef)
 import Data.Vector (Vector)
 import qualified Data.Vector as Vector
 import qualified Semantic.Check.DataInstance as DataInstance
-import Semantic.Check.LocalBinding (Equality (Late), LocalBinding, shiftEquality)
+import Semantic.Check.LocalBinding (Equality (Expanding, Grouping, Late), LocalBinding, shiftEquality)
 import qualified Semantic.Check.LocalBinding as LocalBinding
 import Semantic.Check.Simple.Data as Simple.Data (instanciateMark)
 import Semantic.Check.TermBinding (TermBinding (..))
@@ -33,9 +33,10 @@ import qualified Semantic.Locality as Locality
 import Semantic.Scope (Environment (..))
 import qualified Semantic.Scope as Scope (Declaration, Global, GroupTerm, GroupType)
 import qualified Semantic.Shift as Shift
-import Semantic.Stage (Check)
+import Semantic.Stage (Check, Resolve)
 import Semantic.Tree.Declarations (Declarations (..))
 import Semantic.Tree.Module (Module (..))
+import qualified Semantic.Tree.Synonym as Synonym (Synonym)
 import qualified Semantic.Tree.Type as Type (Synonym (..))
 import Semantic.Tree.TypeDeclaration (TypeDeclaration (TypeDeclaration, definition))
 import qualified Semantic.Tree.TypeDefinition2 as TypeDefinition2
@@ -102,20 +103,26 @@ instance Shift.Unshift (Context s) where
         equalities = mapMaybe Unify.lowerEquality equalities
       }
 
-globalBindings :: forall s. Vector (Module (ST s) Group Check Scope.Global) -> Context s Scope.Global
-globalBindings modules =
+globalBindings ::
+  forall s.
+  -- | For each module, the names for types as they were written.
+  Vector (Vector (Maybe (Synonym.Synonym Resolve Scope.Global))) ->
+  Vector (Module (ST s) Group Check Scope.Global) ->
+  Context s Scope.Global
+globalBindings sources modules =
   Context
     { termEnvironment = Term.Global $ termBindings <$> modules,
       localEnvironment = Local.Global,
-      typeEnvironment = Type.Global $ typeBindings <$> modules,
+      typeEnvironment = Type.Global $ Vector.zipWith typeBindings sources modules,
       equalities = []
     }
   where
     termBindings Module {declarations = Declarations {terms}} =
       TermBinding.global <$> terms
     typeBindings
+      written
       Module {declarations = Declarations {types, typeExtras, dataInstances, classInstances}} =
-        Vector.zipWith4 (TypeBinding.global lookup) types typeExtras dataInstances classInstances
+        Vector.zipWith5 (TypeBinding.global lookup) types typeExtras dataInstances classInstances written
     lookup ::
       Type.Link Locality.Global ->
       ST s (TypeGroup.Set Locality.Global Check Scope.Global)
@@ -129,6 +136,8 @@ globalBindings modules =
 
 localBindings ::
   forall s scope.
+  -- | The names for types as they were written.
+  Vector (Maybe (Synonym.Synonym Resolve (Scope.Declaration ':+ scope))) ->
   Context s scope ->
   Declarations
     (Unify.Solve s)
@@ -140,6 +149,7 @@ localBindings ::
     (Scope.Declaration ':+ scope) ->
   Context s (Scope.Declaration ':+ scope)
 localBindings
+  sources
   Context {termEnvironment, localEnvironment, typeEnvironment, equalities}
   Declarations {terms, types, typeExtras, dataInstances, classInstances} =
     Context
@@ -150,7 +160,7 @@ localBindings
       }
     where
       termBindings = TermBinding.local <$> terms
-      typeBindings = Vector.zipWith4 (TypeBinding.local lookup) types typeExtras dataInstances classInstances
+      typeBindings = Vector.zipWith5 (TypeBinding.local lookup) types typeExtras dataInstances classInstances sources
       lookup ::
         Type.Link Locality.Local ->
         ST s (TypeGroup.Set Locality.Local Check (Scope.Declaration ':+ scope))
@@ -176,12 +186,15 @@ groupTermBindings used declarations Context {termEnvironment, localEnvironment, 
     termBindings = TermBinding.group used <$> declarations
 
 groupTypeBindings ::
+  -- | What each of the types is called from outside them.
+  Vector (Type2.Index scope) ->
   Vector Position ->
   Vector (Label.TypeBinding scope') ->
   Vector (Unify.Type s scope) ->
   Context s scope ->
   Context s (Scope.GroupType ':+ scope)
 groupTypeBindings
+  outside
   positions
   labels
   declarations
@@ -190,7 +203,7 @@ groupTypeBindings
       { termEnvironment = Term.GroupType termEnvironment,
         localEnvironment = Local.GroupType localEnvironment,
         typeEnvironment = Type.GroupType typeBindings typeEnvironment,
-        equalities = shiftEquality <$> equalities
+        equalities = shiftEquality <$> (Grouping (zip (Vector.toList outside) (Vector.toList declarations)) : equalities)
       }
   where
     typeBindings = Vector.zipWith3 TypeBinding.group positions labels declarations
@@ -202,6 +215,31 @@ label Context {termEnvironment, localEnvironment, typeEnvironment} =
       locals = Local.map (Local.Map LocalBinding.label) localEnvironment,
       types = Type.map (Type.Map TypeBinding.label) typeEnvironment
     }
+
+-- |
+-- A name for a type as it was written, if this is inside types that are
+-- checked together: there the name is looked into, since what it was found
+-- to be may wait for those types.
+lookupSource :: Context s scope -> Type2.Index scope -> Maybe (Synonym.Synonym Resolve scope)
+lookupSource Context {typeEnvironment, equalities} (Type2.Index index)
+  | not (null [() | Grouping _ <- equalities]),
+    TypeBinding {source} <- typeEnvironment Type.! index =
+      source
+lookupSource _ _ = Nothing
+
+-- |
+-- The kind a type has so far, if it is one of the types that are being
+-- checked together here and this is how it is called from outside them.
+grouped :: Context s scope -> Type2.Index scope -> Maybe (Unify.Type s scope)
+grouped Context {equalities} index =
+  case [kind | Grouping members <- equalities, (member, kind) <- members, member == index] of
+    kind : _ -> Just kind
+    [] -> Nothing
+
+-- |
+-- Whether this is inside what a name for a type stands for.
+expanding :: Context s scope -> Type2.Index scope -> Bool
+expanding Context {equalities} index = index `elem` [inside | Expanding inside <- equalities]
 
 lookupSynonym :: Context s scope -> Type2.Index scope -> ST s (Type.Synonym Check scope)
 lookupSynonym Context {typeEnvironment} (Type2.Index index) = do

@@ -89,11 +89,24 @@ connect modules = Vector.imap go modules
     Functor.Type.ModuleSet typeGroups =
       tarjan
         Index {(!) = (Functor.Type.!)}
-        (map Type.global . freeType . indexType)
+        (map Type.global . through . freeType . indexType)
         typeIndexes
 
     freeTerm = foldMap Declaration.groupFree
     freeType = foldMap TypeDeclaration.groupFree
+    -- A type that is defined by way of a name for a type is defined by way
+    -- of whatever the name is, and that may be the type itself: then the
+    -- two are checked together.
+    through = go []
+      where
+        go _ [] = []
+        go seen (index : rest)
+          | Type.global index `elem` seen = go seen rest
+          | Type.Global global local <- Type.global index,
+            Module {declarations = Declarations {types}} <- modules Vector.! global,
+            Just named <- TypeDeclaration.synonymFree (types Vector.! local) =
+              index : go (Type.global index : seen) (named ++ rest)
+          | otherwise = index : go (Type.global index : seen) rest
 
     termIndexes = Functor.Term.ModuleSet $ Vector.generate (length modules) termIndex
     termIndex index =

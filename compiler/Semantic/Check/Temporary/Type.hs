@@ -8,16 +8,35 @@ import Core.Tree.Type ((-#>))
 import qualified Core.Tree.Type as Core
 import qualified Data.Strict.Vector1 as Strict (Vector1)
 import qualified Data.Strict.Vector2 as Strict (Vector2)
-import Error (partialSynonym, uncheckable, universeMustBeSmall, unsupportedFeatureStrictFunctions)
+import Core.Type.Functor (shiftLogical)
+import Data.Traversable (for)
+import qualified Data.Vector.Strict as Strict (Vector)
+import qualified Data.Vector.Strict as Strict.Vector (toLazy)
+import Error
+  ( cyclicalTypeChecking,
+    partialSynonym,
+    uncheckable,
+    universeMustBeSmall,
+    unsupportedFeatureStrictFunctions,
+  )
 import Semantic.Check.Context (Context (..))
 import qualified Semantic.Check.Context as Context
-import qualified Semantic.Check.LocalBinding as LocalBinding (LocalBinding (..))
+import qualified Semantic.Check.LocalBinding as LocalBinding (Equality (Expanding), LocalBinding (..), shiftEquality)
+import qualified Semantic.Check.Temporary.TypePattern as Unsolved (TypePattern (..))
 import qualified Semantic.Index.Local as Local
 import qualified Semantic.Index.Table.Local as Local.Table
+import qualified Semantic.Index.Table.Term as Term.Table (Table (..))
+import qualified Semantic.Index.Table.Type as Type.Table (Table (..))
 import qualified Semantic.Index.Type2 as Type2
+import qualified Semantic.Label.Binding.Local as Label
+import Semantic.Scope (Environment (..))
+import qualified Semantic.Scope as Scope (Local)
+import qualified Semantic.Shift0 as Shift0
 import Semantic.Stage (Check, Resolve)
+import qualified Semantic.Tree.Synonym as Synonym (Synonym (..), SynonymBody (..))
 import qualified Semantic.Tree.Type as Semantic (Type (..))
 import qualified Semantic.Tree.Type as Solved
+import qualified Semantic.Tree.TypePattern as Semantic.TypePattern (TypePattern (..))
 import qualified Semantic.Unify as Unify
 import Syntax.Position (Position)
 
@@ -29,7 +48,10 @@ data Type s scope
   | Constructor
       { startPosition, constructorPosition :: !Position,
         constructor :: !(Type2.Index scope),
-        synonym :: !(Solved.Synonym Check scope)
+        -- | What the constructor is a name for, if it is one. It is found
+        -- when the type is solved: inside types that are checked together
+        -- it is not known before.
+        synonym :: Unify.Solve s (Solved.Synonym Check scope)
       }
   | Tuple
       { startPosition :: !Position,
@@ -70,6 +92,40 @@ checkCount context count kind = \case
     function <- checkCount context (count + 1) (parameterType -#> kind) function
     argument <- check context parameterType argument
     pure Call {startPosition, function, argument}
+  -- One of the types that are being checked together, called the way it
+  -- is from outside them: what a name for a type stands for calls it so.
+  Semantic.Constructor {startPosition, constructorPosition, constructor}
+    | Just kind' <- Context.grouped context constructor -> do
+        Unify.unify context constructorPosition kind kind'
+        pure Constructor {startPosition, constructorPosition, constructor, synonym = pure Solved.NoSynonym}
+  -- A name for a type, met inside types that are being checked together.
+  -- What the name was found to be cannot be asked: finding that may wait
+  -- for these very types, as when
+  --
+  -- > type Type s = TypeF (Logical s)
+  -- > data Logical s = Box (Box s)
+  -- > data Box s = Solved (Type s)
+  --
+  -- So what the name stands for is checked here, as if it were written
+  -- out, and the name is kept with what that came to.
+  Semantic.Constructor {startPosition, constructorPosition, constructor}
+    | Just (_ Synonym.::: Synonym.SynonymBody {parameters, synonym = body}) <-
+        Context.lookupSource context constructor -> do
+        if length parameters > count then partialSynonym startPosition else pure ()
+        if Context.expanding context constructor then cyclicalTypeChecking constructorPosition else pure ()
+        universe <- Unify.fresh Core.universe
+        wobbly <- for parameters $ \Semantic.TypePattern.TypePattern {name, position} -> do
+          level <- Unify.fresh Core.universe
+          typex <- Unify.fresh (Core.typeWith level)
+          pure Unsolved.TypePattern {name, typex, position}
+        target <- Unify.fresh (Core.typeWith universe)
+        Unify.unify context constructorPosition kind (foldr ((-#>) . Unsolved.typex) target wobbly)
+        let inner = inside constructor wobbly context
+        body <- check inner (shiftLogical target) body
+        let synonym = do
+              body <- solve inner body
+              pure $ Solved.Synonym (length parameters) (Core.simplify body)
+        pure Constructor {startPosition, constructorPosition, constructor, synonym}
   Semantic.Constructor {startPosition, constructorPosition, constructor} -> do
     kind' <- Context.lookupKind constructorPosition context constructor
     Unify.unify context constructorPosition kind kind'
@@ -80,8 +136,31 @@ checkCount context count kind = \case
           partialSynonym startPosition
       | otherwise -> pure ()
 
-    pure Constructor {startPosition, constructorPosition, constructor, synonym}
+    pure Constructor {startPosition, constructorPosition, constructor, synonym = pure synonym}
   typex -> check context kind typex
+
+-- |
+-- What a name for a type stands for is checked where its parameters are
+-- types that are not known yet, and where meeting the name again is known
+-- for the circle it is.
+inside ::
+  Type2.Index scope ->
+  Strict.Vector (Unsolved.TypePattern s scope) ->
+  Context s scope ->
+  Context s (Scope.Local ':+ scope)
+inside constructor parameters Context {termEnvironment, localEnvironment, typeEnvironment, equalities} =
+  Context
+    { termEnvironment = Term.Table.Local termEnvironment,
+      localEnvironment = Local.Table.Local (fmap wobbly (Strict.Vector.toLazy parameters)) localEnvironment,
+      typeEnvironment = Type.Table.Local typeEnvironment,
+      equalities = LocalBinding.Expanding (Shift0.map Shift0.Shift constructor) : (LocalBinding.shiftEquality <$> equalities)
+    }
+  where
+    wobbly Unsolved.TypePattern {name, typex} =
+      LocalBinding.Wobbly
+        { label = Label.LocalBinding {name},
+          wobbly = shiftLogical typex
+        }
 
 check ::
   Context s scope ->
@@ -150,6 +229,7 @@ solve context = \case
           variable
         }
   Constructor {startPosition, constructorPosition, constructor, synonym} -> do
+    synonym <- synonym
     pure
       Solved.Constructor
         { startPosition,

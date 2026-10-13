@@ -180,11 +180,22 @@ connect declarations@Declarations {terms, types} =
     typeGroups =
       tarjan
         Index {(!) = (Functor.Type.!)}
-        (map Type.local . freeType . indexType)
+        (map Type.local . through . freeType . indexType)
         typeIndexes
 
     freeTerm = foldMap Declaration.groupFree
     freeType = foldMap TypeDeclaration.groupFree
+    -- A type that is defined by way of a name for a type is defined by way
+    -- of whatever the name is: see the same where modules are connected.
+    through = go []
+      where
+        go _ [] = []
+        go seen (index : rest)
+          | Type.local index `elem` seen = go seen rest
+          | Type.Declaration local <- Type.local index,
+            Just named <- TypeDeclaration.synonymFree (types Vector.! local) =
+              index : go (Type.local index : seen) (named ++ rest)
+          | otherwise = index : go (Type.local index : seen) rest
 
     indexTerm' = fromJust . indexTerm
     indexType' = fromJust . indexType

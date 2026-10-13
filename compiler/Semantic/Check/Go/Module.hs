@@ -24,6 +24,7 @@ import Semantic.Tree.Declarations (Declarations (..))
 import Semantic.Tree.Instance (Instance)
 import Semantic.Tree.Module (Module (..), ModuleSet (..))
 import Semantic.Tree.TypeDeclaration (TypeDeclaration)
+import qualified Semantic.Tree.TypeDeclaration as TypeDeclaration (source)
 import Prelude hiding (Functor)
 
 lookupTerm ::
@@ -62,14 +63,20 @@ lookupClassInstance global (Proper (ModuleSet modules)) local index =
   case modules Vector.! global of
     Module {declarations = Declarations {classInstances}} -> classInstances Vector.! local Map.! index
 
-globals :: Proper ModuleSet Group Check Global (ST s) -> Context s Global
-globals (Proper (ModuleSet modules)) = globalBindings modules
+globals ::
+  Vector (Module Identity Group Resolve Global) ->
+  Proper ModuleSet Group Check Global (ST s) ->
+  Context s Global
+globals written (Proper (ModuleSet modules)) = globalBindings (sources <$> written) modules
+  where
+    sources Module {declarations = Declarations {types}} = TypeDeclaration.source <$> types
 
 checkModule ::
+  Vector (Module Identity Group Resolve Global) ->
   Int ->
   Module Identity Group Resolve Global ->
   Module (Topological.Formula (Proper ModuleSet Group Check Global) s) Group Check Global
-checkModule global Module {name, declarations} =
+checkModule written global Module {name, declarations} =
   Module
     { name,
       declarations =
@@ -82,9 +89,9 @@ checkModule global Module {name, declarations} =
           lookupType
           (lookupDataInstance global)
           (lookupClassInstance global)
-          globals
+          (globals written)
           declarations
     }
 
 check :: Vector (Module Identity Group Resolve Global) -> Vector (Module Identity Group Check Global)
-check modules = runModuleSet $ runProper $ loeb $ Loeb $ Proper $ ModuleSet $ Vector.imap checkModule modules
+check modules = runModuleSet $ runProper $ loeb $ Loeb $ Proper $ ModuleSet $ Vector.imap (checkModule modules) modules
