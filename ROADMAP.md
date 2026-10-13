@@ -938,20 +938,61 @@ The order to take it in:
     constructor, in every constructor (test `record-update-many`)
   - `show` of a character or a string escaped as no Haskell does, and
     `read` took a number only in tens (tests `readshow`, `read-bases`)
-- [ ] Compile itself natively. What stands between:
-  - The primitives of the world outside, in the native runtime
-  - The rest of a text is copied each time it is taken, so going through a
-    text a character at a time takes time by the square of its length
-  - Then stage 2 as a native executable, stage 3 made by it, and the two
-    compared
+- [x] **Hazy compiles itself natively.** The compiler that GHC built makes
+      the compiler into an executable (stage 2, 58 MB, about six minutes of
+      which clang takes five). That executable makes the compiler's
+      Javascript, the same 550 files stage 1 made, in a minute and three
+      quarters, and the LLVM of itself, the same 364 MB stage 1 made it
+      from. `tools/bootstrap.sh` does each: `native` for the Javascript,
+      which the tests on Linux run, and `llvm` for the LLVM, which takes
+      fifteen gigabytes of memory and is run by hand
+- [x] **The compiler Hazy makes passes the tests.** `tools/test.sh` given
+      the stage 2 executable goes through all of it: the programs that are
+      refused, the programs run as Javascript, on the AxCut machine and
+      natively, the packages and the interactive tests
+- [x] The world outside a program, in the native runtime and on the AxCut
+      machine. A primitive of this kind is named and not one more
+      constructor (`Foreign`, in `Sequent.Primitive`, which lists them): the
+      native runtime has it as `hazy_prim_` and the name, and the machine
+      does it in `AxCut.Machine`
+  - A reference is a block of one field that is changed where it is
+  - To catch is to leave with the runtime the handler and where to go on
+    from, which is whatever waited for the action's result, made a
+    function. To throw is to take those back, run the handler and go on
+    from there. Nothing is unwound: a native program has no stack
+  - A text is built in a buffer the runtime keeps, not by adding a
+    character to a copy of all the text before it, and the rest of a long
+    text shares the text it is the rest of
+- [x] What else was wrong, found by the compiler Hazy made:
+  - An action that was run was written out three times in Javascript, and
+    so run three times (test `world`)
+  - A case with no alternatives did not evaluate what it was a case of. An
+    error that was waiting there was never raised (test `empty-case`)
+  - A function could take no more than 72 arguments natively, and a
+    constructor of hundreds of fields is taken apart into as many
+  - The modules of a directory were numbered in whatever order the system
+    kept its files in, so what was made differed from one runtime to
+    another. They are sorted now
+- [ ] What a compiler made by Hazy does not do as well as the one GHC
+      builds:
+  - It is slow: about eighteen times as long to compile the compiler to
+    Javascript. Vectors are trees, text is gone through a character at a
+    time in lists, and nothing has been measured yet
+  - It never gives back what refers to itself, and the compiler keeps much
+    in references that do: making its own LLVM takes fifteen gigabytes.
+    The check of the heap (`HAZY_CHECK`) calls that an error, so the tests
+    ask it of the programs and not of the compiler
+  - Its interactive session reads lines as they are given. There is no
+    editing, completing, colour or history: the library's `Lambline` is a
+    plain one, and `Viewer` is a placeholder
 - [ ] What the library still does not do:
-  - `throw` and `catch` do not tell one type of exception from another:
-    what is thrown is caught by whichever `catch` was begun last. The
-    compiler throws one type
+  - Exceptions are told apart by a name each type gives itself
+    (`exceptionTag`). Types that give none are taken for each other. An
+    exit is an exception, as in GHC's library, and `error` is not one
   - `Double` and `Float` have no arithmetic. `Status` in the compiler now
     counts time in whole numbers for that reason
-  - `Lambline` and `Viewer` are placeholders, so a compiler made by Hazy has
-    no interactive session
+  - `Viewer` is a placeholder, and `Lambline` reads lines without editing
+    them
   - `toUpper` and `toLower` change the letters of Latin-1 only
   - An `Int` is 32 bits in both runtimes, and `Int64` is no wider
   - Whatever is read from a handle is read at once, not as it is wanted
