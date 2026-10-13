@@ -10,7 +10,7 @@ import Data.Foldable (toList)
 import qualified Data.Map as Map
 import Data.STRef (readSTRef)
 import qualified Data.Strict.Maybe as Strict
-import Data.Text (Text)
+import Data.Text (Text, pack)
 import Data.Traversable (for)
 import Data.Vector (Vector)
 import qualified Data.Vector as Vector
@@ -28,7 +28,7 @@ import qualified Javascript.Tree.Statement as Javascript (Statement (..))
 import qualified Semantic.Index.Type as Type (Index (..))
 import qualified Semantic.Index.Type2 as Type2
 import qualified Semantic.Scope as Scope
-import Syntax.Lexer (FullQualifiers)
+import Syntax.Lexer (FullQualifiers (..), Qualifiers (..), constructorIdentifier)
 import Syntax.Variable (FullyQualifiedConstructorIdentifier ((:.=.)))
 
 data Module = Module
@@ -48,9 +48,16 @@ precontext :: Vector Core.Module -> Precontext
 precontext modules =
   Precontext
     { terms = names <$> modules,
+      workers = arities <$> modules,
       types = instanceNames <$> modules
     }
   where
+    -- The primitives are declared and not defined: what they are is
+    -- written in Javascript, in one form.
+    arities Core.Module {name, declarations = Declarations {terms}}
+      | name == primitives = Nothing <$ terms
+      | otherwise = (\Term.Declaration {definition} -> Expression.uncurried definition) <$> terms
+    primitives = Local :.. constructorIdentifier (pack "Hazy")
     names Core.Module {name = path, declarations = Declarations {terms}} = generate <$> terms
       where
         generate Term.Declaration {name} =
@@ -102,13 +109,18 @@ generate'
     context <- Context.start precontext
     statements <- for (zip [0 ..] (toList terms)) $ \(termIndex, Declaration {definition}) ->
       do
-        thunk <- Expression.declaration context definition
+        let global@Global {name} = termNames Vector.! moduleIndex Vector.! termIndex
+        worker <- traverse (const $ Context.fresh context) (Expression.uncurried definition)
+        (before, thunk) <- Expression.declaration context worker definition
         source <- Context.fresh context
-        let Global {name} = termNames Vector.! moduleIndex Vector.! termIndex
-        pure
-          [ Javascript.Const source thunk,
-            Javascript.Export source name
-          ]
+        pure $
+          concat
+            [ before,
+              [Javascript.Export direct (Global.name (Global.direct global)) | Just direct <- [worker]],
+              [ Javascript.Const source thunk,
+                Javascript.Export source name
+              ]
+            ]
     classStatements <- for
       (zip [0 ..] $ toList classInstances)
       $ \(typeIndex, classInstances) ->

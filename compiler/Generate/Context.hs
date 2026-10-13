@@ -10,13 +10,15 @@ import Data.STRef (STRef, newSTRef, readSTRef, writeSTRef)
 import qualified Data.Strict.Maybe as Strict (Maybe (..))
 import Data.Text (Text)
 import Data.Vector (Vector)
+import qualified Data.Vector as Vector (zipWith)
 import qualified Data.Vector.Strict as Strict (Vector)
 import qualified Data.Vector.Strict as Strict.Vector
 import qualified Generate.Binding.Evidence as Evidence (Binding (..))
-import qualified Generate.Binding.Term as Term (Binding (..), binding)
+import qualified Generate.Binding.Term as Term (Binding (..), defined)
 import qualified Generate.Binding.Term as Term.Binding
 import qualified Generate.Binding.Type as Type (Binding (..))
 import Generate.Global (Global)
+import qualified Generate.Global as Global (direct)
 import Generate.GlobalType (GlobalType (GlobalType))
 import qualified Generate.GlobalType as GlobalType
 import qualified Generate.Info as Info
@@ -44,7 +46,7 @@ data Context s scope = Context
   }
 
 start :: Precontext -> ST s (Context s Scope.Global)
-start Precontext {terms, types} = do
+start Precontext {terms, workers, types} = do
   unique <- newSTRef Mangle.unique
   used <- newSTRef Map.empty
   let globalType GlobalType {classInstances, dataInstances} =
@@ -55,13 +57,15 @@ start Precontext {terms, types} = do
   builtinUsed <- traverse (const $ newSTRef Strict.Nothing) (pure ())
   pure
     Context
-      { terms = Term.Global (fmap (Term.binding . Global) <$> terms),
+      { terms = Term.Global (Vector.zipWith (Vector.zipWith global) terms workers),
         evidence = Evidence0.Global,
         types = Type.Global (fmap globalType <$> types),
         unique,
         builtinUsed,
         used
       }
+  where
+    global name count = Term.defined (Global name) ((,) (Global (Global.direct name)) <$> count)
 
 fresh :: Context s scope -> ST s Text
 fresh Context {unique} = do
@@ -86,9 +90,20 @@ localBindings ::
   Vector (LocalType (Scope.Declaration ':+ scope)) ->
   Context s scope ->
   Context s (Scope.Declaration ':+ scope)
-localBindings names instances Context {terms, evidence, types, unique, used, builtinUsed} =
+localBindings names = localBindingsWith names (Nothing <$ names)
+
+-- |
+-- The same, with the form of each definition that takes every argument at
+-- once, if it has one: what that is called and how many arguments it takes.
+localBindingsWith ::
+  Vector Text ->
+  Vector (Maybe (Text, Int)) ->
+  Vector (LocalType (Scope.Declaration ':+ scope)) ->
+  Context s scope ->
+  Context s (Scope.Declaration ':+ scope)
+localBindingsWith names workers instances Context {terms, evidence, types, unique, used, builtinUsed} =
   Context
-    { terms = Term.Declaration (Term.binding . Local <$> names) terms,
+    { terms = Term.Declaration (Vector.zipWith local names workers) terms,
       evidence = Evidence0.Declaration evidence,
       types = Type.Declaration (go <$> instances) types,
       unique,
@@ -96,6 +111,7 @@ localBindings names instances Context {terms, evidence, types, unique, used, bui
       builtinUsed
     }
   where
+    local name worker = Term.defined (Local name) ((\(direct, count) -> (Local direct, count)) <$> worker)
     go LocalType {classInstances, dataInstances} =
       Type.Binding
         { classInstances = Map.map Local classInstances,
@@ -105,7 +121,10 @@ localBindings names instances Context {terms, evidence, types, unique, used, bui
 singleBinding :: Text -> Context s scope -> Context s (Scope.SimpleDeclaration ':+ scope)
 singleBinding name Context {terms, evidence, types, unique, used, builtinUsed} =
   Context
-    { terms = Term.SimpleDeclaration Term.Binding {name = Local name, strict = False, delayed = True} terms,
+    { terms =
+        Term.SimpleDeclaration
+          Term.Binding {name = Local name, strict = False, delayed = True, worker = Nothing}
+          terms,
       evidence = Evidence0.SimpleDeclaration evidence,
       types = Type.SimpleDeclaration types,
       unique,
@@ -133,7 +152,8 @@ patternBindings names ConstructorInfo {entries} Context {terms, evidence, types,
       Term.Binding
         { name = Local name,
           strict = Info.strict strict,
-          delayed = False
+          delayed = False,
+          worker = Nothing
         }
 
 evidenceBindings ::

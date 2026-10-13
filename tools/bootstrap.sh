@@ -36,17 +36,9 @@ cp -r "$(dirname "$(dirname "$HAZY")")/lib" "$out/lib"
 echo "Stage 2: the compiler as Javascript, made by the compiler that GHC built"
 "$HAZY" -q -XStableImports compiler -o "$out/stage2"
 
-# A program made of Haskell goes far deeper than a program is given room
-# for. The stack only grows under a limit that is a number.
-stack=4000000
-if ! ulimit -s "$stack" 2> /dev/null; then
-    stack="$(ulimit -H -s)"
-    if [ "$stack" = unlimited ]; then
-        stack=1000000
-    fi
-    ulimit -s "$stack" 2> /dev/null || stack="$(ulimit -s)"
-fi
-export BUN_JSC_maxPerThreadStackUsage=$((stack * 1000))
+# This runs in the stack a program is given, and in half of it. It used to
+# ask for four gigabytes: one definition of the compiler went as deep as a
+# list was long, and nothing else needed it.
 
 if [ "$what" = javascript ] || [ "$what" = all ]; then
     echo "Stage 3: the compiler as Javascript, made by stage 2 as Javascript"
