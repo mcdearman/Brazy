@@ -27,6 +27,6 @@ force :: Javascript.Expression -> Javascript.Expression
 thunk :: Context s scope -> Binder -> Expression scope -> ST s Javascript.Expression
 declaration ::
   Context s scope ->
-  Maybe Text ->
+  Maybe (Text, Int) ->
   TypeLambda scope ->
   ST s ([Javascript.Statement local], Javascript.Expression)

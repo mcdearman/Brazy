@@ -86,6 +86,7 @@ executable hazy
     Builtin.Semigroup
     Builtin.Show
     Builtin.Tuple
+    Core.Arity
     Core.Builtin
     Core.Index.Table.Term
     Core.Substitute

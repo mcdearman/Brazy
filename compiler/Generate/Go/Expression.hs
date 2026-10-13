@@ -2,6 +2,7 @@ module Generate.Go.Expression where
 
 import Control.Monad (zipWithM)
 import Control.Monad.ST (ST)
+import Core.Arity (Arity (..))
 import Core.Tree.Constraints (ConstraintsF (..))
 import Core.Tree.ConstructorInfo (ConstructorInfo (..))
 import Core.Tree.EntryInfo (EntryInfo (EntryInfo))
@@ -367,6 +368,8 @@ generateInto context target = \case
 spine :: Expression scope -> [Expression scope] -> (Expression scope, [Expression scope])
 spine expression given = case expression of
   Call {function, argument} -> spine function (argument : given)
+  -- A newtype is nothing when a program runs.
+  Newtype {argument} -> spine argument given
   _ -> (expression, given)
 
 -- |
@@ -382,34 +385,32 @@ spine expression given = case expression of
 --
 -- A definition of one argument has a second form only when it requires
 -- evidence, which is otherwise one more function to make.
-uncurried :: TypeLambda scope -> Maybe Int
-uncurried TypeLambdaOver {constraints, result}
-  | count >= 2 = Just count
-  | count >= 1, Constraints {} <- constraints = Just count
+--
+-- How many arguments a definition takes is not found here: it is kept with
+-- the definition. See "Core.Arity".
+uncurried :: Arity -> Maybe Int
+uncurried Arity {evidences, lambdas}
+  | lambdas >= 2 = Just lambdas
+  | lambdas >= 1, evidences > 0 = Just lambdas
   | otherwise = Nothing
-  where
-    count = depth result
-    depth :: Expression scope' -> Int
-    depth = \case
-      Lambda {body} -> 1 + depth body
-      _ -> 0
 
 -- |
--- A definition. If it is given what its second form is called, it is made
--- in both: the second is what has to be declared first.
+-- A definition. If it is given what its second form is called and how many
+-- arguments that takes, it is made in both: the second is what has to be
+-- declared first.
 declaration ::
   Context s scope ->
-  Maybe Text ->
+  Maybe (Text, Int) ->
   TypeLambda scope ->
   ST s ([Javascript.Statement local], Javascript.Expression)
-declaration context worker definition@TypeLambdaOver {constraints, result = expression} = do
+declaration context worker TypeLambdaOver {constraints, result = expression} = do
   let count = case constraints of
         Constraints constraints -> length constraints
         None -> 0
   fresh <- Vector.replicateM count (Context.fresh context)
   inner <- pure $ Context.evidenceBindings fresh context
-  case (worker, uncurried definition) of
-    (Just worker, Just arity) -> do
+  case worker of
+    Just (worker, arity) -> do
       (names, statements) <- peel inner arity expression
       let whole =
             Javascript.Arrow
@@ -448,6 +449,7 @@ declaration context worker definition@TypeLambdaOver {constraints, result = expr
     -- The body of some functions inside each other, and what each takes.
     peel :: Context s scope' -> Int -> Expression scope' -> ST s ([Text], [Javascript.Statement 'True])
     peel context remaining = \case
+      Newtype {argument} | remaining > 0 -> peel context remaining argument
       Lambda {body} | remaining > 0 -> do
         name <- fresh' context
         (names, statements) <- peel (singleBinding name context) (remaining - 1) body
