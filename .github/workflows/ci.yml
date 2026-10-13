@@ -106,8 +106,11 @@ jobs:
         run: make test
 
       # The compiler that Hazy makes of its own source makes it again, and
-      # the two are compared. This wants a deeper stack than the other
-      # systems let a program have.
+      # the two are compared: once with the compiler made into Javascript,
+      # and once with it made into an executable. This wants a deeper stack
+      # than the other systems let a program have.
       - name: Check that Hazy compiles itself, and that what it makes does too
         if: matrix.name == 'Linux'
-        run: tools/bootstrap.sh .dist/bin/hazy
+        run: |
+          tools/bootstrap.sh .dist/bin/hazy javascript
+          tools/bootstrap.sh .dist/bin/hazy native

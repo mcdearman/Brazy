@@ -373,6 +373,13 @@ outside World {catching, files, building} name arguments = case (name, arguments
   ("clock", []) -> pure $ Int 0
   ("os", []) -> pure $ Text $ Text.pack os
   ("catch_push", [handler, resume]) -> unit <$ modifyIORef catching ((handler, resume) :)
+  ("catching", []) -> bool . not . null <$> readIORef catching
+  ("uncaught", [Int code, Text shown])
+    | code == 0 -> exitSuccess
+    | code > 0 -> exitWith (ExitFailure (fromIntegral code))
+    | otherwise -> do
+        hPutStrLn stderr $ "uncaught exception: " ++ unpack shown
+        exitFailure
   ("catch_pop", []) ->
     readIORef catching >>= \case
       (handler, resume) : rest -> do

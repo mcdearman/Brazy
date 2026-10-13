@@ -83,6 +83,8 @@ outside =
     ("os", 0),
     ("catch_push", 2),
     ("catch_pop", 0),
+    ("catching", 0),
+    ("uncaught", 2),
     ("pack_new", 0),
     ("pack_push", 2),
     ("pack_append", 2),

@@ -148,7 +148,9 @@ draw sources Report {code, message, location, related} =
       [ gutter ++ (if first then "╭──▶ " else "├──▶ ") ++ Text.unpack file ++ "@" ++ range,
         gutter ++ "│",
         " " ++ replicate (margin - length (show line)) ' ' ++ show line ++ " │ " ++ shown,
-        gutter ++ "• " ++ indent ++ "┬" ++ replicate (width - 1) '─' ++ " ",
+        -- A mark that stops short of the end of its line is followed by a
+        -- space, as the package this is drawn after has it.
+        gutter ++ "• " ++ indent ++ "┬" ++ replicate (width - 1) '─' ++ (if column + width <= length text then " " else ""),
         gutter ++ "• " ++ indent ++ "╰╸ " ++ note
       ]
       where

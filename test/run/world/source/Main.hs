@@ -10,6 +10,7 @@ import qualified Data.Text as Text
 import qualified Data.Text.IO as Text.IO
 import qualified Data.Text.Lazy as Lazy
 import qualified Data.Text.Lazy.IO as Lazy.IO
+import System.Exit (ExitCode (..), exitWith)
 import System.Directory (createDirectoryIfMissing, doesDirectoryExist, doesFileExist, listDirectory)
 import System.IO (IOMode (AppendMode, ReadMode, WriteMode), hClose, hGetContents, hPutStr, hPutStrLn, openFile, stdout)
 import System.IO.Unsafe (unsafeInterleaveIO, unsafePerformIO)
@@ -18,6 +19,9 @@ data Failure = Failure String Int
   deriving (Show)
 
 instance Exception Failure
+
+data Setting = Setting {level :: Maybe Int, inside :: [Setting], sign :: Int}
+  deriving (Show)
 
 -- A sum kept in a place that is changed as the numbers go by.
 total :: [Int] -> Int
@@ -63,6 +67,15 @@ main = do
     (((evaluate (checked 4) >> pure "none") `catch` \(Failure _ number) -> when (number > 3) (throw (Failure "again" (number + 1))) >> pure "inner")
       `catch` \(Failure reason number) -> pure (reason ++ " " ++ show number))
   putStrLn nested
+  -- An exit is an exception of its own type: a handler of another type lets
+  -- it by, and one of its own catches it.
+  stopped <- try (exitWith (ExitFailure 3) `catch` \(Failure _ _) -> putStrLn "not this one")
+  print (stopped :: Either ExitCode ())
+  missed <- try (try (evaluate (checked 9)) :: IO (Either ExitCode Int))
+  print (missed :: Either Failure (Either ExitCode Int))
+  -- What a field is equal to is shown as it is, and a record among arguments in brackets.
+  print (Setting {level = Just 1, inside = [Setting Nothing [] (-2)], sign = -1})
+  print (Just (Setting (Just (-3)) [] 0))
   after <- try (pure 3)
   print (after :: Either Failure Int)
   -- Files.

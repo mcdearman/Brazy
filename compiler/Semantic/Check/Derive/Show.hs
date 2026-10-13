@@ -127,14 +127,17 @@ showsPrec context position typeIndex datax = do
               space = letter ' '
               identifier infixed =
                 map letter $ unpack $ toStrict $ toLazyText $ printConstructor infixed name
-              item index evidence =
+              item = itemAt (precedence + 1)
+              -- What a constructor holds is shown in brackets if it needs
+              -- them to be an argument. What a field is equal to never does.
+              itemAt level index evidence =
                 Expression.Method
                   { method = Method.showsPrec,
                     evidence = shift $ shift $ evidence,
                     instanciation = Instanciation.Mono,
                     methodInfo = Class.info $ Show.definition
                   }
-                  `Expression.call` Expression.int (precedence + 1)
+                  `Expression.call` Expression.int level
                   `Expression.call` Expression.patternVariableAt' index
               sections start end = case syntax of
                 Constructor.Standard ->
@@ -176,7 +179,7 @@ showsPrec context position typeIndex datax = do
                           [space],
                           [letter '='],
                           [space],
-                          [item index evidence]
+                          [itemAt 0 index evidence]
                         ]
               precedence = case syntax of
                 Constructor.Standard -> 10

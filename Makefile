@@ -6,6 +6,7 @@
 #   make run ARGS="..."  run the compiler with some arguments instead
 #   make test            run the tests
 #   make bootstrap       have Hazy compile itself twice over, and compare
+#   make bootstrap WHAT=native   the same with the compiler as an executable
 #   make clean           remove what was built, but not cabal's own cache
 
 DIST ?= .dist
@@ -19,6 +20,9 @@ SOURCES := $(shell find compiler diagnostics viewer runtime library -type f) \
 
 # What `make run` gives the compiler when it is told nothing else.
 ARGS ?= --repl
+
+# Which of its forms `make bootstrap` has the compiler make itself in.
+WHAT ?= javascript
 
 .PHONY: all run test bootstrap clean
 
@@ -35,7 +39,7 @@ test: all
 	env bash tools/test.sh $(HAZY)
 
 bootstrap: all
-	env bash tools/bootstrap.sh $(HAZY)
+	env bash tools/bootstrap.sh $(HAZY) $(WHAT)
 
 clean:
 	rm -rf $(DIST) .test .bootstrap

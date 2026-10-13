@@ -5,6 +5,10 @@ Right 6
 Left (Failure "too big" 3)
 too big: 7
 again 5
+Left (ExitFailure 3)
+Left (Failure "too big" 9)
+Setting {level = Just 1, inside = [Setting {level = Nothing, inside = [], sign = -2}], sign = -1}
+Just (Setting {level = Just (-3), inside = [], sign = 0})
 Right 3
 one
 two

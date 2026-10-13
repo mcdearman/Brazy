@@ -795,6 +795,23 @@ pub extern "C" fn hazy_prim_catch_push(handler: Value, resume: Value) -> Value {
     unit()
 }
 
+/// Whether anything is catching.
+#[no_mangle]
+pub extern "C" fn hazy_prim_catching() -> Value {
+    boolean(!heap::catching().is_empty())
+}
+
+/// A value was thrown and nothing catches it. It said what the program
+/// exits with, or else how it is shown.
+#[no_mangle]
+pub extern "C" fn hazy_prim_uncaught(status: Value, shown: Value) -> Value {
+    if int(status) >= 0 {
+        let _ = std::io::stdout().flush();
+        std::process::exit(int(status))
+    }
+    fail(&format!("uncaught exception: {}", text(shown)))
+}
+
 /// The catch begun last, which is over: its handler and where it goes on,
 /// as a constructor of two fields.
 #[no_mangle]

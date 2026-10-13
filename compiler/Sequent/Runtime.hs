@@ -401,20 +401,38 @@ catch =
 -- for what is thrown never gets anything.
 --
 -- > primThrow value = (handler, resume) = pop; resume (force handler value ())
+--
+-- A value that nothing catches is the library's @Thrown@, which says second
+-- what the program exits with and third how the value is shown.
 throw :: Producer
 throw =
   function "value" "k" $
-    Primitive (outside "catch_pop") [] $
+    Primitive (outside "catching") [] $
       Case
-        [ Alternative 0 [byNeed "handler", byNeed "resume"] $
-            Cut (variable "handler") $
+        [ Alternative 1 [] $
+            Primitive (outside "catch_pop") [] $
+              Case
+                [ Alternative 0 [byNeed "handler", byNeed "resume"] $
+                    Cut (variable "handler") $
+                      Force $
+                        Apply [variable "value"] $
+                          Apply [] $
+                            MuTilde (byNeed "result") $
+                              Cut (variable "resume") $
+                                Force $
+                                  Apply [variable "result"] (covariable "k")
+                ]
+                Nothing,
+          Alternative 0 [] $
+            Cut (variable "value") $
               Force $
-                Apply [variable "value"] $
-                  Apply [] $
-                    MuTilde (byNeed "result") $
-                      Cut (variable "resume") $
-                        Force $
-                          Apply [variable "result"] (covariable "k")
+                Case
+                  [ Alternative 0 [byNeed "tag", byNeed "status", byNeed "shown", byNeed "thrown"] $
+                      force "status" "code" $
+                        force "shown" "text" $
+                          Primitive (outside "uncaught") [variable "code", variable "text"] (covariable "k")
+                  ]
+                  Nothing
         ]
         Nothing
 
