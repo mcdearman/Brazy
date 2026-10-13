@@ -43,7 +43,7 @@ import AxCut.Tree
 import Control.Monad.ST (ST, runST)
 import Data.Char (isAlphaNum, isAscii, ord)
 import Data.Foldable (for_, toList)
-import Data.List (intersperse)
+import Data.List (intercalate, intersperse)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Set (Set)
@@ -57,7 +57,7 @@ import Data.Traversable (for)
 import Generate.Global (Global)
 import Sequent.Primitive (Primitive (..))
 import qualified Sequent.Primitive as Primitive
-import qualified Sequent.Printer as Sequent (global)
+import qualified Sequent.Printer as Sequent (global, parts)
 import qualified Sequent.Tree as Literal (Literal (..))
 
 -- |
@@ -178,8 +178,11 @@ data Shape
 
 data State s = State
   { target :: !Target,
-    -- | The next number for a name.
+    -- | The next number for a name inside the function that is being
+    -- generated. Each function counts from nothing, so the names are short.
     counter :: !(STRef s Int),
+    -- | The next number for a name that is one of everything generated.
+    unique :: !(STRef s Int),
     -- | The functions and constants made along the way.
     extra :: !(STRef s Builder),
     -- | The definitions that have been mentioned.
@@ -187,11 +190,13 @@ data State s = State
     -- | The whole path to the code being generated: the definition it is
     -- in, and then every object inside that which has been gone into. What
     -- is generated is called by it.
-    scope :: !Builder,
+    scope :: !Scope,
     -- | The names that have been given to functions.
     taken :: !(STRef s (Set Lazy.Text.Text)),
     -- | The values that keep alive what a function was lent: the consumer
-    -- of its result, and every object made that holds one of these.
+    -- of its result, and every object made that holds one of these. This
+    -- and the next are of the function that is being generated, as the
+    -- names are.
     holders :: !(STRef s (Set Lazy.Text.Text)),
     -- | What each object that was made holds.
     captures :: !(STRef s (Map Lazy.Text.Text [Lazy.Text.Text])),
@@ -211,6 +216,7 @@ generate' ::
   ST s Builder
 generate' shape target defined shared start = do
   counter <- newSTRef 0
+  unique <- newSTRef 0
   extra <- newSTRef mempty
   mentioned <- newSTRef Set.empty
   -- A definition's own name is not free for the code of an object inside
@@ -221,31 +227,30 @@ generate' shape target defined shared start = do
   standing <- newSTRef Map.empty
   called <- newSTRef Map.empty
   let state =
-        State {target, counter, extra, mentioned, scope = fromString "entry", taken, holders, captures, standing, called}
-      global linkage (name, object@Object {kind, parameters}) = do
+        State
+          { target,
+            counter,
+            unique,
+            extra,
+            mentioned,
+            scope = Scope "entry" [],
+            taken,
+            holders,
+            captures,
+            standing,
+            called
+          }
+      global linkage (name, object@Object {kind}) = do
         function
-          state {scope = symbol name}
+          state {scope = scopeOf name}
           (symbol name <> fromString ".code")
           (comment name)
           Nothing
           []
           "internal "
           object
-        -- The entry that takes lent what the function only reads. It is
-        -- seen from wherever the definition is.
-        case lends target name of
-          Just lent
-            | or lent,
-              length lent + 1 == length parameters ->
-                function
-                  state {scope = symbol name}
-                  (symbol name <> fromString ".lent")
-                  (comment name)
-                  Nothing
-                  lent
-                  linkage
-                  object
-          _ -> pure ()
+        -- A package cannot tell who calls the second entry.
+        if shape == Package then entry linkage (name, object) else pure ()
         pure $
           mconcat
             [ quoted (symbol name),
@@ -257,13 +262,45 @@ generate' shape target defined shared start = do
               quoted (symbol name <> fromString ".code"),
               fromString " }, align 8\n"
             ]
-  globals <- traverse (global (if shape == Whole then "internal " else "")) (Map.toList defined)
+      -- The entry that takes lent what the function only reads. It is
+      -- seen from wherever the definition is.
+      entry linkage (name, object@Object {parameters}) = case lends target name of
+        Just lent
+          | or lent,
+            length lent + 1 == length parameters ->
+              function
+                state {scope = scopeOf name}
+                (symbol name <> fromString ".lent")
+                (comment name)
+                Nothing
+                lent
+                linkage
+                object
+        _ -> pure ()
+      -- In a program the second entry of a definition is made when
+      -- something calls it. It is the whole definition over again, and
+      -- most are never called: the ones that were made and not called were
+      -- a quarter of what was generated for the compiler. Making one may
+      -- call more.
+      entered made = do
+        asked <- readSTRef called
+        case filter (`Set.notMember` made) (Map.keys asked) of
+          [] -> pure ()
+          new -> do
+            for_ new $ \name -> case (Map.lookup name defined, Map.lookup name shared) of
+              (Just object, _) -> entry "internal " (name, object)
+              (_, Just object) -> entry (common target) (name, object)
+              _ -> pure ()
+            entered (made <> Set.fromList new)
+  -- Nothing outside a program uses what is in it.
+  globals <- traverse (global (if shape == Package then "" else "internal ")) (Map.toList defined)
   common <- traverse (global (common target)) (Map.toList shared)
   body <- case start of
     Just entry -> do
       body <- statement state Nothing [] entry
       pure $ fromString "\ndefine internal tailcc void @hazy_entry() {\n" <> body <> fromString "}\n"
     Nothing -> pure mempty
+  if shape == Package then pure () else entered Set.empty
   extra <- readSTRef extra
   mentioned <- readSTRef mentioned
   called <- readSTRef called
@@ -355,7 +392,53 @@ number = fromString . show
 -- |
 -- The name of a definition, without the quotes a name needs.
 symbol :: Global -> Builder
-symbol global = fromString $ escaped $ drop 1 $ Lazy.Text.unpack $ toLazyText $ Sequent.global global
+symbol = render . scopeOf
+
+-- |
+-- The whole path to some code: the definition at the top of a module that
+-- it is in, and then every definition and object inside that which was
+-- gone into to get to it.
+data Scope = Scope String [String]
+
+scopeOf :: Global -> Scope
+scopeOf global = Scope (escaped $ drop 1 $ Lazy.Text.unpack $ toLazyText first) (map (escaped . unpack) inside)
+  where
+    (first, inside) = Sequent.parts global
+
+-- |
+-- What the code at the end of a path is called. A path of a few names is
+-- written out. A longer one is the definition at the top, a mark that
+-- stands for the whole path, and the last name: paths get to be dozens of
+-- names long, and written out they were a quarter of all that was
+-- generated.
+--
+-- The mark is worked out from the path alone, so that two units call a
+-- definition the same. Two paths under one definition could come to one
+-- mark, and then LLVM refuses what is generated, saying a name is defined
+-- twice. A mark is one of two to the 60th.
+render :: Scope -> Builder
+render (Scope first inside)
+  | length inside <= 2 = fromString $ intercalate "." (first : inside)
+  | otherwise = fromString $ intercalate "." (first : ('~' : digest inside) : final)
+  where
+    final = case reverse inside of
+      "direct" : before : _ -> [before, "direct"]
+      end : _ -> [end]
+      [] -> []
+
+-- |
+-- Twelve letters and digits for a path: three numbers of twenty bits. No
+-- number on the way to them is past 31 bits, so that they are worked out
+-- the same by a compiler that Hazy made, where an @Int@ is 32 bits, as by
+-- one that GHC made, where it is 64.
+digest :: [String] -> String
+digest inside = concatMap digits [hash 31 1048573, hash 131 1048559, hash 1009 1048549]
+  where
+    text = intercalate "\US" inside
+    hash :: Int -> Int -> Int
+    hash factor modulus = foldl (\known character -> (known * factor + ord character) `mod` modulus) 5381 text
+    digits value = [alphabet !! (value `div` (62 ^ place) `mod` 62) | place <- [0 .. 3 :: Int]]
+    alphabet = ['0' .. '9'] ++ ['a' .. 'z'] ++ ['A' .. 'Z']
 
 -- |
 -- Some text as it can stand inside the quotes of a name.
@@ -371,18 +454,20 @@ escaped = concatMap escape
 -- A name for the code of an object, given what AxCut calls the object: the
 -- path to where it is, and then its own name. If the same object is
 -- compiled twice, the second is told apart by a number.
-named :: State s -> Text -> ST s Builder
-named state@State {scope, taken} hint = do
-  let wanted = scope <> fromString "." <> fromString (escaped (unpack hint))
+named :: State s -> Text -> ST s (Builder, Scope)
+named State {scope = Scope first inside, taken, unique} hint = do
+  let path = inside ++ [escaped (unpack hint)]
   known <- readSTRef taken
-  name <-
-    if Set.member (toLazyText wanted) known
+  scope <-
+    if Set.member (toLazyText (render (Scope first path))) known
       then do
-        next <- fresh state
-        pure $ wanted <> fromString "." <> fromString (show next)
-      else pure wanted
+        next <- readSTRef unique
+        writeSTRef unique $! next + 1
+        pure $ Scope first (path ++ [show next])
+      else pure (Scope first path)
+  let name = render scope
   modifySTRef' taken (Set.insert (toLazyText name))
-  pure name
+  pure (name, scope)
 
 hex :: Int -> String
 hex byte = [digits !! (byte `div` 16), digits !! (byte `mod` 16)]
@@ -686,8 +771,15 @@ safepoint state roots
 -- in turn. What keeps those alive is the consumer of the function's result,
 -- the last parameter: the caller saw to it that it holds them.
 function :: State s -> Builder -> Builder -> Maybe Int -> [Bool] -> String -> Object -> ST s ()
-function state@State {target = Target {registers}, extra} name comment husk lent linkage object = do
+function outer@State {target = Target {registers}, extra} name comment husk lent linkage object = do
   let Object {kind, captured, parameters, body} = object
+  -- The names of a function are its own, and so is what is known of them.
+  -- The functions made for its consumers go on with both: see
+  -- 'continuation'.
+  counting <- newSTRef 0
+  holding <- newSTRef Set.empty
+  capturing <- newSTRef Map.empty
+  let state = outer {counter = counting, holders = holding, captures = capturing}
   self <- local state
   arguments <- for (zip parameters (lent ++ repeat False)) $ \(_, only) ->
     if only then lentLocal state else local state
@@ -739,8 +831,8 @@ function state@State {target = Target {registers}, extra} name comment husk lent
 -- given what AxCut calls the object.
 anonymous :: State s -> Text -> Maybe Int -> Object -> ST s Builder
 anonymous state hint husk object = do
-  name <- named state hint
-  function state {scope = name} name mempty husk [] "internal " object
+  (name, scope) <- named state hint
+  function state {scope} name mempty husk [] "internal " object
   pure name
 
 -- |
@@ -905,11 +997,11 @@ continuation ::
   State s -> Text -> Maybe Int -> Builder -> [Builder] -> Object -> ST s (Builder, Builder, Maybe Builder)
 continuation outer@State {target = Target {registers}, extra} hint husk forced outside object = do
   let Object {captured, parameters, body} = object
-  entry <- named outer hint
+  (entry, scope) <- named outer hint
   keeping <- readSTRef (holders outer)
   let direct = entry <> fromString ".direct"
       names = parameters ++ captured
-      state = outer {scope = entry}
+      state = outer {scope}
       lent = map lentValue (forced : outside)
       kept' value = Set.member (toLazyText value) keeping
       -- The function that is entered with the value and what was captured,
@@ -1537,8 +1629,9 @@ wanted state token environment = \case
 -- |
 -- Some text as a constant of the program, and how many bytes it is.
 bytes :: State s -> String -> ST s (Builder, Int)
-bytes state@State {extra} string = do
-  next <- fresh state
+bytes State {extra, unique} string = do
+  next <- readSTRef unique
+  writeSTRef unique $! next + 1
   let name = fromString "@bytes." <> fromString (show next)
       encoded = concatMap utf8 string
       size = length encoded

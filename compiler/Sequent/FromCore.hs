@@ -8,7 +8,7 @@
 --
 -- The whole program is translated at once, and only the definitions that
 -- the one it starts at can reach are kept.
-module Sequent.FromCore (generate, complete, definitionOf, Unit (..), Unshared (..), unit, start) where
+module Sequent.FromCore (generate, complete, definitionOf, Unit (..), Unshared (..), unit, reached, start) where
 
 import Control.Monad (replicateM)
 import Control.Monad.ST (ST, runST)
@@ -279,6 +279,24 @@ data Unit = Unit
     -- definition and the unit that has it are told the same.
     lends :: Global.Global -> Maybe Lending
   }
+
+-- |
+-- A unit that is a program, with only what the program gets to from where
+-- it starts. Nothing outside a program uses what is in it, so the rest is
+-- never run: most of it is instances that are derived and never asked for.
+reached :: Statement -> Unit -> Unit
+reached entry unit@Unit {own, shared} =
+  unit {own = Map.restrictKeys own wanted, shared = Map.restrictKeys shared wanted}
+  where
+    wanted = go Set.empty (Set.toList (globals entry))
+    go seen = \case
+      [] -> seen
+      global : rest
+        | Set.member global seen -> go seen rest
+        | Just found <- Map.lookup global own -> go (Set.insert global seen) (Set.toList (globals found) ++ rest)
+        | Just found <- Map.lookup global shared -> go (Set.insert global seen) (Set.toList (globals found) ++ rest)
+        -- Some other unit's.
+        | otherwise -> go (Set.insert global seen) rest
 
 -- |
 -- The modules at some places among all of the modules, as a unit. What they
