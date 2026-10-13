@@ -28,7 +28,7 @@ import qualified Generate.Go.Module as Module (generate)
 import qualified Generate.Go.Module as Stage5
 import qualified Generate.Mangle as Mangle
 import qualified Javascript.Printer.Lexer as Javascript (print, run)
-import qualified AxCut.Lower as AxCut (lowerDefinitions)
+import qualified AxCut.Lower as AxCut (lowerUnit)
 import qualified LLVM.FromAxCut as LLVM
   ( Unit (..),
     arm64,
@@ -517,15 +517,15 @@ main'' args = case getOpt order options args of
                     ++ strip
                     ++ ["-o", executable target]
               Separate -> do
-                Sequent.Unit {own, shared, lends, unshared} <-
+                Sequent.Unit {own, shared, lends, arities, unshared} <-
                   Sequent.reached (Sequent.start Runtime.main) <$> unit all
                 warn unshared
                 emit (target ++ ".ll") $
                   LLVM.generateUnit
                     (machine lends)
                     LLVM.Unit
-                      { defined = AxCut.lowerDefinitions own,
-                        shared = AxCut.lowerDefinitions shared,
+                      { defined = AxCut.lowerUnit arities own,
+                        shared = AxCut.lowerUnit arities shared,
                         start = Just (AxCut.entry (AxCut.lower (startProgram)))
                       }
                 let objects = [directory </> "native.o" | Package {root = directory} <- packages]
@@ -543,15 +543,15 @@ main'' args = case getOpt order options args of
             createDirectoryIfMissing True (dropFileName target)
             let label = packageName (takeDirectory target) ++ " to native code"
             Status.status progress "Compiling" label
-            Sequent.Unit {own, shared, lends, unshared} <- unit all
+            Sequent.Unit {own, shared, lends, arities, unshared} <- unit all
             warn unshared
             let source = dropExtension target ++ ".ll"
             emit source $
               LLVM.generateUnit
                 (machine lends)
                 LLVM.Unit
-                  { defined = AxCut.lowerDefinitions own,
-                    shared = AxCut.lowerDefinitions shared,
+                  { defined = AxCut.lowerUnit arities own,
+                    shared = AxCut.lowerUnit arities shared,
                     start = Nothing
                   }
             callProcess "clang" $ ["-O1", "-Wno-override-module"] ++ sections ++ ["-c", source, "-o", target]

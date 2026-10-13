@@ -200,8 +200,12 @@ data State s = State
     holders :: !(STRef s (Set Lazy.Text.Text)),
     -- | What each object that was made holds.
     captures :: !(STRef s (Map Lazy.Text.Text [Lazy.Text.Text])),
-    -- | The definition each value that is one stands for.
-    standing :: !(STRef s (Map Lazy.Text.Text Global)),
+    -- | The definition each value that is one stands for, and how many
+    -- arguments it takes at once if it is known to be a function.
+    standing :: !(STRef s (Map Lazy.Text.Text (Global, Maybe Int))),
+    -- | The definitions whose code is gone to by its name, and how many
+    -- arguments it is given.
+    direct :: !(STRef s (Map Global Int)),
     -- | The definitions whose second entry is called, and how many
     -- arguments it is called with.
     called :: !(STRef s (Map Global Int))
@@ -226,6 +230,7 @@ generate' shape target defined shared start = do
   captures <- newSTRef Map.empty
   standing <- newSTRef Map.empty
   called <- newSTRef Map.empty
+  direct <- newSTRef Map.empty
   let state =
         State
           { target,
@@ -238,7 +243,8 @@ generate' shape target defined shared start = do
             holders,
             captures,
             standing,
-            called
+            called,
+            direct
           }
       global linkage (name, object@Object {kind}) = do
         function
@@ -247,7 +253,9 @@ generate' shape target defined shared start = do
           (comment name)
           Nothing
           []
-          "internal "
+          -- The code is seen from wherever the definition is: a call of
+          -- the definition from there goes to it.
+          linkage
           object
         -- A package cannot tell who calls the second entry.
         if shape == Package then entry linkage (name, object) else pure ()
@@ -304,6 +312,7 @@ generate' shape target defined shared start = do
   extra <- readSTRef extra
   mentioned <- readSTRef mentioned
   called <- readSTRef called
+  direct <- readSTRef direct
   -- What is used and is not here is some other unit's.
   let elsewhere = do
         name <- Set.toList mentioned
@@ -323,7 +332,20 @@ generate' shape target defined shared start = do
                   fromString ")\n"
                 ]
             ]
-  pure $ mconcat [mconcat elsewhere, mconcat entries, mconcat globals, mconcat common, body, extra]
+      codes = do
+        (name, count) <- Map.toList direct
+        if Map.member name defined || Map.member name shared
+          then []
+          else
+            [ mconcat
+                [ fromString "declare tailcc void ",
+                  quoted (symbol name <> fromString ".code"),
+                  fromString "(",
+                  commas (replicate (min count (registers target)) (fromString "i64")),
+                  fromString ")\n"
+                ]
+            ]
+  pure $ mconcat [mconcat elsewhere, mconcat entries, mconcat codes, mconcat globals, mconcat common, body, extra]
   where
     comment global = fromString "; " <> Sequent.global global <> fromString "\n"
 
@@ -927,9 +949,26 @@ call state@State {target} first callee arguments = do
   let consumer = last arguments
       given = init arguments
       found = do
-        global <- Map.lookup (toLazyText callee) standing'
+        (global, _) <- Map.lookup (toLazyText callee) standing'
         lent <- lends target global
         if or lent && length lent == length given then Just (global, lent) else Nothing
+      -- A definition that is known to take what it is given here. Its code
+      -- is gone to by name: the definition is not asked where its code is.
+      known = case Map.lookup (toLazyText callee) standing' of
+        Just (global, Just count) | count == length given -> Just global
+        _ -> Nothing
+      plainly = case known of
+        Just global -> do
+          modifySTRef' (direct state) (Map.insert global (length arguments + 1))
+          pure $
+            mconcat
+              [ foldMap own (callee : given),
+                first,
+                enter state (quoted (symbol global <> fromString ".code")) (callee : arguments)
+              ]
+        Nothing -> do
+          code <- invoke state callee arguments
+          pure $ foldMap own (callee : given) <> first <> code
       -- What is done to an argument to lend it, if it can be lent.
       lend argument
         | lentValue argument = if Set.member (toLazyText consumer) keeping then Just mempty else Nothing
@@ -955,9 +994,7 @@ call state@State {target} first callee arguments = do
                 line [fromString "store i64 ", more, fromString ", ptr @hazy_lent"],
                 enter state (quoted (symbol global <> fromString ".lent")) (callee : arguments)
               ]
-    _ -> do
-      code <- invoke state callee arguments
-      pure $ foldMap own (callee : given) <> first <> code
+    _ -> plainly
 
 -- |
 -- Whether a value is known, where the program is compiled, to be a number
@@ -1111,7 +1148,7 @@ wants size = \case
   Let _ _ count rest -> count == size || wants size rest
   New _ object rest -> wants size rest || carries size object rest
   Literal _ _ rest -> wants size rest
-  Global _ _ rest -> wants size rest
+  Global _ _ _ rest -> wants size rest
   Primitive _ _ rest -> wants size rest
   Rec _ rest -> wants size rest
   Switch clauses fallback -> or [wants size body | Clause _ _ body <- clauses] || any (wants size) fallback
@@ -1564,10 +1601,10 @@ wanted state token environment = \case
           )
     rest <- statement state token (environment ++ [(name, value)]) rest
     pure $ code <> rest
-  Global name global rest -> do
+  Global name global arity rest -> do
     modifySTRef' (mentioned state) (Set.insert global)
     let value = fromString "ptrtoint (ptr " <> quoted (symbol global) <> fromString " to i64)"
-    modifySTRef' (standing state) (Map.insert (toLazyText value) global)
+    modifySTRef' (standing state) (Map.insert (toLazyText value) (global, arity))
     statement state token (environment ++ [(name, value)]) rest
   -- A primitive borrows its arguments, which are given up afterwards.
   Primitive name primitive rest -> do
