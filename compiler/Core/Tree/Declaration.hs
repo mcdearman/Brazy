@@ -1,5 +1,7 @@
 module Core.Tree.Declaration where
 
+import Core.Arity (Arity)
+import qualified Core.Arity as Arity (measure)
 import qualified Core.Substitute as Substitute
 import qualified Core.Temporary.Pattern as Pattern
 import Core.Tree.Expression (Expression)
@@ -30,7 +32,10 @@ import qualified Semantic.Tree.Expression as Semantic (Expression)
 data Declaration scope = Declaration
   { name :: !Key,
     definition :: TypeLambda scope,
-    typex :: Forall scope
+    typex :: Forall scope,
+    -- | How many arguments the definition takes: see "Core.Arity". It is
+    -- worked out when the definition is made and goes with it from then on.
+    arity :: Arity
   }
   deriving (Show)
 
@@ -41,11 +46,12 @@ instance Shift.Functor Declaration where
   map = Substitute.mapDefault
 
 instance Substitute.Functor Declaration where
-  map category Declaration {name, definition, typex} =
+  map category Declaration {name, definition, typex, arity} =
     Declaration
       { name,
         definition = Substitute.map category definition,
-        typex = Substitute.map category typex
+        typex = Substitute.map category typex,
+        arity
       }
 
 simplify ::
@@ -57,14 +63,15 @@ simplify = \case
       definition,
       typex
     } ->
-      Declaration
-        { name,
-          definition =
-            case definition of
-              _ Semantic.::: Identity (Identity (Check definition)) ->
-                TypeLambda.map (TypeLambda.Map definition3) definition,
-          typex = case typex of Identity (Solved typex) -> typex
-        }
+      let simple = case definition of
+            _ Semantic.::: Identity (Identity (Check definition)) ->
+              TypeLambda.map (TypeLambda.Map definition3) definition
+       in Declaration
+            { name,
+              definition = simple,
+              typex = case typex of Identity (Solved typex) -> typex,
+              arity = Arity.measure simple
+            }
   where
     definition3 :: Semantic.Definition3 mark Normal Check scope -> Expression scope
     definition3 (Semantic.Label _ definition) = definition2 definition
@@ -95,11 +102,14 @@ annotation ::
 annotation TypeLambdaOver {parameters, constraints, result} scheme =
   Declaration
     { name = Unnamed 0,
-      definition =
-        TypeLambdaOver
-          { parameters,
-            constraints,
-            result = Expression.simplify result
-          },
-      typex = Forall.simplify scheme
+      definition,
+      typex = Forall.simplify scheme,
+      arity = Arity.measure definition
     }
+  where
+    definition =
+      TypeLambdaOver
+        { parameters,
+          constraints,
+          result = Expression.simplify result
+        }

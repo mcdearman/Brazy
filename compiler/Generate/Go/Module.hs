@@ -56,7 +56,7 @@ precontext modules =
     -- written in Javascript, in one form.
     arities Core.Module {name, declarations = Declarations {terms}}
       | name == primitives = Nothing <$ terms
-      | otherwise = (\Term.Declaration {definition} -> Expression.uncurried definition) <$> terms
+      | otherwise = (\Term.Declaration {arity} -> Expression.uncurried arity) <$> terms
     primitives = Local :.. constructorIdentifier (pack "Hazy")
     names Core.Module {name = path, declarations = Declarations {terms}} = generate <$> terms
       where
@@ -107,16 +107,18 @@ generate'
       dataInstances
     } = do
     context <- Context.start precontext
-    statements <- for (zip [0 ..] (toList terms)) $ \(termIndex, Declaration {definition}) ->
+    statements <- for (zip [0 ..] (toList terms)) $ \(termIndex, Declaration {definition, arity}) ->
       do
         let global@Global {name} = termNames Vector.! moduleIndex Vector.! termIndex
-        worker <- traverse (const $ Context.fresh context) (Expression.uncurried definition)
+        worker <- for (Expression.uncurried arity) $ \count -> do
+          direct <- Context.fresh context
+          pure (direct, count)
         (before, thunk) <- Expression.declaration context worker definition
         source <- Context.fresh context
         pure $
           concat
             [ before,
-              [Javascript.Export direct (Global.name (Global.direct global)) | Just direct <- [worker]],
+              [Javascript.Export direct (Global.name (Global.direct global)) | Just (direct, _) <- [worker]],
               [ Javascript.Const source thunk,
                 Javascript.Export source name
               ]

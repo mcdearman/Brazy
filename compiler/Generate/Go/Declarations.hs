@@ -28,14 +28,14 @@ generate context Declarations {terms, classInstances, dataInstances} = do
   let instances = Vector.zipWith localType classVariables dataVariables
       localType classInstances dataInstances =
         LocalType {classInstances, dataInstances}
-  workers <- for terms $ \Declaration {definition} ->
-    for (Expression.uncurried definition) $ \count -> do
+  workers <- for terms $ \Declaration {arity} ->
+    for (Expression.uncurried arity) $ \count -> do
       name <- Context.fresh context
       pure (name, count)
   context <- pure $ Context.localBindingsWith variables workers instances context
   statements <- for (zip3 (toList variables) (toList workers) (toList terms)) $
     \(name, worker, Declaration {definition}) -> do
-      (before, thunk) <- Expression.declaration context (fst <$> worker) definition
+      (before, thunk) <- Expression.declaration context worker definition
       pure $ before ++ [Javascript.Const name thunk]
   classStatements <-
     for (zip (toList classVariables) (toList classInstances)) $
