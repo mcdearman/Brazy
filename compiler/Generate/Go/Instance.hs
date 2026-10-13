@@ -27,7 +27,7 @@ generate context Instance {evidence = EvidenceSet evidence, prerequisites, membe
   evidence <- traverse (Evidence.generate context) (toList evidence)
   let supers = Javascript.Literal <$> evidence
   members <- for (toList members) $ \method ->
-    Expression.declaration context (definition method)
+    snd <$> Expression.declaration context Nothing (definition method)
   let fields = Javascript.Literal <$> members
   let object =
         Javascript.Object

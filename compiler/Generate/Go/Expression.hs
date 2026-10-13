@@ -13,6 +13,7 @@ import Core.Tree.MethodInfo (MethodInfo (..))
 import Core.Tree.TypeLambda (TypeLambda, TypeLambdaOver (..))
 import Data.Char (ord)
 import Data.Foldable (toList)
+import Data.Text (Text)
 import qualified Data.Text as Text (pack)
 import qualified Data.Vector as Vector
 import qualified Data.Vector.Strict as Strict
@@ -275,6 +276,26 @@ generateImpure context expression = case expression of
               }
       result <- implicit context (Info.strict strict) select Instanciation.Mono
       pure (statements, result)
+  -- A definition that is given every argument is called in the form that
+  -- takes them at once. Whatever is given past that is given to what it
+  -- gives back.
+  Call {}
+    | (Variable {variable, instanciation}, given) <- spine expression [],
+      Term.Binding {worker = Just (worker, count)} <- context !- variable,
+      length given >= count -> do
+        worker <- symbol context worker
+        evidence <- case instanciation of
+          Instanciation.Mono -> pure []
+          Instanciation evidence -> traverse (Evidence.generate context) (toList evidence)
+        given <- traverse (thunk context Done) given
+        let (first, rest) = splitAt count given
+            call =
+              Javascript.Call
+                { function = Javascript.Variable {name = worker},
+                  arguments = evidence ++ first
+                }
+            more function argument = Javascript.Call {function, arguments = [argument]}
+        pure ([], foldl more call rest)
   Call {function, argument} -> do
     (statements, function) <- generateImpure context function
     argument <- thunk context Done argument
@@ -303,8 +324,8 @@ generateImpure context expression = case expression of
   Generalized {definition = definition@TypeLambdaOver {constraints, result}} -> case constraints of
     None -> generateImpure (Context.evidenceBindings Vector.empty context) result
     Constraints {} -> do
-      value <- declaration context definition
-      pure ([], value)
+      (extra, value) <- declaration context Nothing definition
+      pure (extra, value)
   _ -> generatePure context expression
 generatePure context expression = case expression of
   _ | Just characters <- written expression -> do
@@ -340,19 +361,98 @@ generateInto context target = \case
     (extra, value) <- generateImpure context expression
     pure $ extra ++ [finish target value]
 
-declaration :: Context s scope -> TypeLambda scope -> ST s Javascript.Expression
-declaration context TypeLambdaOver {constraints, result = expression} = do
+-- |
+-- A function and what it is given, from a function given one thing at a
+-- time.
+spine :: Expression scope -> [Expression scope] -> (Expression scope, [Expression scope])
+spine expression given = case expression of
+  Call {function, argument} -> spine function (argument : given)
+  _ -> (expression, given)
+
+-- |
+-- How many arguments a definition takes all at once in its second form, if
+-- it has one.
+--
+-- A function of several arguments is a function that gives back a function,
+-- and to call it is to make each of those in turn. A definition that is
+-- written as functions inside functions is made a second time as one
+-- function of every argument, and of the evidence it requires before them,
+-- which a call that gives every argument calls. The first form is left for
+-- everything else, and only calls the second.
+--
+-- A definition of one argument has a second form only when it requires
+-- evidence, which is otherwise one more function to make.
+uncurried :: TypeLambda scope -> Maybe Int
+uncurried TypeLambdaOver {constraints, result}
+  | count >= 2 = Just count
+  | count >= 1, Constraints {} <- constraints = Just count
+  | otherwise = Nothing
+  where
+    count = depth result
+    depth :: Expression scope' -> Int
+    depth = \case
+      Lambda {body} -> 1 + depth body
+      _ -> 0
+
+-- |
+-- A definition. If it is given what its second form is called, it is made
+-- in both: the second is what has to be declared first.
+declaration ::
+  Context s scope ->
+  Maybe Text ->
+  TypeLambda scope ->
+  ST s ([Javascript.Statement local], Javascript.Expression)
+declaration context worker definition@TypeLambdaOver {constraints, result = expression} = do
   let count = case constraints of
         Constraints constraints -> length constraints
         None -> 0
   fresh <- Vector.replicateM count (Context.fresh context)
-  context <- pure $ Context.evidenceBindings fresh context
-  case constraints of
-    None -> thunk context Group expression
-    Constraints {} -> do
-      statements <- generateInto context Return expression
-      pure
-        Javascript.Arrow
-          { parameters = toList fresh,
-            body = statements
-          }
+  inner <- pure $ Context.evidenceBindings fresh context
+  case (worker, uncurried definition) of
+    (Just worker, Just arity) -> do
+      (names, statements) <- peel inner arity expression
+      let whole =
+            Javascript.Arrow
+              { parameters = toList fresh ++ names,
+                body = statements
+              }
+          call =
+            Javascript.Call
+              { function = Javascript.Variable {name = worker},
+                arguments = [Javascript.Variable {name} | name <- toList fresh ++ names]
+              }
+          one name rest = Javascript.Arrow {parameters = [name], body = [Javascript.Return rest]}
+          curried = foldr one call names
+          first = case constraints of
+            None -> strict curried
+            Constraints {} ->
+              Javascript.Arrow
+                { parameters = toList fresh,
+                  body = [Javascript.Return curried]
+                }
+      pure ([Javascript.Const worker whole], first)
+    _ -> case constraints of
+      None -> do
+        value <- thunk inner Group expression
+        pure ([], value)
+      Constraints {} -> do
+        statements <- generateInto inner Return expression
+        pure
+          ( [],
+            Javascript.Arrow
+              { parameters = toList fresh,
+                body = statements
+              }
+          )
+  where
+    -- The body of some functions inside each other, and what each takes.
+    peel :: Context s scope' -> Int -> Expression scope' -> ST s ([Text], [Javascript.Statement 'True])
+    peel context remaining = \case
+      Lambda {body} | remaining > 0 -> do
+        name <- fresh' context
+        (names, statements) <- peel (singleBinding name context) (remaining - 1) body
+        pure (name : names, statements)
+      body -> do
+        statements <- generateInto context Return body
+        pure ([], statements)
+    fresh' = Context.fresh

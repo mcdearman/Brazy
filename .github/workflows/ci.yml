@@ -107,8 +107,7 @@ jobs:
 
       # The compiler that Hazy makes of its own source makes it again, and
       # the two are compared: once with the compiler made into Javascript,
-      # and once with it made into an executable. This wants a deeper stack
-      # than the other systems let a program have.
+      # and once with it made into an executable.
       - name: Check that Hazy compiles itself, and that what it makes does too
         if: matrix.name == 'Linux'
         run: |

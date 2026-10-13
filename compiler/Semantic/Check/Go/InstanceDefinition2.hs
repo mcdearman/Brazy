@@ -132,7 +132,7 @@ requirements Context {typeEnvironment} derived self datax
   | indexed datax = pure Nothing
   | otherwise = do
       found <- within [(shift derived, shift self)] (shift derived) (held datax)
-      pure (Just (foldr once [] found))
+      pure (Just (once [] (reverse found)))
   where
     indexed :: Core.Data.Data scope' -> Bool
     indexed Core.Data.Data {constructors} = any telling constructors
@@ -147,9 +147,15 @@ requirements Context {typeEnvironment} derived self datax
         Core.Entry.Entry {entry = Core.ForallOver {parameters, constraints = Core.Constraints.None, result}} <- toList entries,
         null parameters
       ]
-    once constraint rest
-      | any (same constraint) rest = rest
-      | otherwise = constraint : rest
+    -- Each thing that is required, once, and the last time it was found.
+    -- There are thousands for a type that holds many types, most of them
+    -- the same, and going through them is not as deep as they are many:
+    -- what has been kept is looked at before the next is gone on to.
+    once kept = \case
+      [] -> kept
+      constraint : rest
+        | any (same constraint) kept -> once kept rest
+        | otherwise -> once (constraint : kept) rest
     same
       Core.Constraint {classx = class1, head = head1, arguments = arguments1}
       Core.Constraint {classx = class2, head = head2, arguments = arguments2} =

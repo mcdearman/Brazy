@@ -1116,6 +1116,28 @@ The order to take it in:
       worked out on a line of its own before every read and write, and
       another quarter is calls. A package is compiled as before: every
       definition, every second entry
+- [x] The compiler as Javascript makes itself in the stack a program is
+      given, and in half of it. It was run with four gigabytes. All that
+      needed it was one definition, which went as deep as a list was long:
+      what a derived instance requires, where each thing required is kept
+      once (`requirements`, in `Semantic.Check.Go.InstanceDefinition2`).
+      Hazy's own source, made into Javascript, does still go deeper
+- [x] A function that calls itself last is a call the engine does not come
+      back from, as it was: `return` of a call. Six shapes of it go round a
+      hundred thousand times in the stack a program is given (test
+      `tail-calls`)
+- [x] In Javascript, a definition that is functions inside functions is
+      made a second time as one function of every argument, with the
+      evidence it requires before them, and a call that gives every
+      argument calls that (`uncurried`, in `Generate.Go.Expression`). The
+      first form is left for everything else and only calls the second,
+      which a module gives out under the definition's name and ` direct`.
+      Upstream makes a function for each argument of every call
+- [ ] What that leaves. A method of a class and a function that is not
+      written as functions inside functions are called as before. A call
+      that is the last thing a thunk does is not the last thing the thunk's
+      function does, which has to keep the value: so a function that is
+      given its last call through `seq` or `$!` still goes deeper each time
 
 `hazy.cabal` gives the working list:
 

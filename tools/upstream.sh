@@ -45,8 +45,8 @@ echo "Hazy's compiler, made by Brazy"
 "$HAZY" -q -XStableImports compiler -o "$DIST/bin"
 
 # What Brazy made is Javascript. Hazy's tools ask for an executable, and
-# this is one: a program made of Haskell wants a deeper stack than
-# Javascript is given, which only grows under a limit that is a number.
+# this is one: Hazy's source goes deeper than Javascript is given room for,
+# and the stack only grows under a limit that is a number.
 cat > "$DIST/bin/hazy" << WRAPPER
 #!/usr/bin/env bash
 stack=4000000
