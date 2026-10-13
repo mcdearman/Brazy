@@ -4,7 +4,6 @@
 -- Parser syntax tree for expressions
 module Syntax.Tree.Expression where
 
-import Data.Foldable (toList)
 import qualified Data.Strict.Vector1 as Strict (Vector1, fromNonEmpty)
 import qualified Data.Strict.Vector2 as Strict (Vector2, fromList'')
 import qualified Data.Vector.Strict as Strict (Vector)
@@ -21,7 +20,6 @@ import Syntax.Parser
     many,
     optional,
     position,
-    sepBy1Comma,
     sepEndBy1Semicolon,
     some,
     text,
@@ -338,7 +336,6 @@ parse4 =
   asum
     [ variable <$> Marked.parseLiteral,
       constructor <$> Marked.parseLiteral,
-      try (betweenParens ExpressionInfix.parseLeftSection),
       cons <$> position <* try (betweenParens $ token ":"),
       betweenParens parseParen,
       betweenBrackets (position <**> parse5),
@@ -376,13 +373,27 @@ parse4 =
     parseParen =
       asum
         [ -- this has to be first to not parse negation as a section
-          tuple <$> position <*> (toList <$> sepBy1Comma parse),
+          position <**> (ExpressionInfix.parseOpen >>= opened),
           parseRightSection,
           parseRightSectionCons,
           tupling <$> position <*> (length <$> some (token ",")),
           tuple <$> position <*> pure []
         ]
       where
+        -- A section is all there is inside its brackets. An expression may
+        -- have its type said, and may be the first of a tuple.
+        opened = \case
+          Left section -> pure (const section)
+          Right infixed -> do
+            first <-
+              asum
+                [ annotated (ExpressionInfix.toExpression infixed) <$> position <*> (token "::" *> Scheme.parse),
+                  pure (ExpressionInfix.toExpression infixed)
+                ]
+            rest <- many (token "," *> parse)
+            pure (\startPosition -> tuple startPosition (first : rest))
+        annotated expression operatorPosition annotation =
+          Annotation {expression, operatorPosition, annotation}
         parseRightSection = rightSection <$> Marked.parseOperator <*> ExpressionInfix.parse
         parseRightSectionCons = rightSectionCons <$ token ":" <*> position <*> ExpressionInfix.parse
 

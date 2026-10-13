@@ -78,20 +78,36 @@ data Target = Target
     -- | Whether a function hands over what it holds when it is asked to,
     -- so that every count of references can be checked. It costs a test at
     -- the start of every function, so it is only for testing.
-    checked :: !Bool
+    checked :: !Bool,
+    -- | How a definition that is made wherever it is used, such as the
+    -- instance of a class for the tuples of a size, meets the same one made
+    -- in another unit: what LLVM calls its linkage.
+    common :: String
   }
 
 -- |
 -- What code is generated for where nothing says otherwise. It was first
 -- written for arm64, and is as right for x86-64 on Linux.
 arm64 :: Target
-arm64 = Target {registers = 8, reuse = True, lends = const Nothing, checked = False}
+arm64 =
+  Target
+    { registers = 8,
+      reuse = True,
+      lends = const Nothing,
+      checked = False,
+      -- The linker keeps one of them.
+      common = "linkonce_odr "
+    }
 
 -- |
 -- Windows on x86-64. A call there passes four arguments in registers, and
 -- LLVM cannot guarantee a tail call that passes any on the stack.
+--
+-- Its linker does not take two units that each have one definition by a
+-- name and keep one, unless more is said than is said here. There, each
+-- unit has its own.
 windows :: Target
-windows = arm64 {registers = 4}
+windows = arm64 {registers = 4, common = "internal "}
 
 -- |
 -- A target whose programs can have their counts of references checked.
@@ -242,7 +258,7 @@ generate' shape target defined shared start = do
               fromString " }, align 8\n"
             ]
   globals <- traverse (global (if shape == Whole then "internal " else "")) (Map.toList defined)
-  common <- traverse (global "linkonce_odr ") (Map.toList shared)
+  common <- traverse (global (common target)) (Map.toList shared)
   body <- case start of
     Just entry -> do
       body <- statement state Nothing [] entry

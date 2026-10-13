@@ -12,7 +12,7 @@ import qualified Data.Strict.Vector1 as Strict (Vector1, fromNonEmpty)
 import qualified Data.Vector.Strict as Strict (Vector)
 import qualified Data.Vector.Strict as Strict.Vector
 import Syntax.FreeVariables (TermBindingVariables (..))
-import qualified Syntax.Lexer as Lexer (variableIdentifier)
+import qualified Syntax.Lexer as Lexer (runConstructorIdentifier, variableIdentifier)
 import Syntax.Parser
   ( Parser,
     asum,
@@ -32,6 +32,7 @@ import Syntax.Tree.Alias (Alias)
 import Syntax.Tree.Brand (Brand)
 import qualified Syntax.Tree.Brand as Brand
 import Syntax.Tree.ClassDeclaration (ClassDeclaration)
+import qualified Syntax.Tree.Derived as Derived (written)
 import qualified Syntax.Tree.ClassDeclaration as ClassDeclaration
 import {-# SOURCE #-} Syntax.Tree.ClassDeclarations (ClassDeclarations)
 import {-# SOURCE #-} qualified Syntax.Tree.ClassDeclarations as ClassDeclarations
@@ -279,11 +280,22 @@ derived = \case
                   typeVariable = startPosition :@ TypePattern.name pattern,
                   arguments = Strict.Vector.empty
                 }
+            -- A class that is derived by writing its instance out. One of
+            -- these that is of a type without its last parameter requires
+            -- nothing of the others.
+            _ Variable.:=. called = className
+            (shortened, instanceDefinition) =
+              case Derived.written startPosition (Lexer.runConstructorIdentifier called) parameters dataDefinition of
+                Just found -> found
+                Nothing -> (False, InstanceDeclarations._derivingClause)
+            taken
+              | shortened = Strict.Vector.init parameters
+              | otherwise = parameters
         pure
           Instance
             { startPosition,
               prerequisites =
-                if null parameters
+                if null parameters || shortened
                   then Constraints.None
                   else Constraints.Constraints (fmap requires parameters),
               classPosition = startPosition,
@@ -292,9 +304,9 @@ derived = \case
                 InstanceHead.Head
                   { startPosition,
                     typeName = Variable.Local Variable.:=. typeName,
-                    parameters
+                    parameters = taken
                   },
-              instanceDefinition = InstanceDeclarations._derivingClause
+              instanceDefinition
             }
   _ -> []
 

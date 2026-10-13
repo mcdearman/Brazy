@@ -114,3 +114,9 @@ jobs:
         run: |
           tools/bootstrap.sh .dist/bin/hazy javascript
           tools/bootstrap.sh .dist/bin/hazy native
+
+      # Hazy, which this is a fork of, is compiled from its own source, and
+      # its tests are run with what that makes.
+      - name: Check that Hazy is compiled, and that what is made passes its tests
+        if: matrix.name == 'Linux'
+        run: tools/upstream.sh .dist/bin/hazy
