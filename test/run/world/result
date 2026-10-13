@@ -1,0 +1,24 @@
+(5050,(True,False,[0,1,9,9]))
+110
+5
+Right 6
+Left (Failure "too big" 3)
+too big: 7
+again 5
+Left (ExitFailure 3)
+Left (Failure "too big" 9)
+Setting {level = Just 1, inside = [Setting {level = Nothing, inside = [], sign = -2}], sign = -1}
+Just (Setting {level = Just (-3), inside = [], sign = 0})
+Right 3
+one
+two
+three!
+["one","two","three!"]
+λ and text
+(10893,"123456789101")
+(["lazy","other","text"],[True,False,False],[False,True,False])
+before
+now
+3
+no line end
+done

@@ -270,8 +270,33 @@ definitions =
             ("primTextTake", wrap TextTake),
             ("primTextDrop", wrap TextDrop),
             ("primTextIsPrefixOf", wrap TextIsPrefixOf),
+            ("primTextConcat", concatx),
             ("primSTPure", primSTPure),
-            ("primSTBind", primSTBind)
+            ("primSTBind", primSTBind),
+            ("primUnsafeCoerce", identity),
+            ("primNewRef", newRef),
+            ("primReadRef", effect "read_ref"),
+            ("primWriteRef", writeRef),
+            ("primSameRef", wrap (outside "same_ref")),
+            ("primArgCount", effect "arg_count"),
+            ("primArg", effect "arg"),
+            ("primGetEnv", effect "get_env"),
+            ("primExecutablePath", effect "executable_path"),
+            ("primExit", effect "exit"),
+            ("primOpen", effect "open"),
+            ("primClose", effect "close"),
+            ("primWrite", effect "write"),
+            ("primReadAll", effect "read_all"),
+            ("primReadLine", effect "read_line"),
+            ("primIsTerminal", effect "is_terminal"),
+            ("primListDirectory", effect "list_directory"),
+            ("primCreateDirectory", effect "create_directory"),
+            ("primPathKind", effect "path_kind"),
+            ("primCallProcess", effect "call_process"),
+            ("primClock", effect "clock"),
+            ("primOS", Thunk (pack "k") (Primitive (outside "os") [] (covariable "k"))),
+            ("primThrow", throw),
+            ("primCatch", catch)
           ]
     ]
 
@@ -280,6 +305,136 @@ definitions =
 -- which is not forced.
 action :: String -> Statement -> Producer
 action result = Function [] (pack result)
+
+-- |
+-- A primitive the runtime has under a name of its own.
+outside :: String -> Primitive
+outside name = case lookup name Primitive.outside of
+  Just count -> Foreign (pack name) count
+  Nothing -> error $ "no such primitive: " ++ name
+
+-- |
+-- A primitive that does something, as an action: a function of what it is
+-- given, which are evaluated when the action is run and not before.
+--
+-- > effect f = \x y -> \() -> f (force x) (force y)
+effect :: String -> Producer
+effect name = go 0
+  where
+    primitive = outside name
+    count = Primitive.arity primitive
+    argument, value, result :: Int -> String
+    argument index = "x" ++ show index
+    value index = "v" ++ show index
+    result index = "k" ++ show index
+    go index
+      | index == count = action "done" call
+      | otherwise =
+          function (argument index) (result index) $
+            Cut (go (index + 1)) (covariable (result index))
+    call =
+      foldr
+        (\index -> force (argument index) (value index))
+        (Primitive primitive (variable . value <$> indexes) (covariable "done"))
+        indexes
+    indexes = [0 .. count - 1]
+
+-- A reference holds whatever it was given, evaluated or not.
+--
+-- > primNewRef value = \() -> new value
+newRef :: Producer
+newRef =
+  function "value" "k" $
+    Cut
+      (action "done" $ Primitive (outside "new_ref") [variable "value"] (covariable "done"))
+      (covariable "k")
+
+-- > primWriteRef reference value = \() -> write (force reference) value
+writeRef :: Producer
+writeRef =
+  function "reference" "k" $
+    Cut
+      ( function "value" "k1" $
+          Cut
+            ( action "done" $
+                force "reference" "place" $
+                  Primitive (outside "write_ref") [variable "place", variable "value"] (covariable "done")
+            )
+            (covariable "k1")
+      )
+      (covariable "k")
+
+-- To catch is to leave with the runtime what handles a thrown value and
+-- where to go on from, run the action, and take them back. Where to go on
+-- from is whatever was waiting for the action's result, as a function.
+--
+-- > primCatch action handler = \() -> push handler resume; result = force action (); pop; result
+catch :: Producer
+catch =
+  function "action" "k" $
+    Cut
+      ( function "handler" "k1" $
+          Cut
+            ( action "done" $
+                LetRec
+                  [ ( pack "resume",
+                      Function [byNeed "given"] (pack "unused") $
+                        Cut (variable "given") (covariable "done")
+                    )
+                  ]
+                  $ Primitive (outside "catch_push") [variable "handler", variable "resume"]
+                  $ MuTilde (byValue "pushed")
+                  $ Cut (variable "action")
+                  $ Force
+                  $ Apply []
+                  $ MuTilde (byNeed "result")
+                  $ Primitive (outside "catch_pop") []
+                  $ MuTilde (byValue "popped")
+                  $ Cut (variable "result") (covariable "done")
+            )
+            (covariable "k1")
+      )
+      (covariable "k")
+
+-- To throw is to take back the catch begun last, run its handler on the
+-- value, and go on from where that catch was begun. Whatever was waiting
+-- for what is thrown never gets anything.
+--
+-- > primThrow value = (handler, resume) = pop; resume (force handler value ())
+--
+-- A value that nothing catches is the library's @Thrown@, which says second
+-- what the program exits with and third how the value is shown.
+throw :: Producer
+throw =
+  function "value" "k" $
+    Primitive (outside "catching") [] $
+      Case
+        [ Alternative 1 [] $
+            Primitive (outside "catch_pop") [] $
+              Case
+                [ Alternative 0 [byNeed "handler", byNeed "resume"] $
+                    Cut (variable "handler") $
+                      Force $
+                        Apply [variable "value"] $
+                          Apply [] $
+                            MuTilde (byNeed "result") $
+                              Cut (variable "resume") $
+                                Force $
+                                  Apply [variable "result"] (covariable "k")
+                ]
+                Nothing,
+          Alternative 0 [] $
+            Cut (variable "value") $
+              Force $
+                Case
+                  [ Alternative 0 [byNeed "tag", byNeed "status", byNeed "shown", byNeed "thrown"] $
+                      force "status" "code" $
+                        force "shown" "text" $
+                          Primitive (outside "uncaught") [variable "code", variable "text"] (covariable "k")
+                  ]
+                  Nothing
+        ]
+        Nothing
 
 -- > putStrLnText text = \() -> print (force text)
 putStrLnText :: Producer
@@ -334,32 +489,50 @@ primSTBind =
       )
       (covariable "k")
 
--- > pack list = go "" list
+-- A text is built in a place the runtime keeps, which each character is
+-- added to, so that it takes time by its length and not by the square of it.
+--
+-- > pack list = go new list
 -- >   where
--- >     go text [] = text
--- >     go text (head : tail) = go (snoc text (force head)) tail
+-- >     go buffer [] = done buffer
+-- >     go buffer (head : tail) = push buffer (force head); go buffer tail
 packx :: Producer
-packx =
+packx = gathered "pack_push"
+
+-- > primTextConcat list = go new list
+-- >   where
+-- >     go buffer [] = done buffer
+-- >     go buffer (head : tail) = append buffer (force head); go buffer tail
+concatx :: Producer
+concatx = gathered "pack_append"
+
+-- |
+-- A text built of a list, each element added by a primitive.
+gathered :: String -> Producer
+gathered add =
   function "list" "k" $
     LetRec
       [ ( pack "go",
-          Function [byValue "text", byNeed "rest"] (pack "done") $
+          Function [byValue "buffer", byNeed "rest"] (pack "done") $
             Cut (variable "rest") $
               Force $
                 Case
-                  [ Alternative nil [] $ Cut (variable "text") (covariable "done"),
+                  [ Alternative nil [] $
+                      Primitive (outside "pack_done") [variable "buffer"] (covariable "done"),
                     Alternative cons [byNeed "head", byNeed "tail"] $
-                      force "head" "character" $
-                        Primitive TextSnoc [variable "text", variable "character"] $
-                          MuTilde (byValue "longer") $
+                      force "head" "element" $
+                        Primitive (outside add) [variable "buffer", variable "element"] $
+                          MuTilde (byValue "added") $
                             Cut (variable "go") $
-                              Apply [variable "longer", variable "tail"] (covariable "done")
+                              Apply [variable "buffer", variable "tail"] (covariable "done")
                   ]
                   Nothing
         )
       ]
+      $ Primitive (outside "pack_new") []
+      $ MuTilde (byValue "buffer")
       $ Cut (variable "go")
-      $ Apply [Literal (Text (pack "")), variable "list"] (covariable "k")
+      $ Apply [variable "buffer", variable "list"] (covariable "k")
 
 -- > unpack text = go (force text)
 -- >   where

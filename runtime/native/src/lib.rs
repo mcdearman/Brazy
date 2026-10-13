@@ -18,7 +18,7 @@
 
 mod heap;
 
-use heap::{hazy_alloc, header, nullary, Value, INTEGER, TEXT};
+use heap::{hazy_alloc, header, nullary, Value, DATA, INTEGER, SLICE, TEXT};
 use num_bigint::BigInt;
 use num_traits::{Signed, ToPrimitive, Zero};
 use std::io::Write;
@@ -69,13 +69,49 @@ pub extern "C" fn hazy_finish() {
 // Text ------------------------------------------------------------------------
 
 fn text(value: Value) -> &'static str {
-    debug_assert!(kind(value) == TEXT, "not a Text");
     unsafe {
         let block = value as *const u64;
+        if kind(value) == SLICE {
+            let whole = *block.add(1) as *const u64;
+            let start = *block.add(2) as usize;
+            let length = *block.add(3) as usize;
+            let bytes = std::slice::from_raw_parts((whole.add(2) as *const u8).add(start), length);
+            return std::str::from_utf8_unchecked(bytes);
+        }
+        debug_assert!(kind(value) == TEXT, "not a Text");
         let length = *block.add(1) as usize;
         let bytes = std::slice::from_raw_parts(block.add(2) as *const u8, length);
         std::str::from_utf8_unchecked(bytes)
     }
+}
+
+/// A part shorter than this is copied. A longer one shares the text it is
+/// part of, which is kept for as long as the part is: so the rest of a long
+/// text is had without going over it, and a word taken from a file does not
+/// keep the file.
+const SHARED: usize = 256;
+
+/// The bytes of a text from one place to another, as a text.
+fn part(value: Value, from: usize, to: usize) -> Value {
+    let string = text(value);
+    if to - from < SHARED {
+        return from_text(&string[from..to]);
+    }
+    let (whole, start) = unsafe {
+        let block = value as *const u64;
+        if kind(value) == SLICE {
+            (*block.add(1), *block.add(2) as usize)
+        } else {
+            (value, 0)
+        }
+    };
+    let block = hazy_alloc(4, header(SLICE, 0, 0));
+    unsafe {
+        *block.add(1) = heap::share(whole);
+        *block.add(2) = (start + from) as u64;
+        *block.add(3) = (to - from) as u64;
+    }
+    block as Value
 }
 
 fn from_text(string: &str) -> Value {
@@ -134,9 +170,9 @@ pub extern "C" fn hazy_prim_text_head(value: Value) -> Value {
 
 #[no_mangle]
 pub extern "C" fn hazy_prim_text_tail(value: Value) -> Value {
-    let mut characters = text(value).chars();
-    match characters.next() {
-        Some(_) => from_text(characters.as_str()),
+    let string = text(value);
+    match string.chars().next() {
+        Some(first) => part(value, first.len_utf8(), string.len()),
         None => fail("tail of an empty Text"),
     }
 }
@@ -184,13 +220,13 @@ fn after(string: &str, count: i32) -> usize {
 #[no_mangle]
 pub extern "C" fn hazy_prim_text_take(count: Value, value: Value) -> Value {
     let string = text(value);
-    from_text(&string[..after(string, int(count))])
+    part(value, 0, after(string, int(count)))
 }
 
 #[no_mangle]
 pub extern "C" fn hazy_prim_text_drop(count: Value, value: Value) -> Value {
     let string = text(value);
-    from_text(&string[after(string, int(count))..])
+    part(value, after(string, int(count)), string.len())
 }
 
 #[no_mangle]
@@ -412,4 +448,383 @@ pub extern "C" fn hazy_prim_integer_rem(left: Value, right: Value) -> Value {
         fail("divide by zero")
     }
     from_integer(integer(left) % integer(right))
+}
+
+// The world outside ---------------------------------------------------------
+//
+// These are the primitives that `Sequent.Primitive` calls foreign: each is
+// named there and called by that name with `hazy_prim_` before it. A
+// primitive borrows what it is given, so one that keeps a value takes a
+// reference of its own to it.
+
+/// The files that are open. A file is known to a program by where it is
+/// here, after the three every program has.
+static mut FILES: Vec<Option<std::fs::File>> = Vec::new();
+
+fn files() -> &'static mut Vec<Option<std::fs::File>> {
+    // The program has one thread.
+    unsafe { &mut *std::ptr::addr_of_mut!(FILES) }
+}
+
+fn file(descriptor: i32) -> &'static mut std::fs::File {
+    match files().get_mut((descriptor - 3) as usize) {
+        Some(Some(file)) => file,
+        _ => fail(&format!("file {descriptor} is not open")),
+    }
+}
+
+fn unit() -> Value {
+    nullary(0)
+}
+
+/// A place that holds a value: a block of one field, which is changed where
+/// it is.
+#[no_mangle]
+pub extern "C" fn hazy_prim_new_ref(value: Value) -> Value {
+    let block = hazy_alloc(2, header(DATA, 0, 1));
+    unsafe { *block.add(1) = heap::share(value) };
+    block as Value
+}
+
+#[no_mangle]
+pub extern "C" fn hazy_prim_read_ref(reference: Value) -> Value {
+    heap::share(unsafe { *(reference as *const u64).add(1) })
+}
+
+#[no_mangle]
+pub extern "C" fn hazy_prim_write_ref(reference: Value, value: Value) -> Value {
+    let place = unsafe { (reference as *mut u64).add(1) };
+    let old = unsafe { *place };
+    unsafe { *place = heap::share(value) };
+    heap::release(old);
+    unit()
+}
+
+#[no_mangle]
+pub extern "C" fn hazy_prim_same_ref(left: Value, right: Value) -> Value {
+    boolean(left == right)
+}
+
+#[no_mangle]
+pub extern "C" fn hazy_prim_arg_count() -> Value {
+    from_int(std::env::args_os().count() as i32 - 1)
+}
+
+#[no_mangle]
+pub extern "C" fn hazy_prim_arg(index: Value) -> Value {
+    match std::env::args_os().nth(int(index) as usize + 1) {
+        Some(argument) => from_text(&argument.to_string_lossy()),
+        None => fail("there is no such argument"),
+    }
+}
+
+/// The value of an environment variable after a 1, or a 0 alone if it is
+/// not set.
+#[no_mangle]
+pub extern "C" fn hazy_prim_get_env(name: Value) -> Value {
+    match std::env::var_os(text(name)) {
+        Some(value) => from_text(&format!("1{}", value.to_string_lossy())),
+        None => from_text("0"),
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn hazy_prim_executable_path() -> Value {
+    match std::env::current_exe().and_then(|path| path.canonicalize()) {
+        Ok(path) => from_text(&path.to_string_lossy()),
+        Err(error) => fail(&format!("where the program is cannot be found: {error}")),
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn hazy_prim_exit(code: Value) -> Value {
+    let _ = std::io::stdout().flush();
+    let _ = std::io::stderr().flush();
+    std::process::exit(int(code))
+}
+
+/// A file opened to read, to write or to add to, as the mode is 0, 1 or 2.
+#[no_mangle]
+pub extern "C" fn hazy_prim_open(path: Value, mode: Value) -> Value {
+    let mut options = std::fs::OpenOptions::new();
+    match int(mode) {
+        0 => options.read(true),
+        1 => options.write(true).create(true).truncate(true),
+        _ => options.append(true).create(true),
+    };
+    match options.open(text(path)) {
+        Ok(file) => {
+            let files = files();
+            let place = match files.iter().position(|slot| slot.is_none()) {
+                Some(place) => {
+                    files[place] = Some(file);
+                    place
+                }
+                None => {
+                    files.push(Some(file));
+                    files.len() - 1
+                }
+            };
+            from_int(place as i32 + 3)
+        }
+        Err(error) => fail(&format!("{}: {error}", text(path))),
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn hazy_prim_close(descriptor: Value) -> Value {
+    let descriptor = int(descriptor);
+    if descriptor >= 3 {
+        if let Some(slot) = files().get_mut((descriptor - 3) as usize) {
+            *slot = None;
+        }
+    }
+    unit()
+}
+
+#[no_mangle]
+pub extern "C" fn hazy_prim_write(descriptor: Value, value: Value) -> Value {
+    let bytes = text(value).as_bytes();
+    let result = match int(descriptor) {
+        1 => std::io::stdout().lock().write_all(bytes),
+        2 => {
+            // What was written before a complaint is seen before it.
+            let _ = std::io::stdout().flush();
+            std::io::stderr().lock().write_all(bytes)
+        }
+        descriptor => file(descriptor).write_all(bytes),
+    };
+    if let Err(error) = result {
+        fail(&format!("could not write: {error}"));
+    }
+    unit()
+}
+
+#[no_mangle]
+pub extern "C" fn hazy_prim_read_all(descriptor: Value) -> Value {
+    use std::io::Read;
+    let mut bytes = Vec::new();
+    let result = match int(descriptor) {
+        0 => std::io::stdin().lock().read_to_end(&mut bytes),
+        descriptor => file(descriptor).read_to_end(&mut bytes),
+    };
+    if let Err(error) = result {
+        fail(&format!("could not read: {error}"));
+    }
+    from_text(&String::from_utf8_lossy(&bytes))
+}
+
+/// A line read after a 1 and without its end, or a 0 alone if there is
+/// nothing left to read.
+#[no_mangle]
+pub extern "C" fn hazy_prim_read_line(descriptor: Value) -> Value {
+    use std::io::{BufRead, Read};
+    let mut bytes = Vec::new();
+    let any = match int(descriptor) {
+        0 => match std::io::stdin().lock().read_until(10, &mut bytes) {
+            Ok(count) => count > 0,
+            Err(error) => fail(&format!("could not read: {error}")),
+        },
+        descriptor => {
+            // A byte at a time, so that nothing past the line is taken.
+            let file = file(descriptor);
+            let mut byte = [0u8; 1];
+            let mut any = false;
+            loop {
+                match file.read(&mut byte) {
+                    Ok(0) => break,
+                    Ok(_) => {
+                        any = true;
+                        bytes.push(byte[0]);
+                        if byte[0] == 10 {
+                            break;
+                        }
+                    }
+                    Err(error) => fail(&format!("could not read: {error}")),
+                }
+            }
+            any
+        }
+    };
+    if !any {
+        return from_text("0");
+    }
+    if bytes.last() == Some(&10) {
+        bytes.pop();
+    }
+    from_text(&format!("1{}", String::from_utf8_lossy(&bytes)))
+}
+
+#[no_mangle]
+pub extern "C" fn hazy_prim_is_terminal(descriptor: Value) -> Value {
+    use std::io::IsTerminal;
+    from_int(match int(descriptor) {
+        0 => std::io::stdin().is_terminal(),
+        1 => std::io::stdout().is_terminal(),
+        2 => std::io::stderr().is_terminal(),
+        _ => false,
+    } as i32)
+}
+
+/// The names in a directory, in order, each on a line.
+#[no_mangle]
+pub extern "C" fn hazy_prim_list_directory(path: Value) -> Value {
+    match std::fs::read_dir(text(path)) {
+        Ok(entries) => {
+            let mut names: Vec<String> = entries
+                .filter_map(|entry| entry.ok())
+                .map(|entry| entry.file_name().to_string_lossy().into_owned())
+                .collect();
+            names.sort();
+            from_text(&names.join("\n"))
+        }
+        Err(error) => fail(&format!("{}: {error}", text(path))),
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn hazy_prim_create_directory(path: Value) -> Value {
+    if let Err(error) = std::fs::create_dir_all(text(path)) {
+        fail(&format!("{}: {error}", text(path)));
+    }
+    unit()
+}
+
+/// Whether a path is there: 0 if not, 1 for a file, 2 for a directory.
+#[no_mangle]
+pub extern "C" fn hazy_prim_path_kind(path: Value) -> Value {
+    from_int(match std::fs::metadata(text(path)) {
+        Ok(found) if found.is_dir() => 2,
+        Ok(_) => 1,
+        Err(_) => 0,
+    })
+}
+
+/// A program run to its end with arguments, each on a line, and what it
+/// exited with.
+#[no_mangle]
+pub extern "C" fn hazy_prim_call_process(program: Value, arguments: Value) -> Value {
+    let _ = std::io::stdout().flush();
+    let mut command = std::process::Command::new(text(program));
+    if !text(arguments).is_empty() {
+        command.args(text(arguments).split("\n"));
+    }
+    match command.status() {
+        Ok(status) => from_int(status.code().unwrap_or(1)),
+        Err(error) => fail(&format!("{}: {error}", text(program))),
+    }
+}
+
+/// Thousandths of a second since the first time this was asked.
+#[no_mangle]
+pub extern "C" fn hazy_prim_clock() -> Value {
+    static START: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
+    let start = START.get_or_init(std::time::Instant::now);
+    from_int(start.elapsed().as_millis() as i32)
+}
+
+/// The system, as Haskell's `System.Info.os` names it.
+#[no_mangle]
+pub extern "C" fn hazy_prim_os() -> Value {
+    from_text(if cfg!(target_os = "windows") {
+        "mingw32"
+    } else if cfg!(target_os = "macos") {
+        "darwin"
+    } else {
+        std::env::consts::OS
+    })
+}
+
+/// Texts that are being built, each known by where it is here. One is
+/// begun, added to and finished, and others may be begun and finished while
+/// it waits for what it is added next.
+static mut BUILDING: Vec<Option<String>> = Vec::new();
+
+fn building() -> &'static mut Vec<Option<String>> {
+    // The program has one thread.
+    unsafe { &mut *std::ptr::addr_of_mut!(BUILDING) }
+}
+
+fn built(buffer: Value) -> &'static mut String {
+    match building().get_mut(int(buffer) as usize) {
+        Some(Some(string)) => string,
+        _ => fail("a text that is not being built"),
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn hazy_prim_pack_new() -> Value {
+    let building = building();
+    let place = match building.iter().rposition(|slot| slot.is_none()) {
+        Some(place) => place,
+        None => {
+            building.push(None);
+            building.len() - 1
+        }
+    };
+    building[place] = Some(String::new());
+    from_int(place as i32)
+}
+
+#[no_mangle]
+pub extern "C" fn hazy_prim_pack_push(buffer: Value, character: Value) -> Value {
+    // A code point that is not a character becomes the replacement character.
+    built(buffer).push(char::from_u32(int(character) as u32).unwrap_or('\u{fffd}'));
+    unit()
+}
+
+#[no_mangle]
+pub extern "C" fn hazy_prim_pack_append(buffer: Value, value: Value) -> Value {
+    built(buffer).push_str(text(value));
+    unit()
+}
+
+#[no_mangle]
+pub extern "C" fn hazy_prim_pack_done(buffer: Value) -> Value {
+    match building().get_mut(int(buffer) as usize).and_then(|slot| slot.take()) {
+        Some(string) => from_text(&string),
+        None => fail("a text that is not being built"),
+    }
+}
+
+/// Begin to catch: what handles a thrown value, and where to go on with what
+/// the handler gives.
+#[no_mangle]
+pub extern "C" fn hazy_prim_catch_push(handler: Value, resume: Value) -> Value {
+    heap::catching().push((heap::share(handler), heap::share(resume)));
+    unit()
+}
+
+/// Whether anything is catching.
+#[no_mangle]
+pub extern "C" fn hazy_prim_catching() -> Value {
+    boolean(!heap::catching().is_empty())
+}
+
+/// A value was thrown and nothing catches it. It said what the program
+/// exits with, or else how it is shown.
+#[no_mangle]
+pub extern "C" fn hazy_prim_uncaught(status: Value, shown: Value) -> Value {
+    if int(status) >= 0 {
+        let _ = std::io::stdout().flush();
+        std::process::exit(int(status))
+    }
+    fail(&format!("uncaught exception: {}", text(shown)))
+}
+
+/// The catch begun last, which is over: its handler and where it goes on,
+/// as a constructor of two fields.
+#[no_mangle]
+pub extern "C" fn hazy_prim_catch_pop() -> Value {
+    match heap::catching().pop() {
+        Some((handler, resume)) => {
+            let block = hazy_alloc(3, header(DATA, 0, 2));
+            unsafe {
+                *block.add(1) = handler;
+                *block.add(2) = resume;
+            }
+            block as Value
+        }
+        None => fail("a value was thrown and nothing catches it"),
+    }
 }

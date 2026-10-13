@@ -22,6 +22,8 @@
 //! * `DONE`: a thunk that has been forced. Its value is where its code was.
 //! * `INTEGER`: the address of the number, which Rust keeps.
 //! * `TEXT`: its length in bytes, and then the bytes, as UTF-8.
+//! * `SLICE`: part of a text: the text, where the part starts in its bytes,
+//!   and how many bytes it is. The text is a `TEXT`, never another part.
 //!
 //! A constructor with no fields is never allocated. There is one block for
 //! each tag in `hazy_nullary`, and it is not counted.
@@ -76,6 +78,8 @@ pub const TEXT: u64 = 6;
 /// What is left of a value that was taken apart, kept for one of as many
 /// fields to be built in. It holds nothing.
 pub const HUSK: u64 = 7;
+/// Part of a text, which it holds a reference to.
+pub const SLICE: u64 = 8;
 /// A slot that holds no block.
 const FREE: u64 = 15;
 
@@ -148,6 +152,7 @@ unsafe fn words(block: *mut u64) -> usize {
         CLOSURE | THUNK | WORKING | DONE => 2 + count(head),
         INTEGER => 2,
         TEXT => 2 + (*block.add(1) as usize + 7) / 8,
+        SLICE => 4,
         kind => panic!("a block of an unknown kind: {kind}"),
     }
 }
@@ -158,7 +163,7 @@ unsafe fn children(block: *mut u64) -> &'static [Value] {
     match head & KIND {
         DATA => std::slice::from_raw_parts(block.add(1), count(head)),
         CLOSURE | THUNK => std::slice::from_raw_parts(block.add(2), count(head)),
-        DONE => std::slice::from_raw_parts(block.add(1), 1),
+        DONE | SLICE => std::slice::from_raw_parts(block.add(1), 1),
         _ => &[],
     }
 }
@@ -184,6 +189,9 @@ struct Heap {
     pending: Vec<*mut u64>,
     /// The thunks at the top of the program that have been forced.
     roots: Vec<*mut u64>,
+    /// What catches a thrown value, the last begun last: a handler and where
+    /// to go on with what it gives. The program holds these through here.
+    catching: Vec<(Value, Value)>,
     /// How many bytes are in blocks.
     live: usize,
     /// After how many allocations every count is checked, if they are.
@@ -228,6 +236,7 @@ fn heap() -> &'static mut Heap {
                 large: Vec::new(),
                 pending: Vec::new(),
                 roots: Vec::new(),
+                catching: Vec::new(),
                 live: 0,
                 check: setting("HAZY_CHECK").map(|value| value.parse().unwrap_or(1).max(1)),
                 since: 0,
@@ -349,6 +358,10 @@ impl Heap {
         for &thunk in &self.roots {
             reach(*thunk.add(1), &mut stack);
         }
+        for &(handler, resume) in &self.catching {
+            reach(handler, &mut stack);
+            reach(resume, &mut stack);
+        }
         while let Some(block) = stack.pop() {
             for &child in children(block) {
                 reach(child, &mut stack);
@@ -400,6 +413,10 @@ impl Heap {
         for &thunk in &self.roots {
             refer(*thunk.add(1), "a definition");
         }
+        for &(handler, resume) in &self.catching {
+            refer(handler, "a catch");
+            refer(resume, "a catch");
+        }
         for &block in blocks {
             let counted = references(*block);
             let found = expected.get(&block).copied().unwrap_or(0);
@@ -427,6 +444,25 @@ fn wrong(message: &str) -> ! {
     let _ = std::io::stdout().flush();
     eprintln!("the heap is wrong: {message}");
     std::process::exit(2)
+}
+
+/// One more reference to a value, for a primitive that keeps what it was
+/// only lent, or gives back what something else still holds.
+pub fn share(value: Value) -> Value {
+    if let Some(block) = counted(value) {
+        unsafe { *block += ONE };
+    }
+    value
+}
+
+/// A reference to a value is given up by a primitive that held it.
+pub fn release(value: Value) {
+    unsafe { heap().erase(value) }
+}
+
+/// What catches a thrown value.
+pub fn catching() -> &'static mut Vec<(Value, Value)> {
+    &mut heap().catching
 }
 
 /// A new block of some words with a header, and one reference to it.

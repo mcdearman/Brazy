@@ -5,6 +5,8 @@
 -- in "Sequent.Runtime".
 module Sequent.Primitive where
 
+import Data.Text (Text)
+
 data Primitive
   = -- | A field of a constructed value, counting from zero.
     Field !Int
@@ -46,7 +48,48 @@ data Primitive
   | IntegerSignum
   | IntegerQuot
   | IntegerRem
+  | -- | Something the runtime does under a name of its own, given so many
+    -- values: the world outside a program, and what changes. Nothing is
+    -- known of one of these but that it is done where it is written.
+    Foreign !Text !Int
   deriving (Eq, Show)
+
+-- |
+-- The primitives the runtime has under names of their own, each with how
+-- many values it is given. The native runtime calls one @hazy_prim_@ and
+-- then its name.
+outside :: [(String, Int)]
+outside =
+  [ ("new_ref", 1),
+    ("read_ref", 1),
+    ("write_ref", 2),
+    ("same_ref", 2),
+    ("arg_count", 0),
+    ("arg", 1),
+    ("get_env", 1),
+    ("executable_path", 0),
+    ("exit", 1),
+    ("open", 2),
+    ("close", 1),
+    ("write", 2),
+    ("read_all", 1),
+    ("read_line", 1),
+    ("is_terminal", 1),
+    ("list_directory", 1),
+    ("create_directory", 1),
+    ("path_kind", 1),
+    ("call_process", 2),
+    ("clock", 0),
+    ("os", 0),
+    ("catch_push", 2),
+    ("catch_pop", 0),
+    ("catching", 0),
+    ("uncaught", 2),
+    ("pack_new", 0),
+    ("pack_push", 2),
+    ("pack_append", 2),
+    ("pack_done", 1)
+  ]
 
 arity :: Primitive -> Int
 arity = \case
@@ -88,3 +131,4 @@ arity = \case
   IntegerSignum -> 1
   IntegerQuot -> 2
   IntegerRem -> 2
+  Foreign _ count -> count

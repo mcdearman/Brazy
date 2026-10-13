@@ -1,21 +1,23 @@
 module System.Exit where
 
-import Hazy (primExit)
-import Hazy.Prelude (IO (..))
 import System.IO (hPutStrLn, stderr)
-import Control.Exception (Exception)
+import Control.Exception (Exception (..), Tag (..), throwIO)
 
 data ExitCode
   = ExitSuccess
   | ExitFailure Int
   deriving (Eq, Ord, Show)
 
-instance Exception ExitCode
+-- To exit is to throw this. A program that catches it goes on, and one
+-- that does not stops with what it says.
+instance Exception ExitCode where
+  exceptionTag = Tag "ExitCode"
+  exceptionStatus = \case
+    ExitSuccess -> 0
+    ExitFailure status -> status
 
 exitWith :: ExitCode -> IO a
-exitWith code = IO $ primExit $ case code of
-  ExitSuccess -> 0
-  ExitFailure status -> status
+exitWith = throwIO
 
 exitFailure :: IO a
 exitFailure = exitWith (ExitFailure 1)

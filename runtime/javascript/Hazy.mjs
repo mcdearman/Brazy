@@ -733,6 +733,19 @@ export const primTextIsPrefixOf = {
   b: (prefix) => (text) => ({ a: +force(text).startsWith(force(prefix)) }),
 };
 
+export const primTextConcat = {
+  a: 0,
+  b: (list) => {
+    const texts = [];
+    let current = force(list);
+    while (current.a) {
+      texts.push(force(current.b));
+      current = force(current.c);
+    }
+    return texts.join("");
+  },
+};
+
 export const putStrLnText = {
   a: 0,
   b: (thunk) => () => {
@@ -873,10 +886,10 @@ export const primIsTerminal = {
   b: (descriptor) => () => done(+tty.isatty(force(descriptor))),
 };
 
-// The names in a directory, each on a line.
+// The names in a directory, in order, each on a line.
 export const primListDirectory = {
   a: 0,
-  b: (path) => () => done(fs.readdirSync(force(path)).join("\n")),
+  b: (path) => () => done(fs.readdirSync(force(path)).sort().join("\n")),
 };
 
 export const primCreateDirectory = {
@@ -936,9 +949,22 @@ class Thrown {
   }
 }
 
+// How many catches have begun and are not over.
+let catching = 0;
+
+// A value that nothing catches says what the program exits with, or how it
+// is shown: the library's `Thrown` holds them second and third.
 export const primThrow = {
   a: 0,
   b: (value) => {
+    if (catching === 0) {
+      const thrown = force(value);
+      const status = force(thrown.c);
+      if (status >= 0) {
+        process.exit(status);
+      }
+      throw new Error("uncaught exception: " + force(thrown.d));
+    }
     throw new Thrown(value);
   },
 };
@@ -946,14 +972,19 @@ export const primThrow = {
 export const primCatch = {
   a: 0,
   b: (action) => (handler) => () => {
+    catching++;
+    let result;
     try {
-      return force(action)();
+      result = force(action)();
     } catch (error) {
+      catching--;
       if (error instanceof Thrown) {
         return force(handler)(error.value)();
       }
       throw error;
     }
+    catching--;
+    return result;
   },
 };
 

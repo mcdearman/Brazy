@@ -10,15 +10,15 @@ module Data.Text.Lazy.Builder
   )
 where
 
-import qualified Data.Text as Strict (unpack)
-import qualified Data.Text.Lazy as Lazy (pack, unpack)
+import qualified Data.Text as Strict (pack, singleton)
+import qualified Data.Text.Lazy as Lazy (fromChunks, toChunks)
 import Data.Text (Text)
 import qualified Data.Text.Lazy as Lazy (Text)
 import Hazy.Prelude (placeholder)
 
--- A builder is what it puts before whatever comes after it, so that two
--- are joined without either being gone over again.
-newtype Builder = Builder ([Char] -> [Char])
+-- A builder is the pieces of text it puts before whatever comes after it,
+-- so that two are joined without either being gone over again.
+newtype Builder = Builder ([Text] -> [Text])
 
 instance Eq Builder where
   a == b = toLazyText a == toLazyText b
@@ -36,22 +36,22 @@ instance Monoid Builder where
   mempty = Builder id
 
 toLazyText :: Builder -> Lazy.Text
-toLazyText (Builder build) = Lazy.pack (build [])
+toLazyText (Builder build) = Lazy.fromChunks (build [])
 
 toLazyTextWith :: Int -> Builder -> Lazy.Text
 toLazyTextWith _ = toLazyText
 
 singleton :: Char -> Builder
-singleton c = Builder (c :)
+singleton c = Builder (Strict.singleton c :)
 
 fromText :: Text -> Builder
-fromText text = Builder (Strict.unpack text ++)
+fromText text = Builder (text :)
 
 fromLazyText :: Lazy.Text -> Builder
-fromLazyText text = Builder (Lazy.unpack text ++)
+fromLazyText text = Builder (Lazy.toChunks text ++)
 
 fromString :: String -> Builder
-fromString characters = Builder (characters ++)
+fromString characters = Builder (Strict.pack characters :)
 
 flush :: Builder
 flush = Builder id

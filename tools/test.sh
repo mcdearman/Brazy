@@ -82,13 +82,16 @@ done
 # where it happens. A block that nothing reaches is found as well, so no
 # program here makes values that hold themselves.
 echo "=== Execution (native) ==="
-export HAZY_CHECK=1
+# The programs are checked as they run: every count of references is worked
+# out again and compared. That is asked of the programs and not of the
+# compiler, which may be a program that Hazy made too: it keeps things in
+# places that refer to each other, and those are never given up.
 for run_dir in test/run/*/; do
     run=$(basename "$run_dir")
     mkdir -p ".test/native"
     echo "Running $run"
     $HAZY -q "test/run/$run/source" --native ".test/native/$run" --checked
-    ".test/native/$run" > ".test/native/$run.result"
+    HAZY_CHECK=1 ".test/native/$run" > ".test/native/$run.result"
     diff "test/run/$run/result" ".test/native/$run.result"
 done
 
@@ -101,7 +104,7 @@ grep -q "refers to itself" ".test/native/cycles.warnings"
 echo "=== Execution (native, whole program) ==="
 echo "Running hello"
 $HAZY -q "test/run/hello/source" --native ".test/native/hello-whole" --whole --checked
-".test/native/hello-whole" > ".test/native/hello-whole.result"
+HAZY_CHECK=1 ".test/native/hello-whole" > ".test/native/hello-whole.result"
 diff "test/run/hello/result" ".test/native/hello-whole.result"
 
 # Build each test package, and run the program that uses it both ways
@@ -117,7 +120,7 @@ for package_dir in test/package/*/; do
     bun "$out/javascript/index.mjs" > "$out/javascript.result"
     diff "test/package/$package/result" "$out/javascript.result"
     $HAZY -q "test/package/$package/source" --package "./$out/library" --native "$out/native" --checked
-    "$out/native" > "$out/native.result"
+    HAZY_CHECK=1 "$out/native" > "$out/native.result"
     diff "test/package/$package/result" "$out/native.result"
 done
 

@@ -22,8 +22,9 @@ import AxCut.Tree
   )
 import qualified AxCut.Tree as Kind (Kind (..))
 import Data.Char (chr, generalCategory, ord)
-import Data.IORef (IORef, newIORef, readIORef, writeIORef)
+import Data.IORef (IORef, modifyIORef, newIORef, readIORef, writeIORef)
 import Data.Int (Int32)
+import Data.List (sort)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Text (Text, unpack)
@@ -35,8 +36,23 @@ import Sequent.Primitive (Primitive (..))
 import qualified Sequent.Primitive as Primitive
 import qualified Sequent.Runtime as Runtime
 import qualified Sequent.Tree as Literal (Literal (..))
-import System.Exit (exitFailure)
-import System.IO (hPutStrLn, stderr)
+import System.Directory (createDirectoryIfMissing, doesDirectoryExist, doesFileExist, listDirectory)
+import System.Environment (getExecutablePath, lookupEnv)
+import System.Exit (ExitCode (ExitFailure), exitFailure, exitSuccess, exitWith)
+import System.IO
+  ( Handle,
+    IOMode (AppendMode, ReadMode, WriteMode),
+    hClose,
+    hIsTerminalDevice,
+    hPutStrLn,
+    hSetEncoding,
+    openFile,
+    stderr,
+    stdin,
+    stdout,
+    utf8,
+  )
+import System.Info (os)
 
 data Value
   = Int !Int32
@@ -44,6 +60,18 @@ data Value
   | Text !Text
   | Data !Int [Value]
   | Reference !(IORef Cell)
+  | -- | A place that holds a value, which can be changed for another.
+    Box !(IORef Value)
+
+-- |
+-- What a program has of the world outside while it runs: what catches a
+-- thrown value, the catch begun last first, and the files that are open.
+data World = World
+  { catching :: !(IORef [(Value, Value)]),
+    files :: !(IORef (Map Int Handle)),
+    -- | The texts that are being built, each as its pieces, the last first.
+    building :: !(IORef (Map Int [Text]))
+  }
 
 -- |
 -- What an object is at the moment.
@@ -72,7 +100,10 @@ type Globals = Map Global (IORef Cell)
 run :: Program -> IO ()
 run Program {definitions, entry} = do
   globals <- traverse (\object -> allocate object []) definitions
-  execute globals entry []
+  catching <- newIORef []
+  files <- newIORef Map.empty
+  building <- newIORef Map.empty
+  execute World {catching, files, building} globals entry []
 
 allocate :: Object -> Environment -> IO (IORef Cell)
 allocate Object {kind, method, parameters, body} environment = newIORef $ case kind of
@@ -101,8 +132,8 @@ bool = \case
   False -> false
   True -> true
 
-execute :: Globals -> Statement -> Environment -> IO ()
-execute globals = go
+execute :: World -> Globals -> Statement -> Environment -> IO ()
+execute world globals = go
   where
     go :: Statement -> Environment -> IO ()
     go statement environment = case statement of
@@ -155,7 +186,7 @@ execute globals = go
         Nothing -> bug $ "undefined global: " ++ Runtime.showGlobal global
       Primitive name primitive rest -> do
         (kept, taken) <- splitEnd (Primitive.arity primitive) environment
-        value <- apply primitive (map snd taken)
+        value <- apply world primitive (map snd taken)
         go rest (kept ++ [(name, value)])
       Rec objects rest -> do
         let mine Recursive {object, others} = length (captured object) - length others
@@ -210,8 +241,9 @@ execute globals = go
           _ -> bug "a value was given to something that is not a consumer"
       _ -> bug "a value was given to something that is not an object"
 
-apply :: Primitive -> [Value] -> IO Value
-apply primitive arguments = case (primitive, arguments) of
+apply :: World -> Primitive -> [Value] -> IO Value
+apply world primitive arguments = case (primitive, arguments) of
+  (Foreign name _, _) -> outside world (unpack name) arguments
   (Field index, [Data _ fields])
     | index < length fields -> pure $ fields !! index
   (Error, [Text message]) -> do
@@ -280,3 +312,103 @@ apply primitive arguments = case (primitive, arguments) of
     divideByZero = do
       hPutStrLn stderr "divide by zero"
       exitFailure
+
+-- |
+-- What the runtime does under a name of its own, as the machine does it.
+outside :: World -> String -> [Value] -> IO Value
+outside World {catching, files, building} name arguments = case (name, arguments) of
+  ("new_ref", [value]) -> Box <$> newIORef value
+  ("read_ref", [Box box]) -> readIORef box
+  ("write_ref", [Box box, value]) -> unit <$ writeIORef box value
+  ("same_ref", [Box left, Box right]) -> pure $ bool $ left == right
+  -- A program on the machine is given no arguments.
+  ("arg_count", []) -> pure $ Int 0
+  ("get_env", [Text variable]) -> do
+    found <- lookupEnv (unpack variable)
+    pure $ Text $ Text.pack $ case found of
+      Just value -> '1' : value
+      Nothing -> "0"
+  ("executable_path", []) -> Text . Text.pack <$> getExecutablePath
+  ("exit", [Int code])
+    | code == 0 -> exitSuccess
+    | otherwise -> exitWith (ExitFailure (fromIntegral code))
+  ("open", [Text path, Int mode]) -> do
+    handle <- openFile (unpack path) $ case mode of
+      0 -> ReadMode
+      1 -> WriteMode
+      _ -> AppendMode
+    hSetEncoding handle utf8
+    open <- readIORef files
+    let descriptor = head [number | number <- [3 ..], Map.notMember number open]
+    writeIORef files (Map.insert descriptor handle open)
+    pure $ Int $ fromIntegral descriptor
+  ("close", [Int descriptor]) -> do
+    open <- readIORef files
+    case Map.lookup (fromIntegral descriptor) open of
+      Just handle -> do
+        hClose handle
+        writeIORef files (Map.delete (fromIntegral descriptor) open)
+      Nothing -> pure ()
+    pure unit
+  ("write", [Int descriptor, Text text]) -> do
+    handle <- known descriptor
+    Text.IO.hPutStr handle text
+    pure unit
+  ("read_all", [Int descriptor]) -> do
+    handle <- known descriptor
+    Text <$> Text.IO.hGetContents handle
+  ("is_terminal", [Int descriptor]) -> do
+    handle <- known descriptor
+    terminal <- hIsTerminalDevice handle
+    pure $ Int $ if terminal then 1 else 0
+  ("list_directory", [Text path]) -> do
+    names <- listDirectory (unpack path)
+    pure $ Text $ Text.intercalate (Text.pack "\n") $ map Text.pack $ sort names
+  ("create_directory", [Text path]) -> unit <$ createDirectoryIfMissing True (unpack path)
+  ("path_kind", [Text path]) -> do
+    file <- doesFileExist (unpack path)
+    directory <- doesDirectoryExist (unpack path)
+    pure $ Int $ if directory then 2 else if file then 1 else 0
+  -- The machine keeps no time.
+  ("clock", []) -> pure $ Int 0
+  ("os", []) -> pure $ Text $ Text.pack os
+  ("catch_push", [handler, resume]) -> unit <$ modifyIORef catching ((handler, resume) :)
+  ("catching", []) -> bool . not . null <$> readIORef catching
+  ("uncaught", [Int code, Text shown])
+    | code == 0 -> exitSuccess
+    | code > 0 -> exitWith (ExitFailure (fromIntegral code))
+    | otherwise -> do
+        hPutStrLn stderr $ "uncaught exception: " ++ unpack shown
+        exitFailure
+  ("catch_pop", []) ->
+    readIORef catching >>= \case
+      (handler, resume) : rest -> do
+        writeIORef catching rest
+        pure $ Data 0 [handler, resume]
+      [] -> do
+        hPutStrLn stderr "a value was thrown and nothing catches it"
+        exitFailure
+  ("pack_new", []) -> do
+    texts <- readIORef building
+    let buffer = head [number | number <- [0 ..], Map.notMember number texts]
+    writeIORef building (Map.insert buffer [] texts)
+    pure $ Int $ fromIntegral buffer
+  ("pack_push", [Int buffer, Int character]) ->
+    unit <$ modifyIORef building (Map.adjust (Text.singleton (chr (fromIntegral character)) :) (fromIntegral buffer))
+  ("pack_append", [Int buffer, Text text]) ->
+    unit <$ modifyIORef building (Map.adjust (text :) (fromIntegral buffer))
+  ("pack_done", [Int buffer]) -> do
+    texts <- readIORef building
+    writeIORef building (Map.delete (fromIntegral buffer) texts)
+    pure $ Text $ Text.concat $ reverse $ Map.findWithDefault [] (fromIntegral buffer) texts
+  _ -> bug $ "the machine cannot " ++ name
+  where
+    known descriptor = case descriptor of
+      0 -> pure stdin
+      1 -> pure stdout
+      2 -> pure stderr
+      _ -> do
+        open <- readIORef files
+        case Map.lookup (fromIntegral descriptor) open of
+          Just handle -> pure handle
+          Nothing -> bug $ "file " ++ show descriptor ++ " is not open"

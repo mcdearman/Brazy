@@ -561,17 +561,25 @@ word state pointer = do
   pure (line [value, fromString " = ptrtoint ptr ", pointer, fromString " to i64"], value)
 
 -- |
+-- How many arguments can be passed outside the registers. A constructor of
+-- very many fields is taken apart into as many arguments: the compiler's own
+-- record of what is built in has hundreds. The number is also written where
+-- the place for them is defined and declared, below.
+spills :: Int
+spills = 1024
+
+-- |
 -- Where an argument that is not passed in a register goes.
 spill :: Int -> Builder
 spill index =
-  fromString "getelementptr ([64 x i64], ptr @hazy_spill, i64 0, i64 " <> fromString (show index) <> fromString ")"
+  fromString "getelementptr ([1024 x i64], ptr @hazy_spill, i64 0, i64 " <> fromString (show index) <> fromString ")"
 
 -- |
 -- Enter some code and do not come back. The first argument is the object the
 -- code belongs to.
 enter :: State s -> Builder -> [Builder] -> Builder
 enter State {target = Target {registers}} code arguments
-  | length spilled > 64 = error "too many arguments"
+  | length spilled > spills = error "too many arguments"
   | otherwise =
       mconcat
         [ mconcat $ do
@@ -1592,6 +1600,7 @@ primitiveName = \case
   IntegerSignum -> "hazy_prim_integer_signum"
   IntegerQuot -> "hazy_prim_integer_quot"
   IntegerRem -> "hazy_prim_integer_rem"
+  Foreign name _ -> "hazy_prim_" ++ unpack name
 
 -- |
 -- What a unit starts with: what the runtime provides, and forcing.
@@ -1601,9 +1610,18 @@ primitiveName = \case
 -- the unit that is the program, and a package only declares it.
 prelude :: Shape -> String
 prelude = \case
-  Whole -> runtime ++ "\n" ++ areas "internal " ++ "\n" ++ forcing "internal " ++ "\n" ++ mainFunction
-  Main -> runtime ++ "\n" ++ areas "" ++ "\n" ++ forcing "" ++ "\n" ++ mainFunction
-  Package -> runtime ++ "\n" ++ declared
+  Whole -> runtime ++ foreigns ++ "\n" ++ areas "internal " ++ "\n" ++ forcing "internal " ++ "\n" ++ mainFunction
+  Main -> runtime ++ foreigns ++ "\n" ++ areas "" ++ "\n" ++ forcing "" ++ "\n" ++ mainFunction
+  Package -> runtime ++ foreigns ++ "\n" ++ declared
+
+-- |
+-- The primitives the runtime has under names of their own.
+foreigns :: String
+foreigns =
+  concat
+    [ "declare i64 @hazy_prim_" ++ name ++ "(" ++ concat (intersperse ", " (replicate count "i64")) ++ ")\n"
+      | (name, count) <- Primitive.outside
+    ]
 
 -- |
 -- What the runtime provides, and counting, which every unit has for itself
@@ -1742,7 +1760,7 @@ runtime =
 areas :: String -> String
 areas linkage =
   concat
-    [ "@hazy_spill = " ++ linkage ++ "global [64 x i64] zeroinitializer\n",
+    [ "@hazy_spill = " ++ linkage ++ "global [1024 x i64] zeroinitializer\n",
       "@hazy_roots = " ++ linkage ++ "global [1024 x i64] zeroinitializer\n"
     ]
 
@@ -1858,7 +1876,7 @@ forcing linkage =
 declared :: String
 declared =
   """
-  @hazy_spill = external global [64 x i64]
+  @hazy_spill = external global [1024 x i64]
   @hazy_roots = external global [1024 x i64]
   declare tailcc void @hazy_force(i64, i64)
   """

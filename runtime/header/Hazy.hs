@@ -46,6 +46,9 @@ primTextLength :: Text -> Int
 primTextTake :: Int -> Text -> Text
 primTextDrop :: Int -> Text -> Text
 primTextIsPrefixOf :: Text -> Text -> Bool
+
+-- Texts one after another as one text.
+primTextConcat :: [Text] -> Text
 primSTPure :: a -> ST s a
 primSTBind :: ST s a -> (a -> ST s b) -> ST s b
 

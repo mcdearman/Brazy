@@ -116,15 +116,21 @@ import Prelude hiding (all, any, break, concat, concatMap, cycle, drop, dropWhil
 import qualified Prelude
 import Data.Int (Int64)
 import Hazy.Prelude (placeholder)
+import qualified Data.Text as Whole (concat, length)
 import qualified Hazy.Prelude as Strict (Text, pack, unpack)
 
--- Lazy text is its characters, one after another, none made before it is
--- wanted.
-newtype Text = Text [Char]
-  deriving (Eq, Ord)
+-- Lazy text is pieces of text, one after another, none made before it is
+-- wanted. How a text is cut into pieces says nothing about it.
+newtype Text = Text [Strict.Text]
+
+instance Eq Text where
+  a == b = unpack a == unpack b
+
+instance Ord Text where
+  compare a b = compare (unpack a) (unpack b)
 
 instance Show Text where
-  showsPrec d (Text characters) = showsPrec d characters
+  showsPrec d text = showsPrec d (unpack text)
 
 instance Semigroup Text where
   Text a <> Text b = Text (a ++ b)
@@ -133,10 +139,16 @@ instance Monoid Text where
   mempty = Text []
 
 pack :: String -> Text
-pack = Text
+pack characters = Text (Prelude.map Strict.pack (pieces characters))
+  where
+    -- A few thousand characters to a piece, so that a text without end can
+    -- be begun.
+    pieces [] = []
+    pieces rest = case Prelude.splitAt 4096 rest of
+      (before, after) -> before : pieces after
 
 unpack :: Text -> String
-unpack (Text characters) = characters
+unpack (Text chunks) = Prelude.concatMap Strict.unpack chunks
 
 singleton :: Char -> Text
 singleton c = pack [c]
@@ -144,17 +156,17 @@ singleton c = pack [c]
 empty :: Text
 empty = pack []
 
-fromChunks :: [Text] -> Text
-fromChunks = placeholder
+fromChunks :: [Strict.Text] -> Text
+fromChunks = Text
 
-toChunks :: Text -> [Text]
-toChunks = placeholder
+toChunks :: Text -> [Strict.Text]
+toChunks (Text chunks) = chunks
 
 toStrict :: Text -> Strict.Text
-toStrict (Text characters) = Strict.pack characters
+toStrict (Text chunks) = Whole.concat chunks
 
 fromStrict :: Strict.Text -> Text
-fromStrict text = Text (Strict.unpack text)
+fromStrict text = Text [text]
 
 foldrChunks :: (Text -> a -> a) -> a -> Text -> a
 foldrChunks = placeholder
@@ -199,7 +211,7 @@ null :: Text -> Bool
 null text = Prelude.null (unpack text)
 
 length :: Text -> Int64
-length text = tally (Prelude.length (unpack text))
+length (Text chunks) = tally (Prelude.sum (Prelude.map Whole.length chunks))
 
 compareLength :: Text -> Int64 -> Ordering
 compareLength text count = compare (length text) count
@@ -330,16 +342,16 @@ mapAccumR f state text = case go (unpack text) of
         (final, d) -> (final, d : others)
 
 repeat :: Char -> Text
-repeat c = Text (Prelude.repeat c)
+repeat c = pack (Prelude.repeat c)
 
 replicate :: Int64 -> Text -> Text
 replicate count text = pack (Prelude.concat (Prelude.replicate (measure count) (unpack text)))
 
 cycle :: Text -> Text
-cycle (Text characters) = Text (Prelude.cycle characters)
+cycle (Text chunks) = Text (Prelude.cycle chunks)
 
 iterate :: (Char -> Char) -> Char -> Text
-iterate f c = Text (Prelude.iterate f c)
+iterate f c = pack (Prelude.iterate f c)
 
 unfoldr :: (a -> Maybe (Char, a)) -> a -> Text
 unfoldr f seed = pack (go seed)
