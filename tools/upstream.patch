@@ -1,0 +1,248 @@
+diff --git a/compiler/Core/Tree/Expression.hs b/compiler/Core/Tree/Expression.hs
+index beafb11..3a58c5b 100644
+--- a/compiler/Core/Tree/Expression.hs
++++ b/compiler/Core/Tree/Expression.hs
+@@ -70,6 +70,7 @@ import qualified Semantic.Tree.Statements as Semantic.Statements
+ import qualified Syntax.StringLiteral as StringLiteral
+ import Prelude hiding (compare, fail)
+ 
++type Expression :: Environment -> Data.Kind.Type
+ data Expression scope
+   = Variable
+       { variable :: !(Term.Index scope),
+diff --git a/compiler/Generate/Mangle/Builtin.hs b/compiler/Generate/Mangle/Builtin.hs
+index 237cd97..53891b7 100644
+--- a/compiler/Generate/Mangle/Builtin.hs
++++ b/compiler/Generate/Mangle/Builtin.hs
+@@ -88,7 +88,22 @@ data Builtin a = Builtin
+     readRatio ::
+       a
+   }
+-  deriving (Functor, Foldable, Traversable)
++
++instance Functor Builtin where
++  fmap f = build . map f . every
++
++instance Foldable Builtin where
++  foldr f z = foldr f z . every
++
++instance Traversable Builtin where
++  traverse f builtin = build <$> traverse f (every builtin)
++
++every :: Builtin a -> [a]
++every Builtin {abort, numInt, numInteger, numRatio, enumBool, enumChar, enumInt, enumInteger, enumOrdering, enumUnit, enumRatio, boundedBool, boundedChar, boundedInt, boundedOrdering, boundedTuple, eqBool, eqChar, eqTuple, eqInt, eqInteger, eqList, eqNonEmpty, eqOrdering, eqRatio, ordChar, ordTuple, ordInt, ordInteger, ordBool, ordList, ordNonEmpty, ordOrdering, ordRatio, realInt, realInteger, realRatio, integralInt, integralInteger, fractionalRatio, functorList, functorNonEmpty, applicativeList, applicativeNonEmpty, monadList, monadNonEmpty, monadFailList, functorST, applicativeST, monadST, semigroupArrow, semigroupList, semigroupNonEmpty, semigroupOrdering, semigroupST, semigroupTuple, monoidArrow, monoidList, monoidOrdering, monoidST, monoidTuple, showBool, showOrdering, showChar, showInt, showInteger, showTuple, showList, showNonEmpty, showRatio, readBool, readOrdering, readChar, readInt, readInteger, readTuple, readList, readNonEmpty, readRatio} = [abort, numInt, numInteger, numRatio, enumBool, enumChar, enumInt, enumInteger, enumOrdering, enumUnit, enumRatio, boundedBool, boundedChar, boundedInt, boundedOrdering, boundedTuple, eqBool, eqChar, eqTuple, eqInt, eqInteger, eqList, eqNonEmpty, eqOrdering, eqRatio, ordChar, ordTuple, ordInt, ordInteger, ordBool, ordList, ordNonEmpty, ordOrdering, ordRatio, realInt, realInteger, realRatio, integralInt, integralInteger, fractionalRatio, functorList, functorNonEmpty, applicativeList, applicativeNonEmpty, monadList, monadNonEmpty, monadFailList, functorST, applicativeST, monadST, semigroupArrow, semigroupList, semigroupNonEmpty, semigroupOrdering, semigroupST, semigroupTuple, monoidArrow, monoidList, monoidOrdering, monoidST, monoidTuple, showBool, showOrdering, showChar, showInt, showInteger, showTuple, showList, showNonEmpty, showRatio, readBool, readOrdering, readChar, readInt, readInteger, readTuple, readList, readNonEmpty, readRatio]
++
++build :: [a] -> Builtin a
++build [abort, numInt, numInteger, numRatio, enumBool, enumChar, enumInt, enumInteger, enumOrdering, enumUnit, enumRatio, boundedBool, boundedChar, boundedInt, boundedOrdering, boundedTuple, eqBool, eqChar, eqTuple, eqInt, eqInteger, eqList, eqNonEmpty, eqOrdering, eqRatio, ordChar, ordTuple, ordInt, ordInteger, ordBool, ordList, ordNonEmpty, ordOrdering, ordRatio, realInt, realInteger, realRatio, integralInt, integralInteger, fractionalRatio, functorList, functorNonEmpty, applicativeList, applicativeNonEmpty, monadList, monadNonEmpty, monadFailList, functorST, applicativeST, monadST, semigroupArrow, semigroupList, semigroupNonEmpty, semigroupOrdering, semigroupST, semigroupTuple, monoidArrow, monoidList, monoidOrdering, monoidST, monoidTuple, showBool, showOrdering, showChar, showInt, showInteger, showTuple, showList, showNonEmpty, showRatio, readBool, readOrdering, readChar, readInt, readInteger, readTuple, readList, readNonEmpty, readRatio] = Builtin {abort, numInt, numInteger, numRatio, enumBool, enumChar, enumInt, enumInteger, enumOrdering, enumUnit, enumRatio, boundedBool, boundedChar, boundedInt, boundedOrdering, boundedTuple, eqBool, eqChar, eqTuple, eqInt, eqInteger, eqList, eqNonEmpty, eqOrdering, eqRatio, ordChar, ordTuple, ordInt, ordInteger, ordBool, ordList, ordNonEmpty, ordOrdering, ordRatio, realInt, realInteger, realRatio, integralInt, integralInteger, fractionalRatio, functorList, functorNonEmpty, applicativeList, applicativeNonEmpty, monadList, monadNonEmpty, monadFailList, functorST, applicativeST, monadST, semigroupArrow, semigroupList, semigroupNonEmpty, semigroupOrdering, semigroupST, semigroupTuple, monoidArrow, monoidList, monoidOrdering, monoidST, monoidTuple, showBool, showOrdering, showChar, showInt, showInteger, showTuple, showList, showNonEmpty, showRatio, readBool, readOrdering, readChar, readInt, readInteger, readTuple, readList, readNonEmpty, readRatio}
++build _ = error "not every builtin name"
+ 
+ {-# UnorderedRecords Builtin #-}
+ 
+diff --git a/compiler/Main.hs b/compiler/Main.hs
+index 0888eed..63aece8 100644
+--- a/compiler/Main.hs
++++ b/compiler/Main.hs
+@@ -53,6 +53,7 @@ import System.FilePath (dropExtension, dropFileName, hasDrive, pathSeparators, t
+ import System.IO (IOMode (..), hClose, hSetEncoding, openFile, utf8)
+ import System.IO.Unsafe (unsafeInterleaveIO)
+ import Verbose (runVerbose)
++import qualified Verbose (Debug)
+ import Prelude hiding (Show (show))
+ import qualified Prelude
+ 
+@@ -118,6 +119,7 @@ stage1 verbose = case verbose of
+   Debug -> runVerbose . traverse parse
+   Normal -> pure . runIdentity . traverse parse
+   where
++    parse :: (Verbose.Debug verbose) => Loaded -> verbose (Syntax.Module Position)
+     parse Root {extensions, name, contents} = Parser.parse extensions Module.parse name contents
+     parse Inner {extensions, path, name, contents} =
+       Syntax.assumeName path
+diff --git a/compiler/Semantic/Index/Term.hs b/compiler/Semantic/Index/Term.hs
+index c4809d6..d97e18c 100644
+--- a/compiler/Semantic/Index/Term.hs
++++ b/compiler/Semantic/Index/Term.hs
+@@ -45,4 +45,4 @@ instance Show (Index scope) where
+ data Bound
+   = At
+   | Select !Int !Bound
+-  deriving (Show, Read, Eq)
++  deriving (Show, Eq)
+diff --git a/compiler/Semantic/Shift.hs b/compiler/Semantic/Shift.hs
+index f12b9fb..97c77ce 100644
+--- a/compiler/Semantic/Shift.hs
++++ b/compiler/Semantic/Shift.hs
+@@ -193,17 +193,15 @@ shiftTypeIndex = map
+     map UngroupType {} (Type.Shift index) = index
+     map UngroupTerm {} (Type.Shift index) = index
+     map Builtin {} _ = error "builtin free variable"
+-    map category index = map general index
+-      where
+-        general = case category of
+-          ReplaceWildcard {} -> generalReplaceWildcard
+-          SimplifyPattern {} -> generalSimplifyPattern
+-          RenamePattern {} -> generalRenamePattern
+-          SimplifyList {} -> generalSimplifyList
+-          LetPattern {} -> generalLetPattern
+-          FinishPattern {} -> generalFinishPattern
+-          FinishNewtype {} -> generalFinishNewtype
+-          ReplaceIrrefutable {} -> generalReplaceIrrefutable
++    map category index = case category of
++      ReplaceWildcard {} -> map generalReplaceWildcard index
++      SimplifyPattern {} -> map generalSimplifyPattern index
++      RenamePattern {} -> map generalRenamePattern index
++      SimplifyList {} -> map generalSimplifyList index
++      LetPattern {} -> map generalLetPattern index
++      FinishPattern {} -> map generalFinishPattern index
++      FinishNewtype {} -> map generalFinishNewtype index
++      ReplaceIrrefutable {} -> map generalReplaceIrrefutable index
+ 
+ instance Functor Type2.Index where
+   map (Builtin index) (Type2.Index (Type.Global 0 0)) = index
+@@ -236,18 +234,16 @@ instance Functor Evidence0.Index where
+   map GroupType {} index = Evidence0.Shift index
+   map UngroupTerm {} (Evidence0.Shift index) = index
+   map UngroupType {} (Evidence0.Shift index) = index
+-  map category index = map general index
+-    where
+-      general = case category of
+-        ReplaceWildcard {} -> generalReplaceWildcard
+-        SimplifyPattern {} -> generalSimplifyPattern
+-        RenamePattern {} -> generalRenamePattern
+-        SimplifyList {} -> generalSimplifyList
+-        LetPattern {} -> generalLetPattern
+-        FinishPattern {} -> generalFinishPattern
+-        FinishNewtype {} -> generalFinishNewtype
+-        ReplaceIrrefutable {} -> generalReplaceIrrefutable
+-        Builtin {} -> error "unreachable"
++  map category index = case category of
++    ReplaceWildcard {} -> map generalReplaceWildcard index
++    SimplifyPattern {} -> map generalSimplifyPattern index
++    RenamePattern {} -> map generalRenamePattern index
++    SimplifyList {} -> map generalSimplifyList index
++    LetPattern {} -> map generalLetPattern index
++    FinishPattern {} -> map generalFinishPattern index
++    FinishNewtype {} -> map generalFinishNewtype index
++    ReplaceIrrefutable {} -> map generalReplaceIrrefutable index
++    Builtin {} -> error "unreachable"
+ 
+ instance PartialUnshift Evidence0.Index where
+   partialUnshift abort (Evidence0.Assumed _) = vacuous abort
+@@ -265,18 +261,16 @@ instance Functor Local.Index where
+   map (GroupType _) index = Local.Shift index
+   map UngroupTerm {} (Local.Shift index) = index
+   map UngroupType {} (Local.Shift index) = index
+-  map category index = map general index
+-    where
+-      general = case category of
+-        ReplaceWildcard {} -> generalReplaceWildcard
+-        SimplifyPattern {} -> generalSimplifyPattern
+-        RenamePattern {} -> generalRenamePattern
+-        SimplifyList {} -> generalSimplifyList
+-        LetPattern {} -> generalLetPattern
+-        FinishPattern {} -> generalFinishPattern
+-        FinishNewtype {} -> generalFinishNewtype
+-        ReplaceIrrefutable {} -> generalReplaceIrrefutable
+-        Builtin {} -> error "unreachable"
++  map category index = case category of
++    ReplaceWildcard {} -> map generalReplaceWildcard index
++    SimplifyPattern {} -> map generalSimplifyPattern index
++    RenamePattern {} -> map generalRenamePattern index
++    SimplifyList {} -> map generalSimplifyList index
++    LetPattern {} -> map generalLetPattern index
++    FinishPattern {} -> map generalFinishPattern index
++    FinishNewtype {} -> map generalFinishNewtype index
++    ReplaceIrrefutable {} -> map generalReplaceIrrefutable index
++    Builtin {} -> error "unreachable"
+ 
+ instance PartialUnshift Local.Index where
+   partialUnshift _ (Local.Shift index) = pure index
+diff --git a/compiler/Semantic/Unify/Evidence.hs b/compiler/Semantic/Unify/Evidence.hs
+index aaee15d..d76db24 100644
+--- a/compiler/Semantic/Unify/Evidence.hs
++++ b/compiler/Semantic/Unify/Evidence.hs
+@@ -2,6 +2,7 @@ module Semantic.Unify.Evidence where
+ 
+ import Control.Monad.ST (ST)
+ import Core.Tree.Evidence (EvidenceF (..))
++import qualified Data.Kind
+ import Data.STRef (STRef, newSTRef, readSTRef, writeSTRef)
+ import Semantic.Scope (Environment (..))
+ import qualified Semantic.Shift as Shift
+@@ -10,6 +11,7 @@ import qualified Semantic.Unify.Instanciation as Instanciation
+ 
+ type Evidence s scope = EvidenceF (Logical s scope) scope
+ 
++type Logical :: Data.Kind.Type -> Environment -> Data.Kind.Type
+ data Logical s scope where
+   Box :: !(STRef s (Box s scope)) -> Logical s scope
+   Shift :: !(Logical s scopes) -> Logical s (scope ':+ scopes)
+@@ -20,6 +22,7 @@ instance Shift0.Functor (Logical s) where
+     Shift0.Shift -> Shift index
+     after Shift0.:. before -> Shift0.map after (Shift0.map before index)
+ 
++type Box :: Data.Kind.Type -> Environment -> Data.Kind.Type
+ data Box s scope
+   = Solved !(Evidence s scope)
+   | Unsolved {}
+diff --git a/compiler/Semantic/Unify/Type.hs b/compiler/Semantic/Unify/Type.hs
+index 45f6a2b..8ff7b88 100644
+--- a/compiler/Semantic/Unify/Type.hs
++++ b/compiler/Semantic/Unify/Type.hs
+@@ -15,6 +15,7 @@ import Core.Type.Functor (shiftLogical)
+ import Data.Foldable (for_, toList, traverse_)
+ import Data.Map (Map)
+ import qualified Data.Map as Map
++import qualified Data.Kind
+ import Data.STRef (STRef, newSTRef, readSTRef, writeSTRef)
+ import Data.Traversable (for)
+ import qualified Data.Vector as Vector
+@@ -41,12 +42,14 @@ import Prelude hiding (Functor, head, map)
+ 
+ type Type s scope = TypeF (Logical s scope) scope
+ 
++type Logical :: Data.Kind.Type -> Environment -> Data.Kind.Type
+ data Logical s scopes where
+   Box :: !(STRef s (Box s scopes)) -> Logical s scopes
+   -- |
+   -- Bring a type from a higher scope into current scope
+   Shift :: !(Logical s scopes) -> Logical s (scope ':+ scopes)
+ 
++type Box :: Data.Kind.Type -> Environment -> Data.Kind.Type
+ data Box s scope
+   = Unsolved
+       { kind :: !(Type s scope),
+@@ -443,6 +446,7 @@ unshift ::
+   ST s (Type s scopes)
+ unshift context position typex = unshift typex
+   where
++    unshift :: Type s (scope ':+ scopes) -> ST s (Type s scopes)
+     unshift = \case
+       Logical (Box reference) ->
+         readSTRef reference >>= \case
+diff --git a/compiler/Syntax/Tree/Associativity.hs b/compiler/Syntax/Tree/Associativity.hs
+index a19c143..77039ff 100644
+--- a/compiler/Syntax/Tree/Associativity.hs
++++ b/compiler/Syntax/Tree/Associativity.hs
+@@ -20,7 +20,7 @@ data Associativity
+     --
+     -- > infix
+     None
+-  deriving (Show, Read, Eq)
++  deriving (Show, Eq)
+ 
+ parse :: Parser Associativity
+ parse =
+diff --git a/compiler/Syntax/Tree/Fixity.hs b/compiler/Syntax/Tree/Fixity.hs
+index 87a595f..ee565d5 100644
+--- a/compiler/Syntax/Tree/Fixity.hs
++++ b/compiler/Syntax/Tree/Fixity.hs
+@@ -17,7 +17,7 @@ data Fixity
+     { associativity :: Associativity,
+       precedence :: !Int
+     }
+-  deriving (Show, Read)
++  deriving (Show)
+ 
+ parse :: Parser Fixity
+ parse = fixity <$> Associativity.parse <*> (fromMaybe 9 <$> optional (fromInteger <$> integer))

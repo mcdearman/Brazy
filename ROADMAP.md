@@ -973,6 +973,28 @@ The order to take it in:
   - The modules of a directory were numbered in whatever order the system
     kept its files in, so what was made differed from one runtime to
     another. They are sorted now
+- [x] **Brazy compiles Hazy.** `tools/upstream.sh` fetches Hazy's source as
+      it was at one commit, has Brazy make its compiler, and has what that
+      makes build Hazy's packages and run Hazy's tests, which pass. The
+      tests on Linux run it. Hazy's source is changed for it in nine files,
+      by `tools/upstream.patch`, where it does what Brazy cannot do yet
+- [ ] Compile Hazy as Hazy is written: empty `tools/upstream.patch`. These
+      are the same things Brazy's own source was changed to get past:
+  - A name for a type, defined together with the types it is defined by
+    way of: `type Type s scope = TypeF (Logical s scope) scope` beside
+    `Logical` and `Box`, and `Expression` round several modules. The name
+    is checked by itself and the types as a group, and each waits for the
+    other (`Semantic.Check.Go.TypeDefinition2`). Five types have their
+    kinds written instead
+  - Derive `Functor`, `Foldable` and `Traversable`, for the record of
+    builtin names. The last two are classes of the library and not built
+    in
+  - A definition inside another, with no type written, that requires a
+    class of its type and is used at two types: `parse` in `Main`
+  - Derive `Read`. Three types derive it and nothing reads them
+  - A definition inside another, with no type written, whose value depends
+    on which constructor of an indexed type is matched: `general` three
+    times in `Semantic.Shift`, and `unshift` in `Semantic.Unify.Type`
 - [ ] What a compiler made by Hazy does not do as well as the one GHC
       builds:
   - It is slow: about eighteen times as long to compile the compiler to

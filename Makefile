@@ -7,6 +7,7 @@
 #   make test            run the tests
 #   make bootstrap       have Hazy compile itself twice over, and compare
 #   make bootstrap WHAT=native   the same with the compiler as an executable
+#   make upstream        have Brazy compile Hazy, and run Hazy's tests with it
 #   make clean           remove what was built, but not cabal's own cache
 
 DIST ?= .dist
@@ -24,7 +25,7 @@ ARGS ?= --repl
 # Which of its forms `make bootstrap` has the compiler make itself in.
 WHAT ?= javascript
 
-.PHONY: all run test bootstrap clean
+.PHONY: all run test bootstrap upstream clean
 
 all: $(BUILT)
 
@@ -41,5 +42,8 @@ test: all
 bootstrap: all
 	env bash tools/bootstrap.sh $(HAZY) $(WHAT)
 
+upstream: all
+	env bash tools/upstream.sh $(HAZY)
+
 clean:
-	rm -rf $(DIST) .test .bootstrap
+	rm -rf $(DIST) .test .bootstrap .upstream
