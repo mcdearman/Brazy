@@ -133,11 +133,14 @@ generalizeBody position context requiring (Generalize run) = do
           typeEnvironment = Table.Type.Local typeEnvironment,
           equalities = shiftEquality <$> equalities
         }
-  requiring <- requiring
+  allowed <- requiring
   direct <- collect (Collector Mask.Runtime) typex
-  -- A type that is only in what is required of another is a variable too.
-  indirect <- if requiring then concat <$> traverse mentioned direct else pure []
-  let candidates = direct ++ indirect
+  -- Only what is required of a type by itself is made part of the type that
+  -- is made here: what is required of a type given other types is not, and
+  -- is left as it was.
+  plain <- and <$> traverse simple direct
+  let requiring = allowed && plain
+      candidates = direct
   traverse_ (shiftUnwanted requiring) candidates
   boxes <- nub . catMaybes <$> traverse (selectBox requiring) candidates
   parameters <- Strict.Vector.fromList <$> traverse parameter boxes
@@ -172,16 +175,16 @@ generalizeBody position context requiring (Generalize run) = do
               result
             }
   where
-    -- The types in what is required of a type.
-    mentioned :: Collected s (scope ':+ scopes) -> ST s [Collected s (scope ':+ scopes)]
-    mentioned = \case
+    -- Whether whatever is required of a type is required of it alone.
+    simple :: Collected s (scope ':+ scopes) -> ST s Bool
+    simple = \case
       Collect reference ->
         readSTRef reference >>= \case
           Unsolved {constraints} ->
-            concat <$> traverse (collect (Collector Mask.Runtime)) [argument | delays <- Map.elems constraints, Delay {arguments} <- delays, argument <- arguments]
-          Solved {} -> pure []
-          Skolem {} -> pure []
-      Reach {} -> pure []
+            pure $ and [null arguments | delays <- Map.elems constraints, Delay {arguments} <- delays]
+          Solved {} -> pure True
+          Skolem {} -> pure True
+      Reach {} -> pure True
     -- What is required of a type that is to be a variable: each class, with
     -- which variable it is and what was waiting for the evidence.
     requirements ::
