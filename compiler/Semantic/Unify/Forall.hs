@@ -1,6 +1,6 @@
 module Semantic.Unify.Forall where
 
-import Control.Monad (zipWithM_)
+import Control.Monad (zipWithM, zipWithM_)
 import Control.Monad.ST (ST)
 import Core.Tree.Constraint (ConstraintF (..))
 import Core.Tree.Constraints (ConstraintsF (..))
@@ -13,6 +13,7 @@ import qualified Core.Tree.TypeLambda as Simple (TypeLambdaOver (..))
 import Data.Foldable (toList, traverse_)
 import qualified Data.Kind as Kind
 import Data.List (nub)
+import qualified Data.Map as Map
 import Data.Maybe (catMaybes)
 import Data.STRef (STRef, readSTRef, writeSTRef)
 import Data.Traversable (for)
@@ -21,6 +22,7 @@ import qualified Data.Vector.Strict as Strict.Vector
 import Semantic.Check.Context (Context (..))
 import Semantic.Check.LocalBinding (shiftEquality)
 import qualified Semantic.Check.Mask as Mask
+import qualified Semantic.Index.Evidence as Index.Evidence (assumed)
 import qualified Semantic.Index.Local as Local
 import qualified Semantic.Index.Table.Local as Table.Local
 import qualified Semantic.Index.Table.Term as Table.Term
@@ -29,11 +31,14 @@ import qualified Semantic.Index.Type2 as Type2
 import Semantic.Scope (Environment (..))
 import qualified Semantic.Scope as Scope
 import qualified Semantic.Shift0 as Shift0
+import qualified Semantic.Unify.Evidence as Evidence (unify)
+import qualified Core.Tree.Evidence as Evidence (EvidenceF (..))
 import Semantic.Unify.Generalizable (Collected (..), Collector (..), Generalizable (..))
 import Semantic.Unify.Instanciation (Instanciation)
 import Semantic.Unify.Solve (Solve (..), solve)
 import Semantic.Unify.Type
   ( Box (..),
+    Delay (..),
     Logical (..),
     Type (..),
     constrainWith,
@@ -104,13 +109,25 @@ data Body typef term s scope = (:::)
 
 infix 5 :::
 
+--
+-- A type that is still unknown and has something required of it is made a
+-- variable too, with what is required of it, if the caller allows: then
+-- what was waiting for the evidence is given what the type made here
+-- assumes. Otherwise the unknown is left to whatever is outside to work
+-- out, and what is made here does not vary in it.
 generalizeBody ::
   (Generalizable typex) =>
   Position ->
   Context s scope ->
+  -- | Whether a type that something is required of may become a variable.
+  -- It is asked after the body is checked.
+  ST s Bool ->
+  -- | Whether any type becomes a variable at all. If not, what is made is
+  -- of one type, which whatever is outside works out.
+  Bool ->
   Generalize (Body typex term) s scope ->
   ST s (Body (ForallOver typex) (Simple.TypeLambdaOver term) s scope)
-generalizeBody position context (Generalize run) = do
+generalizeBody position context requiring varying (Generalize run) = do
   typex ::: term <- run $ case context of
     Context {termEnvironment, localEnvironment, typeEnvironment, equalities} ->
       Context
@@ -119,21 +136,40 @@ generalizeBody position context (Generalize run) = do
           typeEnvironment = Table.Type.Local typeEnvironment,
           equalities = shiftEquality <$> equalities
         }
-  candidates <- collect (Collector Mask.Runtime) typex
-  traverse_ shiftUnwanted candidates
-  boxes <- nub . catMaybes <$> traverse selectBox candidates
+  allowed <- requiring
+  direct <- collect (Collector Mask.Runtime) typex
+  -- Only what is required of a type by itself is made part of the type that
+  -- is made here: what is required of a type given other types is not, and
+  -- is left as it was.
+  plain <- and <$> traverse simple direct
+  let requiring = allowed && plain && varying
+      candidates = direct
+  traverse_ (shiftUnwanted requiring) candidates
+  boxes <- nub . catMaybes <$> traverse (selectBox requiring) candidates
   parameters <- Strict.Vector.fromList <$> traverse parameter boxes
+  required <- concat <$> zipWithM requirements [0 ..] boxes
   zipWithM_ writeVariable [0 ..] boxes
   result <- zonk Zonker Shift0.Id typex
+  assumed <- for (zip [0 ..] required) $ \(index, (classx, head, Delay {arguments, evidence})) -> do
+    Evidence.unify evidence $
+      Evidence.Variable
+        { variable = Index.Evidence.assumed index,
+          instanciation = Mono
+        }
+    arguments <- traverse (zonk Zonker Shift0.Id) arguments
+    pure Constraint {classx = Type2.unlocal classx, head, arguments = Strict.Vector.fromList arguments}
+  let constraints
+        | null assumed = Constraints.None
+        | otherwise = Constraints.Constraints (Strict.Vector.fromList assumed)
   pure $
     ForallOver
       { parameters,
-        constraints = Constraints.None,
+        constraints,
         result
       }
       ::: do
         parameters <- traverse (solve position) parameters
-        constraints <- solve position Constraints.None
+        constraints <- solve position constraints
         result <- term
         pure
           Simple.TypeLambdaOver
@@ -142,12 +178,34 @@ generalizeBody position context (Generalize run) = do
               result
             }
   where
-    shiftUnwanted :: Collected s (scope ':+ scopes) -> ST s ()
-    shiftUnwanted = \case
+    -- Whether whatever is required of a type is required of it alone.
+    simple :: Collected s (scope ':+ scopes) -> ST s Bool
+    simple = \case
+      Collect reference ->
+        readSTRef reference >>= \case
+          Unsolved {constraints} ->
+            pure $ and [null arguments | delays <- Map.elems constraints, Delay {arguments} <- delays]
+          Solved {} -> pure True
+          Skolem {} -> pure True
+      Reach {} -> pure True
+    -- What is required of a type that is to be a variable: each class, with
+    -- which variable it is and what was waiting for the evidence.
+    requirements ::
+      Int ->
+      STRef s (Box s (Scope.Local ':+ scopes)) ->
+      ST s [(Type2.Index (Scope.Local ':+ scopes), Int, Delay s (Scope.Local ':+ scopes))]
+    requirements head reference =
+      readSTRef reference >>= \case
+        Unsolved {constraints} ->
+          pure [(classx, head, delay) | (classx, delays) <- Map.toList constraints, delay <- delays]
+        Solved {} -> pure []
+        Skolem {} -> pure []
+    shiftUnwanted :: Bool -> Collected s (scope ':+ scopes) -> ST s ()
+    shiftUnwanted requiring = \case
       Collect reference ->
         readSTRef reference >>= \case
           Unsolved {kind, constraints}
-            | null constraints -> do
+            | varying, null constraints || requiring -> do
                 _ <- unshift fail fail kind
                 pure ()
             | otherwise -> do
@@ -159,12 +217,13 @@ generalizeBody position context (Generalize run) = do
           Solved {} -> pure ()
           Skolem {} -> pure ()
       Reach {} -> pure ()
-    selectBox :: Collected s (scope ':+ scopes) -> ST s (Maybe (STRef s (Box s (scope ':+ scopes))))
-    selectBox = \case
+    selectBox :: Bool -> Collected s (scope ':+ scopes) -> ST s (Maybe (STRef s (Box s (scope ':+ scopes))))
+    selectBox requiring = \case
       Collect reference ->
         readSTRef reference >>= \case
           Unsolved {constraints}
-            | null constraints -> pure $ Just reference
+            | not varying -> pure Nothing
+            | null constraints || requiring -> pure $ Just reference
             | otherwise -> error "select box with unsolved"
           Solved {} -> pure Nothing
           Skolem {} -> pure Nothing

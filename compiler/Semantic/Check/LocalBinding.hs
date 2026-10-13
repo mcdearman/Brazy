@@ -1,10 +1,12 @@
 module Semantic.Check.LocalBinding where
 
+import Control.Monad.ST (ST)
 import qualified Core.Tree.Evidence as Simple (Evidence)
 import Core.Tree.Type as Simple (Type)
 import qualified Core.Type.Functor as Core
 import qualified Data.Kind (Type)
 import Data.Map (Map)
+import Data.STRef (STRef)
 import qualified Data.Map as Map
 import qualified Data.Vector.Strict as Strict
 import Semantic.Check.Mask (Mask)
@@ -66,6 +68,23 @@ data Equality s scope
     -- it: a constructor that was matched on requires it of its types, and
     -- the value that was matched holds the evidence.
     Given !(Type2.Index scope) !(Unify.Type s scope) !(Unify.Evidence s scope)
+  | -- | Not something that is known, but where a definition leaves what is
+    -- to be checked once the rest of the definition it is inside has been:
+    -- see @postponed@ in "Semantic.Check.Context". It is here because what
+    -- is known is handed to everything inside a definition, and so is this.
+    Late !(STRef s [ST s ()])
+  | -- | Not something that is known either: this is inside types that are
+    -- being checked together, where a name for a type is looked into and
+    -- not asked what it was found to be. See @checkCount@ in
+    -- "Semantic.Check.Temporary.Type".
+    --
+    -- With it are the types that are being checked, each as it is called
+    -- from outside them and with the kind it has so far. What a name for a
+    -- type stands for calls them that way.
+    Grouping ![(Type2.Index scope, Unify.Type s scope)]
+  | -- | This is inside what a name for a type stands for, which was looked
+    -- into: a name that is by way of itself is found by meeting it again.
+    Expanding !(Type2.Index scope)
 
 shiftEquality :: Equality s scope -> Equality s (scope' ':+ scope)
 shiftEquality = \case
@@ -73,6 +92,10 @@ shiftEquality = \case
   Hidden logical typex -> Hidden (Shift0.map Shift0.Shift logical) (Core.shiftLogical typex)
   Given classx subject evidence ->
     Given (Shift0.map Shift0.Shift classx) (Core.shiftLogical subject) (Core.shiftLogical evidence)
+  Late waiting -> Late waiting
+  Grouping members ->
+    Grouping [(Shift0.map Shift0.Shift index, Core.shiftLogical kind) | (index, kind) <- members]
+  Expanding index -> Expanding (Shift0.map Shift0.Shift index)
 
 data Constraint scope = Constraint
   { arguments :: !(Strict.Vector (Simple.Type scope)),

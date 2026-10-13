@@ -1,6 +1,8 @@
 module Semantic.Check.Go.Definition4 where
 
 import Control.Monad.ST (ST)
+import Data.Foldable (toList)
+import Data.STRef (modifySTRef, newSTRef, readSTRef, writeSTRef)
 import Core.Substitute (logicalType)
 import qualified Core.Tree.Constraints as Simple.Constraints (simplify)
 import qualified Core.Tree.Type as Core
@@ -13,7 +15,7 @@ import qualified Data.Vector.Strict as Strict.Vector
 import Data.Void (Void)
 import Error (cyclicalTypeChecking)
 import qualified Graph.Topological as Topological
-import Semantic.Check.Context (Context, groupTermBindings)
+import Semantic.Check.Context (Context, groupTermBindings, postponed)
 import qualified Semantic.Check.Go.Scheme as Solved.Scheme
 import qualified Semantic.Check.Mask as Mask
 import qualified Semantic.Check.Temporary.Definition3 as Definition3
@@ -132,20 +134,49 @@ check position Solve {solve, logical} reflection information = \case
         { cycle = cyclicalTypeChecking position,
           run = \declarations -> do
             let context = information declarations
-            types Unify.::: set <- Unify.generalizeBody position context $ Unify.Generalize $ \context -> do
+            -- A definition's type requires what the definition requires, as
+            -- the Haskell report has it, if every definition here is of a
+            -- function. A definition that is not is of one type, so that
+            -- it is worked out once.
+            --
+            -- A definition that uses itself, or another that is defined
+            -- with it, is of one type too: the use would have to be given
+            -- the evidence, and is not yet.
+            recursive <- newSTRef False
+            let functions = all (\Element {element} -> Definition3.functional element) set
+                requiring = (functions &&) . not <$> readSTRef recursive
+            -- A definition that takes apart a value of an indexed type, and
+            -- is no function, is put off until what it is inside has been
+            -- checked: by then how it is used has said what type it is, and
+            -- it is checked against that. It is of that one type.
+            waiting <- case (toList set, postponed context) of
+              ([Element {element}], Just waiting) -> do
+                indexed <- Definition3.indexed context element
+                pure $ if indexed then Just waiting else Nothing
+              _ -> pure Nothing
+            types Unify.::: set <- Unify.generalizeBody position context requiring (null waiting) $ Unify.Generalize $ \context -> do
               fresh <- Vector.replicateM (length set) $ Unify.fresh Core.typex
-              set <- flip Strict.Vector.imapM set $ \index Element {element, link} -> do
-                let element' = Shift.map (Shift.Over Shift) element
-                    typex = fresh Vector.! index
-                element <- Definition3.checkAuto (groupTermBindings fresh context) (shiftLogical typex) element'
-                pure $ do
-                  element <- Definition3.solve position element
-                  pure Element {element, link}
-              let types = Types (Strict.Vector.fromLazy fresh)
-                  solved = do
-                    set <- sequence set
-                    pure $ Set set
-              pure $ types Unify.::: solved
+              let checked = flip Strict.Vector.imapM set $ \index Element {element, link} -> do
+                    let element' = Shift.map (Shift.Over Shift) element
+                        typex = fresh Vector.! index
+                        used = writeSTRef recursive True
+                    element <- Definition3.checkAuto (groupTermBindings used fresh context) (shiftLogical typex) element'
+                    pure $ do
+                      element <- Definition3.solve position element
+                      pure Element {element, link}
+                  types = Types (Strict.Vector.fromLazy fresh)
+              case waiting of
+                Nothing -> do
+                  set <- checked
+                  pure $ types Unify.::: (Set <$> sequence set)
+                Just waiting -> do
+                  cell <- newSTRef Nothing
+                  modifySTRef waiting (++ [checked >>= writeSTRef cell . Just])
+                  let solved =
+                        Unify.later (readSTRef cell) >>= \case
+                          Just set -> Set <$> sequence set
+                          Nothing -> error "a definition that was put off was never checked"
+                  pure $ types Unify.::: solved
             set <- solve set
             types <- logical position types
             pure $ Solved types :::: (Implicit.Check <$> set)

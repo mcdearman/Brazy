@@ -45,4 +45,4 @@ instance Show (Index scope) where
 data Bound
   = At
   | Select !Int !Bound
-  deriving (Show, Eq)
+  deriving (Show, Read, Eq)

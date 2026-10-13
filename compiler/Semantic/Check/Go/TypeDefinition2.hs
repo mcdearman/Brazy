@@ -5,6 +5,9 @@ import Core.Substitute (logicalType)
 import qualified Core.Tree.Type as Core
 import qualified Core.Tree.Type as Type (simplify)
 import Core.Type.Functor (shiftLogical)
+import qualified Semantic.Index.Link.Type as Type (Link)
+import qualified Semantic.Index.Type0 as Type0 (Index, normal)
+import qualified Semantic.Index.Type2 as Type2 (Index (Index))
 import Data.Functor.Identity (Identity (..))
 import qualified Data.Vector as Vector
 import Data.Vector.Strict (toLazy)
@@ -25,12 +28,15 @@ import qualified Semantic.Unify as Unify
 import Syntax.Position (Position)
 
 check ::
+  -- | What a type that is checked here with others is called from outside
+  -- them.
+  (Type.Link locality -> Type0.Index scope) ->
   Position ->
   (declarations (ST s) -> TypeDefinition2 locality (ST s) Layout.Group Check scope) ->
   (declarations (ST s) -> Context s scope) ->
   TypeDefinition2 locality Identity Layout.Group Resolve scope ->
   TypeDefinition2 locality (Topological.Formula declarations s) Layout.Group Check scope
-check position reflection information = \case
+check outside position reflection information = \case
   Annotated (Identity annotation) ::: Identity definition ->
     Annotated
       Topological.Formula
@@ -65,6 +71,7 @@ check position reflection information = \case
             fresh <- Vector.replicateM (length set) (Unify.fresh Core.kind)
             let context' =
                   groupTypeBindings
+                    ((\Element {link} -> Type2.Index (Type0.normal (outside link))) <$> toLazy set)
                     (TypeGroup.position <$> toLazy set)
                     (TypeGroup.label <$> toLazy set)
                     fresh

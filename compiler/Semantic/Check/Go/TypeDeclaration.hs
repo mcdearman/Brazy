@@ -17,11 +17,13 @@ import qualified Semantic.Stage as Stage
 import Semantic.Tree.Combinators.Inferred (Inferred (Solved))
 import Semantic.Tree.Synonym (SynonymBody (..))
 import qualified Semantic.Tree.Synonym as Synonym
+import qualified Semantic.Index.Type0 as Type0 (Index)
 import Semantic.Tree.TypeDeclaration (TypeDeclaration (..))
 import Semantic.Tree.TypeDefinition2 (Annotation (..), TypeDefinition2 (..))
 import Semantic.Tree.TypeGroup (TypeGroup (..), Types (..))
 
 check ::
+  (Type.Link locality -> Type0.Index scope) ->
   Type.Link locality ->
   ( declarations (ST s) ->
     Type.Link locality ->
@@ -31,6 +33,7 @@ check ::
   TypeDeclaration locality Identity Group Resolve scope ->
   TypeDeclaration locality (Topological.Formula declarations s) Group Check scope
 check
+  outside
   link
   reflection
   information
@@ -42,7 +45,7 @@ check
         definition =
           let reflection' declarations = case reflection declarations link of
                 TypeDeclaration {definition} -> definition
-           in TypeDefinition2.check position reflection' information definition,
+           in TypeDefinition2.check outside position reflection' information definition,
         kind =
           Topological.Formula
             { cycle = cyclicalTypeChecking position,

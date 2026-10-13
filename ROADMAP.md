@@ -976,21 +976,39 @@ The order to take it in:
 - [x] **Brazy compiles Hazy.** `tools/upstream.sh` fetches Hazy's source as
       it was at one commit, has Brazy make its compiler, and has what that
       makes build Hazy's packages and run Hazy's tests, which pass. The
-      tests on Linux run it. Hazy's source is changed for it in five files,
-      by `tools/upstream.patch`, where it does what Brazy cannot do yet
-- [ ] Compile Hazy as Hazy is written: empty `tools/upstream.patch`. These
-      are the same things Brazy's own source was changed to get past:
-  - A name for a type, defined together with the types it is defined by
-    way of: `type Type s scope = TypeF (Logical s scope) scope` beside
-    `Logical` and `Box`, and `Expression` round several modules. The name
-    is checked by itself and the types as a group, and each waits for the
-    other (`Semantic.Check.Go.TypeDefinition2`). Five types have their
-    kinds written instead
-  - A definition inside another, with no type written, that requires a
-    class of its type and is used at two types: `parse` in `Main`
+      tests on Linux run it. Hazy's source was changed for it in five
+      files at first, by `tools/upstream.patch`, where it did what Brazy
+      could not do
+- [x] **Compile Hazy as Hazy is written.** `tools/upstream.patch` is
+      empty, and Brazy's own source has back what it was changed to get
+      past. Three things were added to the check for it:
+  - A function with no type written is given a type that requires what it
+    requires, so it can be used at two types: `parse` in `Main` (test
+    `requires-inferred`). The unknowns that something is required of are
+    made variables with the rest, and the evidence is what the function is
+    given (`generalizeBody`, in `Semantic.Unify.Forall`)
   - A definition inside another, with no type written, whose value depends
     on which constructor of an indexed type is matched: `general` three
     times in `Semantic.Shift`, and `unshift` in `Semantic.Unify.Type`
+    (test `gadt-late`). What is taken apart has to be known before how, so
+    such a definition is checked after what uses it, at the end of the
+    definition it is inside (`postponing`, in `Semantic.Check.Context`)
+  - A name for a type, defined together with the types it is defined by
+    way of: `type Type s scope = TypeF (Logical s scope) scope` beside
+    `Logical` and `Box`, and `Expression` round several modules (test
+    `synonym-cycle`). A type that uses the name is grouped with what the
+    name is by way of, and inside such a group the name is looked into
+    where it is met and not asked what it was found to be (`checkCount`,
+    in `Semantic.Check.Temporary.Type`)
+- [ ] What these three leave undone:
+  - A definition that is defined by way of itself is given a type that
+    requires nothing, as before, and so is one that is not a function
+  - What is required of a type given other types, as `C a b` is, is not
+    made part of a type that is worked out
+  - A definition that is checked after what uses it has one type for all
+    its uses
+  - What a name for a type stands for is checked again at each place it is
+    met inside a group, which is slow for a name that is used often
 - [x] Derive `Functor`, `Foldable`, `Traversable` and `Read`, in a clause
       on a type. These are derived by writing the instance out as a
       programmer would and reading it as any instance is
@@ -1006,8 +1024,6 @@ The order to take it in:
     `Functor` of `data T f a = T (f a)` is not derived
   - `deriving instance` on a line of its own is not taken for these, and a
     constructor or a field that is an operator is not read
-  - Brazy's own source still has what it was changed to: the instances
-    written out, and no `Read`
 - [x] Brackets inside brackets took twice as long to read for each pair: a
       section was tried first, and when what was inside was no section it
       was read again. Twenty pairs took four seconds, and an instance
@@ -1050,19 +1066,18 @@ The order to take it in:
       function of nothing, and running it calls it (`Run`, in
       `Core.Tree.Expression`). The references an action is for,
       `Data.STRef`, are still placeholders in the library
+- [x] What the compiler's own source was changed to get past, and Hazy
+      can do now, so the source has it back: `Read` derived by three types;
+      `parse` in `Main` with no type written; `Environment` in
+      `AxCut.Machine` used in the types it is a name by way of; `Functor`,
+      `Foldable` and `Traversable` derived by the record of builtin names
+      in `Generate.Mangle.Builtin`; and the kinds and types that were
+      written out in the unifier and in `Semantic.Shift`
 - [ ] What the compiler's own source was changed to get past, and Hazy
       still cannot do:
-  - Derive `Read`. Three types derived it and never used it
-  - A definition with no type written that requires something of its type
-    and is used at two types: `parse` in `Main` now has its type written
-  - A name for a type that is defined by way of the types the name is used
-    in: `Environment` in `AxCut.Machine` is written out where that is so
   - `Functor`, `Foldable` and `Traversable` for a pair, which the library
     cannot give because both the classes and the type are built in. Two
     uses were written another way
-  - Derive `Functor`, `Foldable` and `Traversable`. One type derived them,
-    the record of builtin names in `Generate.Mangle.Builtin`, and its
-    instances are now written out
   - Arithmetic of floating point. `Status` kept the time in a `Double` and
     now keeps it in a `Word64`
 - [ ] Run the check again after each of these and count what stops it next.

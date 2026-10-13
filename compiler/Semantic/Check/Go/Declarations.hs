@@ -36,7 +36,7 @@ import Semantic.Tree.Declarations (Declarations (..), Local (..))
 import qualified Semantic.Tree.Declarations as Semantic (Local (..))
 import Semantic.Tree.Instance (Instance)
 import Semantic.Tree.TypeDeclaration (TypeDeclaration (..))
-import qualified Semantic.Tree.TypeDeclaration as TypeDeclaration (ungroupM)
+import qualified Semantic.Tree.TypeDeclaration as TypeDeclaration (source, ungroupM)
 import qualified Semantic.Tree.TypeDeclarationExtra as TypeDeclarationExtra (TypeDeclarationExtra (..))
 import qualified Semantic.Tree.TypeDefinition2 as TypeDefinition2
 import qualified Semantic.Tree.TypeGroup as TypeGroup
@@ -86,7 +86,7 @@ checkImpl
           let check index = Declaration.check (termLink index) solve reflection1 information
            in Vector.imap check terms,
         types =
-          let check index = TypeDeclaration.check (typeLink index) reflection2 information
+          let check index = TypeDeclaration.check typeIndexLink (typeLink index) reflection2 information
            in Vector.imap check types,
         typeExtras =
           let check index (Identity (Identity typeExtra)) =
@@ -164,7 +164,8 @@ lookupClassInstance (Proper Declarations {classInstances}) local index = classIn
 
 check :: Context s scope -> Semantic.Local Group Resolve scope -> ST s (Result s scope)
 check context (Semantic.Local declarations) = do
-  let locals (Proper declarations) = localBindings context declarations
+  let Declarations {types = written} = declarations
+      locals (Proper declarations) = localBindings (TypeDeclaration.source <$> written) context declarations
   Proper declarations <-
     loebST $
       Proper $

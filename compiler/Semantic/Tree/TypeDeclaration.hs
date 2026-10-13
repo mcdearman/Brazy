@@ -23,6 +23,7 @@ import Semantic.Stage (Check, Resolve, Stage)
 import Semantic.Tree.Combinators.Inferred (Inferred (..))
 import Semantic.Tree.TypeDefinition (TypeDefinition)
 import Semantic.Tree.TypeDefinition2 (TypeDefinition2)
+import qualified Semantic.Tree.Synonym as Synonym (Synonym)
 import qualified Semantic.Tree.TypeDefinition2 as TypeDefinition2
 import qualified Semantic.Tree.TypeGroup as TypeGroup
 import Syntax.Position (Position)
@@ -164,6 +165,19 @@ groupable TypeDeclaration {position, name, constructorNames, definition} = case 
         }
   TypeDefinition2.Annotated {} TypeDefinition2.::: _ -> Nothing
   TypeDefinition2.Synonym _ -> Nothing
+
+-- |
+-- A name for a type, as it was written, if a declaration is of one.
+source :: TypeDeclaration locality Identity layout Resolve scope -> Maybe (Synonym.Synonym Resolve scope)
+source TypeDeclaration {definition} = case definition of
+  TypeDefinition2.Synonym (Identity synonym) -> Just synonym
+  _ -> Nothing
+
+-- |
+-- The types that a name for a type is by way of, if a declaration is of
+-- one. A type that uses the name is defined by way of these too.
+synonymFree :: TypeDeclaration locality Identity Normal Resolve scope -> Maybe [Type0.Index scope]
+synonymFree declaration = freeTypeVariables Target <$> source declaration
 
 groupFree :: Groupable scope -> [Type0.Index scope]
 groupFree Groupable {element} = freeTypeVariables Target element

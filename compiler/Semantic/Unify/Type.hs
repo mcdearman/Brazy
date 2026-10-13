@@ -14,7 +14,6 @@ import Core.Tree.Type (TypeF (..), (#))
 import qualified Core.Tree.Type as Simple (Type)
 import Core.Type.Functor (shiftLogical)
 import Data.Foldable (for_, toList, traverse_)
-import qualified Data.Kind
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.STRef (STRef, newSTRef, readSTRef, writeSTRef)
@@ -52,17 +51,12 @@ import Prelude hiding (Functor, head, map)
 
 type Type s scope = TypeF (Logical s scope) scope
 
--- The kinds of these two are written out, as they are in the file that
--- stands for this module to the modules it is defined together with: Hazy
--- does not read that file, and cannot work the kinds out round the circle.
-type Logical :: Data.Kind.Type -> Environment -> Data.Kind.Type
 data Logical s scopes where
   Box :: !(STRef s (Box s scopes)) -> Logical s scopes
   -- |
   -- Bring a type from a higher scope into current scope
   Shift :: !(Logical s scopes) -> Logical s (scope ':+ scopes)
 
-type Box :: Data.Kind.Type -> Environment -> Data.Kind.Type
 data Box s scope
   = Unsolved
       { kind :: !(Type s scope),
@@ -388,6 +382,10 @@ lowerEquality = \case
   Local.Hidden (Box _) _ -> Nothing
   -- The evidence is named by the match, and there is no match further out.
   Local.Given {} -> Nothing
+  Local.Late waiting -> Just (Local.Late waiting)
+  Local.Grouping members ->
+    Local.Grouping <$> traverse (\(index, kind) -> (,) <$> Shift.partialUnshift Nothing index <*> lower kind) members
+  Local.Expanding index -> Local.Expanding <$> Shift.partialUnshift Nothing index
   where
     lower :: Type s (scope' ':+ scope) -> Maybe (Type s scope)
     lower = \case
@@ -980,10 +978,6 @@ unshift ::
   ST s (Type s scopes)
 unshift context position typex = unshift typex
   where
-    -- Its type is said, because it takes apart an unknown that says what
-    -- scope it is of: Hazy has to know what is taken apart before it looks
-    -- at how.
-    unshift :: Type s (scope ':+ scopes) -> ST s (Type s scopes)
     unshift = \case
       Logical (Box reference) ->
         readSTRef reference >>= \case

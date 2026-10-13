@@ -42,6 +42,8 @@ generalizeBody ::
   (Generalizable typex) =>
   Position ->
   Context s scope ->
+  ST s Bool ->
+  Bool ->
   Generalize (Body typex term) s scope ->
   ST s (Body (ForallOver typex) (Simple.TypeLambdaOver term) s scope)
 
