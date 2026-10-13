@@ -26,6 +26,10 @@ import qualified Semantic.Unify.Type as Type (Box (..), Logical (..))
 
 newtype Solve s a = Solve (ST s a)
 
+-- | Something that is done when the solving gets to it.
+later :: ST s a -> Solve s a
+later = Solve
+
 instance Functor (Solve s) where
   fmap = liftM
 

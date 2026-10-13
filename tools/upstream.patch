@@ -10,95 +10,6 @@ index beafb11..3a58c5b 100644
  data Expression scope
    = Variable
        { variable :: !(Term.Index scope),
-diff --git a/compiler/Semantic/Shift.hs b/compiler/Semantic/Shift.hs
-index f12b9fb..97c77ce 100644
---- a/compiler/Semantic/Shift.hs
-+++ b/compiler/Semantic/Shift.hs
-@@ -193,17 +193,15 @@ shiftTypeIndex = map
-     map UngroupType {} (Type.Shift index) = index
-     map UngroupTerm {} (Type.Shift index) = index
-     map Builtin {} _ = error "builtin free variable"
--    map category index = map general index
--      where
--        general = case category of
--          ReplaceWildcard {} -> generalReplaceWildcard
--          SimplifyPattern {} -> generalSimplifyPattern
--          RenamePattern {} -> generalRenamePattern
--          SimplifyList {} -> generalSimplifyList
--          LetPattern {} -> generalLetPattern
--          FinishPattern {} -> generalFinishPattern
--          FinishNewtype {} -> generalFinishNewtype
--          ReplaceIrrefutable {} -> generalReplaceIrrefutable
-+    map category index = case category of
-+      ReplaceWildcard {} -> map generalReplaceWildcard index
-+      SimplifyPattern {} -> map generalSimplifyPattern index
-+      RenamePattern {} -> map generalRenamePattern index
-+      SimplifyList {} -> map generalSimplifyList index
-+      LetPattern {} -> map generalLetPattern index
-+      FinishPattern {} -> map generalFinishPattern index
-+      FinishNewtype {} -> map generalFinishNewtype index
-+      ReplaceIrrefutable {} -> map generalReplaceIrrefutable index
- 
- instance Functor Type2.Index where
-   map (Builtin index) (Type2.Index (Type.Global 0 0)) = index
-@@ -236,18 +234,16 @@ instance Functor Evidence0.Index where
-   map GroupType {} index = Evidence0.Shift index
-   map UngroupTerm {} (Evidence0.Shift index) = index
-   map UngroupType {} (Evidence0.Shift index) = index
--  map category index = map general index
--    where
--      general = case category of
--        ReplaceWildcard {} -> generalReplaceWildcard
--        SimplifyPattern {} -> generalSimplifyPattern
--        RenamePattern {} -> generalRenamePattern
--        SimplifyList {} -> generalSimplifyList
--        LetPattern {} -> generalLetPattern
--        FinishPattern {} -> generalFinishPattern
--        FinishNewtype {} -> generalFinishNewtype
--        ReplaceIrrefutable {} -> generalReplaceIrrefutable
--        Builtin {} -> error "unreachable"
-+  map category index = case category of
-+    ReplaceWildcard {} -> map generalReplaceWildcard index
-+    SimplifyPattern {} -> map generalSimplifyPattern index
-+    RenamePattern {} -> map generalRenamePattern index
-+    SimplifyList {} -> map generalSimplifyList index
-+    LetPattern {} -> map generalLetPattern index
-+    FinishPattern {} -> map generalFinishPattern index
-+    FinishNewtype {} -> map generalFinishNewtype index
-+    ReplaceIrrefutable {} -> map generalReplaceIrrefutable index
-+    Builtin {} -> error "unreachable"
- 
- instance PartialUnshift Evidence0.Index where
-   partialUnshift abort (Evidence0.Assumed _) = vacuous abort
-@@ -265,18 +261,16 @@ instance Functor Local.Index where
-   map (GroupType _) index = Local.Shift index
-   map UngroupTerm {} (Local.Shift index) = index
-   map UngroupType {} (Local.Shift index) = index
--  map category index = map general index
--    where
--      general = case category of
--        ReplaceWildcard {} -> generalReplaceWildcard
--        SimplifyPattern {} -> generalSimplifyPattern
--        RenamePattern {} -> generalRenamePattern
--        SimplifyList {} -> generalSimplifyList
--        LetPattern {} -> generalLetPattern
--        FinishPattern {} -> generalFinishPattern
--        FinishNewtype {} -> generalFinishNewtype
--        ReplaceIrrefutable {} -> generalReplaceIrrefutable
--        Builtin {} -> error "unreachable"
-+  map category index = case category of
-+    ReplaceWildcard {} -> map generalReplaceWildcard index
-+    SimplifyPattern {} -> map generalSimplifyPattern index
-+    RenamePattern {} -> map generalRenamePattern index
-+    SimplifyList {} -> map generalSimplifyList index
-+    LetPattern {} -> map generalLetPattern index
-+    FinishPattern {} -> map generalFinishPattern index
-+    FinishNewtype {} -> map generalFinishNewtype index
-+    ReplaceIrrefutable {} -> map generalReplaceIrrefutable index
-+    Builtin {} -> error "unreachable"
- 
- instance PartialUnshift Local.Index where
-   partialUnshift _ (Local.Shift index) = pure index
 diff --git a/compiler/Semantic/Unify/Evidence.hs b/compiler/Semantic/Unify/Evidence.hs
 index aaee15d..d76db24 100644
 --- a/compiler/Semantic/Unify/Evidence.hs
@@ -128,7 +39,7 @@ index aaee15d..d76db24 100644
    = Solved !(Evidence s scope)
    | Unsolved {}
 diff --git a/compiler/Semantic/Unify/Type.hs b/compiler/Semantic/Unify/Type.hs
-index 45f6a2b..8ff7b88 100644
+index 45f6a2b..8d3f9e1 100644
 --- a/compiler/Semantic/Unify/Type.hs
 +++ b/compiler/Semantic/Unify/Type.hs
 @@ -15,6 +15,7 @@ import Core.Type.Functor (shiftLogical)
@@ -154,11 +65,3 @@ index 45f6a2b..8ff7b88 100644
  data Box s scope
    = Unsolved
        { kind :: !(Type s scope),
-@@ -443,6 +446,7 @@ unshift ::
-   ST s (Type s scopes)
- unshift context position typex = unshift typex
-   where
-+    unshift :: Type s (scope ':+ scopes) -> ST s (Type s scopes)
-     unshift = \case
-       Logical (Box reference) ->
-         readSTRef reference >>= \case

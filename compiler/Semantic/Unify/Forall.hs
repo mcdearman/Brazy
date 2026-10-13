@@ -122,9 +122,12 @@ generalizeBody ::
   -- | Whether a type that something is required of may become a variable.
   -- It is asked after the body is checked.
   ST s Bool ->
+  -- | Whether any type becomes a variable at all. If not, what is made is
+  -- of one type, which whatever is outside works out.
+  Bool ->
   Generalize (Body typex term) s scope ->
   ST s (Body (ForallOver typex) (Simple.TypeLambdaOver term) s scope)
-generalizeBody position context requiring (Generalize run) = do
+generalizeBody position context requiring varying (Generalize run) = do
   typex ::: term <- run $ case context of
     Context {termEnvironment, localEnvironment, typeEnvironment, equalities} ->
       Context
@@ -139,7 +142,7 @@ generalizeBody position context requiring (Generalize run) = do
   -- is made here: what is required of a type given other types is not, and
   -- is left as it was.
   plain <- and <$> traverse simple direct
-  let requiring = allowed && plain
+  let requiring = allowed && plain && varying
       candidates = direct
   traverse_ (shiftUnwanted requiring) candidates
   boxes <- nub . catMaybes <$> traverse (selectBox requiring) candidates
@@ -202,7 +205,7 @@ generalizeBody position context requiring (Generalize run) = do
       Collect reference ->
         readSTRef reference >>= \case
           Unsolved {kind, constraints}
-            | null constraints || requiring -> do
+            | varying, null constraints || requiring -> do
                 _ <- unshift fail fail kind
                 pure ()
             | otherwise -> do
@@ -219,6 +222,7 @@ generalizeBody position context requiring (Generalize run) = do
       Collect reference ->
         readSTRef reference >>= \case
           Unsolved {constraints}
+            | not varying -> pure Nothing
             | null constraints || requiring -> pure $ Just reference
             | otherwise -> error "select box with unsolved"
           Solved {} -> pure Nothing

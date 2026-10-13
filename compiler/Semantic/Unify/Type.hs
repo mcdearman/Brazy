@@ -388,6 +388,7 @@ lowerEquality = \case
   Local.Hidden (Box _) _ -> Nothing
   -- The evidence is named by the match, and there is no match further out.
   Local.Given {} -> Nothing
+  Local.Late waiting -> Just (Local.Late waiting)
   where
     lower :: Type s (scope' ':+ scope) -> Maybe (Type s scope)
     lower = \case

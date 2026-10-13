@@ -7,10 +7,11 @@ import qualified Core.Tree.Type as Core
 import Core.Tree.TypeDeclaration (assumeData)
 import qualified Data.Kind
 import Data.Maybe (mapMaybe)
+import Data.STRef (STRef, newSTRef, readSTRef, writeSTRef)
 import Data.Vector (Vector)
 import qualified Data.Vector as Vector
 import qualified Semantic.Check.DataInstance as DataInstance
-import Semantic.Check.LocalBinding (Equality, LocalBinding, shiftEquality)
+import Semantic.Check.LocalBinding (Equality (Late), LocalBinding, shiftEquality)
 import qualified Semantic.Check.LocalBinding as LocalBinding
 import Semantic.Check.Simple.Data as Simple.Data (instanciateMark)
 import Semantic.Check.TermBinding (TermBinding (..))
@@ -53,6 +54,42 @@ data Context s scope = Context
   }
 
 typeEnvironment_ = typeEnvironment
+
+-- |
+-- Where a definition that is put off leaves its checking: the definition it
+-- is inside, the nearest, goes through what was left when it has checked
+-- everything else of itself.
+--
+-- A definition is put off when what it is cannot be told from itself but
+-- can from how it is used: one that takes apart a value of an indexed type
+-- has to know what type that is, and what type it is to give back.
+postponed :: Context s scope -> Maybe (STRef s [ST s ()])
+postponed Context {equalities} = case [waiting | Late waiting <- equalities] of
+  waiting : _ -> Just waiting
+  [] -> Nothing
+
+-- |
+-- Check something that definitions inside it may be put off to the end of.
+postponing :: Context s scope -> (Context s scope -> ST s a) -> ST s a
+postponing Context {termEnvironment, localEnvironment, typeEnvironment, equalities} check = do
+  waiting <- newSTRef []
+  result <-
+    check
+      Context
+        { termEnvironment,
+          localEnvironment,
+          typeEnvironment,
+          equalities = Late waiting : equalities
+        }
+  let finish =
+        readSTRef waiting >>= \case
+          [] -> pure ()
+          left -> do
+            writeSTRef waiting []
+            sequence_ left
+            finish
+  finish
+  pure result
 
 instance Shift.Unshift (Context s) where
   unshift Context {termEnvironment, localEnvironment, typeEnvironment, equalities} =
