@@ -1037,11 +1037,13 @@ The order to take it in:
 - [ ] `- 1 + 2` is refused as an illegal fixity. It is `(- 1) + 2`
 - [ ] What a compiler made by Hazy does not do as well as the one GHC
       builds:
-  - It is slow: about eighteen times as long to compile the compiler to
-    Javascript. Vectors are trees, text is gone through a character at a
-    time in lists, and nothing has been measured yet
+  - It is slow. Checking the compiler's source takes it ninety seconds
+    where the one GHC built takes six. Compiling the compiler to native
+    code takes it about six minutes where the other takes three, clang's
+    share included. Vectors are trees, text is gone through a character at
+    a time in lists, and nothing has been measured yet
   - It never gives back what refers to itself, and the compiler keeps much
-    in references that do: making its own LLVM takes fifteen gigabytes.
+    in references that do: compiling itself takes six gigabytes at most.
     The check of the heap (`HAZY_CHECK`) calls that an error, so the tests
     ask it of the programs and not of the compiler
   - Its interactive session reads lines as they are given. There is no
@@ -1085,8 +1087,8 @@ The order to take it in:
     uses were written another way
   - Arithmetic of floating point. `Status` kept the time in a `Double` and
     now keeps it in a `Word64`
-- [ ] Run the check again after each of these and count what stops it next.
-      Each of the items below is a guess until then
+- [x] Run the check again after each of these and count what stops it next.
+      It was run until nothing stopped it, and then the compiler was built
 - [x] Less LLVM. The compiler's own source came to 366 MB of it, in 242
       thousand functions. It comes to 130 MB in 109 thousand, the
       executable is 43 MB where it was 59, and making it takes three
@@ -1177,24 +1179,23 @@ The order to take it in:
       function does, which has to keep the value: so a function that is
       given its last call through `seq` or `$!` still goes deeper each time
 
-`hazy.cabal` gives the working list:
+`hazy.cabal` gave the working list when this began. All of it is done, and
+the compiler builds itself natively (see `tools/bootstrap.sh`):
 
-- [ ] Language features Hazy lacks: `DeriveFunctor`, `DeriveFoldable`,
-      `DeriveTraversable`,
-      `StandaloneKindSignatures`, `RoleAnnotations`, `MonoLocalBinds`,
-      `DisambiguateRecordFields`, and full `TypeOperators`
-- [ ] Enough of `base` to build the compiler
-- [ ] The libraries it imports: `containers`, `directory`, `filepath`,
-      `parser-combinators`, `text`, `vector`
-- [ ] The three libraries the tools added, `diagnose`, `lambline` and
-      `brick`, with what they depend on. Each is behind a small interface
-      (`Diagnostics`, `Repl`, `Viewer`), so a self-compiled compiler could at
-      first be built without them
-- [ ] Exceptions. The compiler reports errors by throwing from pure code, and
-      `library/base` has only a stub of `Control.Exception`
-- [ ] File and process IO in the Rust runtime
-- [ ] Check: the compiler built by GHC and the compiler built by Hazy produce
-      the same output on the test suite
+- [x] Language features Hazy lacked: `DeriveFunctor`, `DeriveFoldable` and
+      `DeriveTraversable` are derived; the rest were not needed or were
+      written around, as said above
+- [x] Enough of `base` to build the compiler, in `library/base`
+- [x] The libraries it imports: `containers`, `directory`, `filepath`,
+      `parser-combinators`, `text` and `vector`, written in `library/base`
+- [x] The three libraries the tools added, `diagnose`, `lambline` and
+      `brick`, behind `Diagnostics`, `Repl` and `Viewer`. The first is drawn
+      by hand, the second reads plain lines, and the third is a placeholder
+- [x] Exceptions, in `Control.Exception`
+- [x] File and process IO in the Rust runtime: the compiler made by Hazy
+      reads its source, writes its LLVM and runs clang
+- [x] Check: the compiler built by GHC and the compiler built by Hazy make
+      the same LLVM of the compiler, and the tests pass
 
 Note on `base`. Hazy's README plans to replace the test-only `library/base`
 with a fork of GHC's `base`. Freddy is no longer confident in that: GHC's
