@@ -1037,11 +1037,28 @@ The order to take it in:
 - [ ] `- 1 + 2` is refused as an illegal fixity. It is `(- 1) + 2`
 - [ ] What a compiler made by Hazy does not do as well as the one GHC
       builds:
-  - It is slow. Checking the compiler's source takes it ninety seconds
-    where the one GHC built takes six. Compiling the compiler to native
-    code takes it about six minutes where the other takes three, clang's
-    share included. Vectors are trees, text is gone through a character at
-    a time in lists, and nothing has been measured yet
+  - It is slow. Checking the compiler's source takes it about eighty
+    seconds where the one GHC built takes six. Compiling the compiler to
+    native code takes it about six minutes where the other takes three,
+    clang's share included. What was measured:
+    - Two thirds of the time is in the runtime, making blocks and giving
+      them back: the program makes five and a half thousand million blocks
+      to check the source. A block is made and given back quickly. There
+      are just a great many
+    - `HAZY_PROFILE` says, now and then, which function made a block, and
+      lists them at the end. Every so many blocks is asked for with a
+      number, a million and more if none is given
+    - One in six was made by `div`, `mod` and `divMod` of `Int`, which went
+      the long way round through the defaults of the class: a vector is a
+      tree, and every step down it halves a number. They are written out
+      now, over the primitives
+    - Of the rest, one in seven is what forcing a thunk makes to keep its
+      value. Nothing else makes more than one in thirty: the time goes in
+      a little everywhere, to thunks, to functions made one argument at a
+      time, and to methods looked up in evidence
+    - A large block was found, when it was given back, by going through
+      every large block there was. That was not what made it slow, but it
+      is found by its address now
   - It never gives back what refers to itself, and the compiler keeps much
     in references that do: compiling itself takes six gigabytes at most.
     The check of the heap (`HAZY_CHECK`) calls that an error, so the tests
