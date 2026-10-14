@@ -183,8 +183,11 @@ struct Class {
 struct Heap {
     /// One for each size, from zero words to `SMALL`.
     classes: Vec<Class>,
-    /// The blocks too big for a slot, each with its size.
-    large: Vec<(*mut u64, usize)>,
+    /// The blocks too big for a slot, each with its size. A block is found
+    /// here by its address when it is given back: this was a list, gone
+    /// through from the start each time, and a program that holds many long
+    /// texts spent most of its time there.
+    large: HashMap<*mut u64, usize>,
     /// The blocks waiting to be taken apart.
     pending: Vec<*mut u64>,
     /// The thunks at the top of the program that have been forced.
@@ -199,6 +202,10 @@ struct Heap {
     /// How many allocations there have been since the last check.
     since: u64,
     report: bool,
+    /// Every how many allocations the function that allocated is noted,
+    /// if that is asked for, and how many times each was.
+    sample: Option<u64>,
+    sampled: HashMap<String, u64>,
     allocated: u64,
     counted: u64,
 }
@@ -233,7 +240,7 @@ fn heap() -> &'static mut Heap {
                         chunks: Vec::new(),
                     })
                     .collect(),
-                large: Vec::new(),
+                large: HashMap::new(),
                 pending: Vec::new(),
                 roots: Vec::new(),
                 catching: Vec::new(),
@@ -241,6 +248,8 @@ fn heap() -> &'static mut Heap {
                 check: setting("HAZY_CHECK").map(|value| value.parse().unwrap_or(1).max(1)),
                 since: 0,
                 report: setting("HAZY_STATS").is_some(),
+                sample: setting("HAZY_PROFILE").map(|value| value.parse().unwrap_or(1 << 20).max(1)),
+                sampled: HashMap::new(),
                 allocated: 0,
                 counted: 0,
             }
@@ -252,7 +261,7 @@ impl Heap {
     unsafe fn take(&mut self, size: usize) -> *mut u64 {
         if size > SMALL {
             let block = Vec::<u64>::with_capacity(size).leak().as_mut_ptr();
-            self.large.push((block, size));
+            self.large.insert(block, size);
             return block;
         }
         let class = &mut self.classes[size];
@@ -280,8 +289,7 @@ impl Heap {
         }
         self.live -= size * 8;
         if size > SMALL {
-            let place = self.large.iter().position(|(other, _)| *other == block);
-            let (_, size) = self.large.swap_remove(place.expect("a large block that is not known"));
+            let size = self.large.remove(&block).expect("a large block that is not known");
             drop(Vec::from_raw_parts(block, 0, size));
         } else {
             let class = &mut self.classes[size];
@@ -333,7 +341,7 @@ impl Heap {
                 }
             }
         }
-        found.extend(self.large.iter().map(|(block, _)| *block));
+        found.extend(self.large.keys().copied());
         found
     }
 
@@ -476,6 +484,12 @@ pub extern "C" fn hazy_alloc(size: u64, head: u64) -> *mut u64 {
         *block = head | ONE;
         heap.allocated += 1;
         heap.live += size * 8;
+        if let Some(every) = heap.sample {
+            if heap.allocated % every == 0 {
+                let caller = caller();
+                *heap.sampled.entry(caller).or_insert(0) += 1;
+            }
+        }
         if let Some(every) = heap.check {
             heap.since += 1;
             if heap.since >= every {
@@ -545,9 +559,38 @@ pub extern "C" fn hazy_check(given: *const Value, length: u64) {
     unsafe { heap().examine(given) }
 }
 
+/// The function that called `hazy_alloc`, by name. There is no stack to
+/// speak of, every call being a tail call, so finding it is cheap.
+#[inline(never)]
+fn caller() -> String {
+    let trace = std::backtrace::Backtrace::force_capture().to_string();
+    let names: Vec<&str> = trace
+        .lines()
+        .filter_map(|line| {
+            let line = line.trim_start();
+            let (number, name) = line.split_once(": ")?;
+            number.parse::<u32>().ok()?;
+            Some(name)
+        })
+        .collect();
+    match names.iter().position(|name| name.contains("hazy_alloc")) {
+        Some(at) => names.get(at + 1).unwrap_or(&"(nothing)").to_string(),
+        None => "(not found)".to_string(),
+    }
+}
+
 /// The program is over and holds nothing.
 pub fn finish() {
     let heap = heap();
+    if heap.sample.is_some() {
+        let mut sampled: Vec<(&String, &u64)> = heap.sampled.iter().collect();
+        sampled.sort_by(|left, right| right.1.cmp(left.1));
+        let total: u64 = heap.sampled.values().sum();
+        eprintln!("allocations, a sample of {total}:");
+        for (name, count) in sampled.into_iter().take(60) {
+            eprintln!("{:6.2}% {count:8} {name}", 100.0 * *count as f64 / total as f64);
+        }
+    }
     if heap.check.is_some() {
         unsafe { heap.examine(&[]) };
     }
