@@ -13,7 +13,7 @@ import qualified Data.Text.Lazy as Text.Lazy
 import Data.Text.Lazy.Builder (Builder, fromString, fromText)
 import qualified Data.Text.Lazy.Builder as Builder
 import Generate.Mangle.Builtin (Builtin (..), canonical)
-import Javascript.Keywords (keywords)
+import Generate.Keywords (keywords)
 import qualified Semantic.Index.Constructor as Constructor
 import qualified Semantic.Index.Type as Type
 import qualified Semantic.Index.Type2 as Type2

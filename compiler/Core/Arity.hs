@@ -5,9 +5,7 @@
 -- and nothing in a type says how a definition of one was written: as
 -- functions inside functions, which can be given every argument at once, or
 -- as something that works a function out. That is found here, once, when a
--- definition is made, and kept with it. What makes Javascript reads it to
--- make the form of a definition that takes every argument at once, and to
--- send a call there.
+-- definition is made, and kept with it.
 --
 -- What is counted is what is written: the functions a definition is made
 -- of, one inside the next. They are counted through what is nothing when a
@@ -21,7 +19,7 @@
 --   variable is called by that variable.
 --
 -- Whatever goes by what is counted here has to get to the functions the
--- same way: see @peel@ in "Generate.Go.Expression", and "Core.Eta".
+-- same way: see "Core.Eta".
 module Core.Arity (Arity (..), measure, alias) where
 
 import Core.Tree.Constraints (ConstraintsF (..))

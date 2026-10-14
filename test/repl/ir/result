@@ -132,19 +132,6 @@ L29:
   musttail call tailcc void @hazy_force(i64 %t18, i64 %t1)
   ret void
 }
-=== Javascript ===
-const f = {
-  a : 0,
-  b : a => {
-    const c = a ;
-    const e = ( d . a ? d . b ( ) : d . b ) . a ;
-    return ( e . a ? e . b ( ) : e . b ) ( c ) ( c ) ;
-    b ( ) ;
-  }
-} ;
-export {
-  f as "double"
-} ;
 @Repl.it'repl = thunk(a).
     IntAdd(1, 1; a)
 entry = <@Repl.it'repl | force(apply(; mu~ _.

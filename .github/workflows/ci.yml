@@ -28,9 +28,6 @@ jobs:
           ghc-version: "9.12.2"
           cabal-version: "3.14"
 
-      # The generated Javascript is run with Bun.
-      - uses: oven-sh/setup-bun@v2
-
       - name: Restore what cabal built before
         uses: actions/cache@v4
         with:
@@ -81,7 +78,10 @@ jobs:
           ghc-version: "9.12.2"
           cabal-version: "3.14"
 
+      # Hazy, which is compiled below to see that it can be, makes
+      # Javascript, and its tests run that with Bun. Nothing else here does.
       - uses: oven-sh/setup-bun@v2
+        if: matrix.name == 'Linux'
 
       - name: Restore what cabal built before
         uses: actions/cache@v4

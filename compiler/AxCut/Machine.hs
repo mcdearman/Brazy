@@ -1,11 +1,10 @@
 -- |
 -- An abstract machine for AxCut.
 --
--- This is the reference for what an AxCut program means, and it is how the
--- lowering is tested before any code generator exists: a program run here
--- must print what the Javascript backend's output prints. It is not a
--- runtime. Nothing here is tuned, and values are left to Haskell's garbage
--- collector.
+-- This is the reference for what an AxCut program means, and it is what a
+-- code generator is tested against: a program made into native code must
+-- print what it prints run here. It is not a runtime. Nothing here is
+-- tuned, and values are left to Haskell's garbage collector.
 --
 -- The environment is kept with its names, which a real machine would not
 -- have. 'Substitute' looks values up by name, so an environment that the

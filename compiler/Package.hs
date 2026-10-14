@@ -27,9 +27,7 @@ import System.IO.Unsafe (unsafeInterleaveIO)
 data Module = Module
   { name :: !Text,
     path :: !FullQualifiers,
-    target :: FilePath,
-    header :: Text,
-    artifacts :: Text
+    header :: Text
   }
   deriving (Show)
 
@@ -67,11 +65,6 @@ haskell = \case
   Root name -> unpack name ++ ".hs"
   root :</> subpath -> unpack root </> haskell subpath
 
-javascript :: Path -> FilePath
-javascript = \case
-  Root name -> unpack name ++ ".mjs"
-  root :</> subpath -> unpack root </> javascript subpath
-
 qualifiers :: Path -> FullQualifiers
 qualifiers = go Lexer.Local
   where
@@ -101,22 +94,15 @@ load root = do
   let Meta {toggles, paths} = parse meta $ startStream (pack package) raw
   modules <- for paths $ \path -> do
     let haskellName = root </> "header" </> haskell path
-        javascriptName = root </> "artifacts" </> javascript path
     header <- unsafeInterleaveIO $ do
       handle <- openFile haskellName ReadMode
-      hSetEncoding handle utf8
-      Text.hGetContents handle
-    artifacts <- unsafeInterleaveIO $ do
-      handle <- openFile javascriptName ReadMode
       hSetEncoding handle utf8
       Text.hGetContents handle
     pure
       Module
         { name = pack haskellName,
           path = qualifiers path,
-          target = javascript path,
-          header,
-          artifacts
+          header
         }
   pure
     Package
