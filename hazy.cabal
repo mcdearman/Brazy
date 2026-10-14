@@ -138,10 +138,8 @@ executable hazy
     Generate.Global
     Generate.GlobalType
     Generate.Info
-    Generate.Keywords
     Generate.LocalType
     Generate.Mangle
-    Generate.Mangle.Builtin
     Generate.Precontext
     Generate.Variable
     Graph.StronglyConnected

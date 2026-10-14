@@ -25,7 +25,7 @@ import Data.Vector (Vector)
 import qualified Data.Vector as Vector
 import Error (HazyError)
 import qualified Error (allow, fail, types)
-import qualified Generate.Mangle as Mangle (pathJS, pathSys)
+import qualified Generate.Mangle as Mangle (pathListed, pathSys)
 import qualified AxCut.Lower as AxCut (lowerUnit)
 import qualified LLVM.FromAxCut as LLVM
   ( Unit (..),
@@ -570,7 +570,7 @@ main'' args = case getOpt order options args of
                   Text.IO.hPutStr handle (contents loaded)
                   hClose handle
             zipWithM_ copy (toList code) (toList modules)
-            let format checked = pack "\n" <> Mangle.pathJS (Semantic.name checked) <> pack ".hs"
+            let format checked = pack "\n" <> Mangle.pathListed (Semantic.name checked) <> pack ".hs"
                 files = foldMap format code
                 extensions = intercalate (pack ",") language
                 meta = extensions <> pack ";" <> files

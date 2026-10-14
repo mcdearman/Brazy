@@ -1,19 +1,14 @@
-module Generate.Mangle
-  ( module Generate.Mangle,
-    Builtin (..),
-    canonical,
-  )
-where
+-- |
+-- What the compiler calls the definitions of a program, the instances in
+-- it, its modules, and the values it makes up.
+module Generate.Mangle where
 
 import Data.List.NonEmpty (NonEmpty (..))
 import qualified Data.List.NonEmpty as NonEmpty
-import qualified Data.Set as Set
 import Data.Text (Text, pack, unpack)
 import qualified Data.Text.Lazy as Text.Lazy
 import Data.Text.Lazy.Builder (Builder, fromString, fromText)
 import qualified Data.Text.Lazy.Builder as Builder
-import Generate.Mangle.Builtin (Builtin (..), canonical)
-import Generate.Keywords (keywords)
 import qualified Semantic.Index.Constructor as Constructor
 import qualified Semantic.Index.Type as Type
 import qualified Semantic.Index.Type2 as Type2
@@ -32,17 +27,16 @@ letters, letters' :: [Char]
 letters = ['a' .. 'z'] ++ ['A' .. 'Z'] ++ ['$', '_']
 letters' = letters ++ ['0' .. '9']
 
+-- |
+-- Every name of a letter or more, shortest first.
 names :: [Text]
-names = filter (`Set.notMember` keywords) $ map pack $ go [""]
+names = map pack $ go [""]
   where
     go :: [String] -> [String]
     go post =
       let set = (:) <$> letters <*> post
           next = (:) <$> letters' <*> post
        in set ++ go next
-
-fields :: [Text]
-fields = names
 
 data Brand
   = Class
@@ -125,17 +119,16 @@ mangleInstance run brand name target = Text.Lazy.toStrict $ Builder.toLazyText b
           qualify (path :.. root :.=. name)
         ]
 
-lazy = pack "a"
-
-value = pack "b"
-
-local = pack "a"
-
+-- |
+-- Where the source of a module is, under some directory.
 pathSys :: FullQualifiers -> FilePath
 pathSys = foldr1 (</>) . fmap unpack . path'
 
-pathJS :: FullQualifiers -> Text
-pathJS = foldr1 (\x y -> x <> pack "/" <> y) . path'
+-- |
+-- Where the source of a module is, as a package lists it, whatever system
+-- the package was made on.
+pathListed :: FullQualifiers -> Text
+pathListed = foldr1 (\x y -> x <> pack "/" <> y) . path'
 
 path' :: FullQualifiers -> NonEmpty Text
 path' (root :.. head) = go (runConstructorIdentifier head :| []) root
@@ -144,13 +137,7 @@ path' (root :.. head) = go (runConstructorIdentifier head :| []) root
     go result (root :. head) =
       go (NonEmpty.cons (runConstructorIdentifier head) result) root
 
-depth :: FullQualifiers -> Text
-depth (Local :.. _) = pack "./"
-depth (path :. _ :.. root) = depth (path :.. root) <> pack "../"
-
-mjs = pack ".mjs"
-
-runtime = pack "Hazy.mjs"
-
+-- |
+-- The names that are made up for values, in the order they are used.
 unique :: [Text]
 unique = names

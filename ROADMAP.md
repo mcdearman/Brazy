@@ -1234,13 +1234,13 @@ now. These are what went by Javascript, in the order they are moved.
   - What the sequent calculus shared with the generator stays, under
     `Generate.*`: the names of definitions (`Generate.Precontext`), the
     bindings and `Generate.Context`
-- [ ] What is left over from it. `Generate.Mangle` still has what a name is
-      in Javascript, and its fresh names still keep off Javascript's
-      keywords (`Generate.Keywords`), which keeps what is generated as it
-      was. `Generate.Context` still counts the builtin names a module of
-      Javascript used. The form of a definition that takes every argument at
-      once, which Javascript had its own of, is the sequent calculus's
-      alone again
+- [x] What was left over from it. `Generate.Mangle` no longer has what a
+      name is in Javascript, and the names it makes up for values no longer
+      keep off Javascript's keywords: `Generate.Keywords` is gone. Nor does
+      `Generate.Context` count the builtin names a module of Javascript
+      used, or name the definitions it imported: `Generate.Mangle.Builtin`
+      is gone. The form of a definition that takes every argument at once,
+      which Javascript had its own of, is the sequent calculus's alone again
 - [ ] Bun is only wanted for Hazy's own tests, which run the Javascript that
       Hazy makes
 
