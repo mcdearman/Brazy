@@ -71,7 +71,12 @@ All by Chris on 2026-10-09 unless noted.
   day.
 - **The Javascript backend is the oracle.** Native output is checked against
   what the Javascript backend produces, except where the Javascript backend
-  is itself wrong.
+  is itself wrong. This held until the next decision.
+- **Javascript is on its way out, and the AxCut machine is the oracle.**
+  Freddy, through Chris, on 2026-10-13: LLVM is the goal, Javascript was
+  there to check that programs are compiled rightly, and the AxCut machine
+  does that now. Nothing more is done to what makes Javascript. What still
+  goes by it is moved off it, and then it is taken out: see M7.
 
 ## Where Hazy stands today
 
@@ -1196,6 +1201,38 @@ with a fork of GHC's `base`. Freddy is no longer confident in that: GHC's
 `base` is now re-exports of `ghc-internal`, so there is little to fork. This
 milestone grows the existing `library/base` as far as the compiler needs and
 leaves the full standard library question open.
+
+### M7. Without Javascript
+
+Javascript was what a program was run as to see that it was compiled
+rightly. The AxCut machine runs AxCut as it is written, and is what says so
+now. These are what went by Javascript, in the order they are moved.
+
+- [x] The tests. A program is run on the AxCut machine and as native code,
+      and what each prints is compared with what is expected. It is no
+      longer made into Javascript and run by Bun. A package's program
+      likewise
+- [x] The bootstrap. The compiler is made into an executable, and that
+      makes the executable again, by itself: it reads the source, makes the
+      LLVM and has it compiled and linked. The LLVM the two were made from
+      is the same, 130 MB of it. It takes thirteen minutes and six
+      gigabytes. Before, the second compiler only ever made Javascript
+- [x] Hazy's own source is made into an executable to run Hazy's tests,
+      and not into Javascript (`tools/upstream.sh`). Hazy makes Javascript
+      and nothing else, so its tests still run what it makes with Bun
+- [ ] What still makes Javascript or is made of it:
+  - A package is kept as Javascript, its `artifacts`, beside the headers
+    and the native object. `--pack` makes both
+  - With nothing asked of it the compiler makes Javascript: `-o` is where
+    it goes. Native code is asked for with `--native`
+  - The interactive session shows a definition as Javascript among its
+    other forms
+  - `tools/bootstrap.sh` can still be asked for `javascript`
+- [ ] Take out what makes Javascript: `Generate.Go.*`, `Javascript.*`, the
+      runtime in `runtime/javascript`, and what of `Generate.*` the
+      sequent calculus does not use. `Generate.Context`, `Generate.Mangle`
+      and the bindings are used by `Sequent.FromCore` and stay
+- [ ] Bun is then only wanted for Hazy's own tests
 
 ## Track A: Hazy's own list
 

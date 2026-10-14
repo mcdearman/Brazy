@@ -56,21 +56,14 @@ for good in $(sources test/good); do
     $HAZY "$good"
 done
 
-# Run the execution tests
-echo "=== Execution ==="
-for run_dir in test/run/*/; do
-    run=$(basename "$run_dir")
-    mkdir -p ".test/$run"
-    echo "Running $run"
-    $HAZY -q "test/run/$run/source" -o ".test/$run"
-    bun ".test/$run/index.mjs" > ".test/$run/result"
-    diff "test/run/$run/result" ".test/$run/result"
-done
-
-# Run the execution tests on the AxCut machine
+# Run the execution tests on the AxCut machine. It is what says a program
+# is compiled rightly: it runs AxCut as AxCut is written, with nothing made
+# of it. The programs were run as Javascript for that, before there was
+# anything else to run them as.
 echo "=== Execution (AxCut) ==="
 for run_dir in test/run/*/; do
     run=$(basename "$run_dir")
+    mkdir -p ".test/$run"
     echo "Running $run"
     $HAZY -q "test/run/$run/source" --run-axcut > ".test/$run/axcut"
     diff "test/run/$run/result" ".test/$run/axcut"
@@ -107,7 +100,7 @@ $HAZY -q "test/run/hello/source" --native ".test/native/hello-whole" --whole --c
 HAZY_CHECK=1 ".test/native/hello-whole" > ".test/native/hello-whole.result"
 diff "test/run/hello/result" ".test/native/hello-whole.result"
 
-# Build each test package, and run the program that uses it both ways
+# Build each test package, and run the program that uses it
 echo "=== Packages ==="
 for package_dir in test/package/*/; do
     package=$(basename "$package_dir")
@@ -116,9 +109,8 @@ for package_dir in test/package/*/; do
     echo "Running $package"
     $HAZY -q "test/package/$package/library" -o "$out/library" --pack
     $HAZY -q "test/package/$package/library" --native-object "$out/library/native.o"
-    $HAZY -q "test/package/$package/source" --package "./$out/library" -o "$out/javascript"
-    bun "$out/javascript/index.mjs" > "$out/javascript.result"
-    diff "test/package/$package/result" "$out/javascript.result"
+    $HAZY -q "test/package/$package/source" --package "./$out/library" --run-axcut > "$out/axcut.result"
+    diff "test/package/$package/result" "$out/axcut.result"
     $HAZY -q "test/package/$package/source" --package "./$out/library" --native "$out/native" --checked
     HAZY_CHECK=1 "$out/native" > "$out/native.result"
     diff "test/package/$package/result" "$out/native.result"
