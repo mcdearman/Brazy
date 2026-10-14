@@ -15,9 +15,9 @@
 > intermediate languages, the LLVM backend, the Rust runtime, the REPL and the
 > roadmap. Those commits carry a `Co-Authored-By: Claude` line. Freddy's
 > blessing is for the fork as a whole: he has not reviewed this code, and it
-> should not be taken as his work or as approved by him. It is tested against
-> Hazy's Javascript backend, but it is experimental, so read it with care
-> before relying on it.
+> should not be taken as his work or as approved by him. It is tested by
+> running programs on a reference machine for AxCut and as native code, but
+> it is experimental, so read it with care before relying on it.
 
 # The Hazy Haskell Compiler
 
@@ -62,11 +62,11 @@ tools/build.sh .dist
 # Add the compiler to the path for testing
 export PATH=.dist/bin:$PATH
 
-# Compile hello world
-hazy test/run/hello/source -o .hello
+# Compile hello world to a native executable (this wants clang and cargo)
+hazy test/run/hello/source --native .hello/hello
 
 # Run hello world
-bun .hello/index.mjs
+.hello/hello
 ```
 
 # Windows

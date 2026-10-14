@@ -41,23 +41,11 @@ DIST="$work/.dist"
 PACKAGE="$DIST/lib/hazy/packages"
 mkdir -p "$DIST/bin" "$PACKAGE"
 
+# Hazy's compiler is made into an executable. What that makes is
+# Javascript, as Hazy makes nothing else, and Hazy's tests run it.
 echo "Hazy's compiler, made by Brazy"
-"$HAZY" -q -XStableImports compiler -o "$DIST/bin"
-
-# What Brazy made is Javascript. Hazy's tools ask for an executable, and
-# this is one: Hazy's source goes deeper than Javascript is given room for,
-# and the stack only grows under a limit that is a number.
-cat > "$DIST/bin/hazy" << WRAPPER
-#!/usr/bin/env bash
-stack=4000000
-if ! ulimit -s "\$stack" 2> /dev/null; then
-    stack="\$(ulimit -s)"
-    if [ "\$stack" = unlimited ]; then stack=1000000; fi
-fi
-export BUN_JSC_maxPerThreadStackUsage=\$((stack * 1000))
-exec bun "$DIST/bin/index.mjs" "\$@"
-WRAPPER
-chmod +x "$DIST/bin/hazy"
+"$HAZY" -q -XStableImports compiler --native "$DIST/bin/hazy" 2> "$work/.native.log" \
+    || { grep -v Warning "$work/.native.log"; exit 1; }
 
 # The rest is Hazy's tools/build.sh after it has built the compiler.
 echo "Hazy's packages, made by that compiler"

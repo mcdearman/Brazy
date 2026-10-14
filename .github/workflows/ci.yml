@@ -105,14 +105,11 @@ jobs:
       - name: Test
         run: make test
 
-      # The compiler that Hazy makes of its own source makes it again, and
-      # the two are compared: once with the compiler made into Javascript,
-      # and once with it made into an executable.
+      # The compiler that Hazy makes of its own source, an executable, makes
+      # it again, and the LLVM the two were made from is compared.
       - name: Check that Hazy compiles itself, and that what it makes does too
         if: matrix.name == 'Linux'
-        run: |
-          tools/bootstrap.sh .dist/bin/hazy javascript
-          tools/bootstrap.sh .dist/bin/hazy native
+        run: tools/bootstrap.sh .dist/bin/hazy
 
       # Hazy, which this is a fork of, is compiled from its own source, and
       # its tests are run with what that makes.
