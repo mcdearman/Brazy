@@ -1,10 +1,10 @@
 -- |
 -- Core to the sequent calculus.
 --
--- This follows "Generate.Go", the Javascript generator, case for case, so
--- that the two agree on what a program means. Where the Javascript
--- generator builds an expression, this builds a statement that hands its
--- value to a consumer.
+-- This was written after the Javascript generator there used to be, case
+-- for case, so that the two agreed on what a program means. Where that
+-- built an expression, this builds a statement that hands its value to a
+-- consumer.
 --
 -- The whole program is translated at once, and only the definitions that
 -- the one it starts at can reach are kept.
@@ -52,12 +52,11 @@ import Generate.Context (Context, fresh, singleBinding, (!-), (!=.), (!~))
 import qualified Generate.Context as Context
 import qualified Generate.Global as Global (Global (..))
 import qualified Generate.GlobalType as GlobalType
-import Generate.Go.Module (precontext)
 import qualified Generate.Info as Info
 import qualified Generate.Mangle as Mangle (mangle)
 import Generate.LocalType (LocalType (LocalType))
 import qualified Generate.LocalType as LocalType
-import Generate.Precontext (Precontext (Precontext))
+import Generate.Precontext (Precontext (Precontext), precontext)
 import qualified Generate.Precontext as Precontext
 import qualified Generate.Variable as Variable (Variable (..))
 import qualified Semantic.Index.Constructor as Constructor

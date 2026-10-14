@@ -25,10 +25,7 @@ import Data.Vector (Vector)
 import qualified Data.Vector as Vector
 import Error (HazyError)
 import qualified Error (allow, fail, types)
-import qualified Generate.Go.Module as Module (generate)
-import qualified Generate.Go.Module as Stage5
-import qualified Generate.Mangle as Mangle
-import qualified Javascript.Printer.Lexer as Javascript (print, run)
+import qualified Generate.Mangle as Mangle (pathJS, pathSys)
 import qualified AxCut.Lower as AxCut (lowerUnit)
 import qualified LLVM.FromAxCut as LLVM
   ( Unit (..),
@@ -40,7 +37,6 @@ import qualified LLVM.FromAxCut as LLVM
     windows,
     withoutReuse,
   )
-import qualified Javascript.Tree.Module as Module (print)
 import Package as X (Module (Module), Package (Package))
 import qualified Package
 import Repl (Compiler (..), repl)
@@ -201,9 +197,6 @@ stage4 ::
   IO (Vector Core.Module)
 stage4 _ = pure . Eta.expand . Vector.map Module.simplify
 
-stage5 :: Debug -> Vector Core.Module -> IO (Vector Stage5.Module)
-stage5 _ = pure . Module.generate
-
 -- |
 -- What a directory is called: its own name, without what it is in.
 packageName :: FilePath -> String
@@ -272,7 +265,6 @@ data Failure
 
 data Format
   = Full
-  | Partial
   | Pack
 
 data Bare
@@ -337,10 +329,9 @@ options =
     Option [] ["parse"] (NoArg parse) "Parse source",
     Option [] ["resolve"] (NoArg resolve) "Resolve source",
     Option [] ["check"] (NoArg check) "Typecheck source",
-    Option ['o'] ["generate"] (ReqArg generate "PATH") "Generate Javascript from source",
+    Option ['o'] [] (ReqArg generate "PATH") "Compile the program to a native executable, or with --pack write the package",
     Option ['I'] [] (ReqArg include "PATH") "Add directory to search path",
     Option [] ["package"] (ReqArg package "NAME or PATH ('./...' or '/...')") "Load a package.",
-    Option ['c'] [] (NoArg partial) "Don't include package artifacts",
     Option [] ["pack"] (NoArg pack) "Emit package",
     Option ['X'] [] (ReqArg extension "EXTENSION") "Enable extension",
     Option ['q'] [""] (NoArg quiet) "Don't show messages when compiling",
@@ -388,7 +379,6 @@ options =
     package path execute@Execute {packages} = execute {packages = packages :> path}
     show execute = execute {show = Show}
     quiet execute = execute {verbose = Quiet}
-    partial execute = execute {format = Partial}
     pack execute = execute {format = Pack}
     bare execute = execute {bare = Bare}
     bareRuntime execute = execute {bare = Runtime}
@@ -457,7 +447,12 @@ main'' args = case getOpt order options args of
         split = length headers
         all = headers <> modules
         help = putStr $ usageInfo "hazy [options] folders..." options
-        run = case mode of
+        -- What is made of a program is an executable, however it is asked
+        -- for.
+        asked = case (mode, format) of
+          (Generate target, Full) -> Native target
+          _ -> mode
+        run = case asked of
           Repl -> do
             parsed <- newIORef Map.empty
             verified <- newIORef Nothing
@@ -557,72 +552,33 @@ main'' args = case getOpt order options args of
                   }
             callProcess "clang" $ ["-O1", "-Wno-override-module"] ++ sections ++ ["-c", source, "-o", target]
             Status.finished progress label
+          -- A package is the source of its modules, each where its name says,
+          -- and what says which they are and how they are read. It is
+          -- checked first: what is wrong with it is said here, and not to
+          -- whoever uses it.
           Generate target -> do
             all <- stage1 debug all
             all <- stage2 debug all
             all <- stage3 debug all
-            all <- stage4 debug all
-            all <- stage5 debug all
             let code = Vector.drop split all
-                total = length code
-                -- What is being made: a package is called by its directory.
-                label = case format of
-                  Partial -> packageName (takeDirectory (dropTrailingPathSeparator target))
-                  _ -> packageName target
-            Status.status progress "Compiling" label
-            out <- case format of
-              Partial -> pure target
-              Full -> do
-                for_ packages $ \Package {modules} ->
-                  for_ modules $ \Package.Module {target = subtarget, artifacts} -> do
-                    let file = target </> subtarget
-                    createDirectoryIfMissing True (dropFileName file)
-                    handle <- openFile file WriteMode
-                    hSetEncoding handle utf8
-                    Text.IO.hPutStr handle artifacts
-                let index =
-                      mconcat
-                        [ pack "import{main as a}from\"./Main.mjs\";(a.",
-                          Mangle.lazy,
-                          pack "?a.",
-                          Mangle.value,
-                          pack "():a.",
-                          Mangle.value,
-                          pack ")()"
-                        ]
-                handle <- openFile (target </> "index.mjs") WriteMode
-                hSetEncoding handle utf8
-                Text.IO.hPutStr handle index
-                pure target
-              Pack -> pure $ target </> "artifacts"
-            for_ (zip [1 ..] $ toList code) $ \(index, Stage5.Module {name, statements}) -> do
-              Status.progress progress "Building" index total (moduleName name)
-              let file = out </> (Mangle.pathSys name ++ ".mjs")
-              createDirectoryIfMissing True (dropFileName file)
-              let javascript = Javascript.print $ Module.print statements
-              let text = Builder.toLazyText $ Javascript.run javascript
-              Text.Lazy.IO.writeFile file text
-            case format of
-              Pack -> do
-                let copy Stage5.Module {name = path} loaded = do
-                      let file = target </> "header" </> Mangle.pathSys path ++ ".hs"
-                      createDirectoryIfMissing True (dropFileName file)
-                      handle <- openFile file WriteMode
-                      hSetEncoding handle utf8
-                      Text.IO.hPutStr handle (contents loaded)
-                      hClose handle
-                zipWithM_ copy (toList code) (toList modules)
-                let format Stage5.Module {name = path} =
-                      pack "\n" <> Mangle.pathJS path <> pack ".hs"
-                    files = foldMap format code
-                    extensions = intercalate (pack ",") language
-                    meta = extensions <> pack ";" <> files
-                handle <- openFile (target </> "package") WriteMode
-                hSetEncoding handle utf8
-                Text.IO.hPutStr handle meta
-                hClose handle
-              _ -> pure ()
-            Status.finished progress label
+            forceModules "Checking" show progress Semantic.name code
+            let copy checked loaded = do
+                  let file = target </> "header" </> Mangle.pathSys (Semantic.name checked) ++ ".hs"
+                  createDirectoryIfMissing True (dropFileName file)
+                  handle <- openFile file WriteMode
+                  hSetEncoding handle utf8
+                  Text.IO.hPutStr handle (contents loaded)
+                  hClose handle
+            zipWithM_ copy (toList code) (toList modules)
+            let format checked = pack "\n" <> Mangle.pathJS (Semantic.name checked) <> pack ".hs"
+                files = foldMap format code
+                extensions = intercalate (pack ",") language
+                meta = extensions <> pack ";" <> files
+            createDirectoryIfMissing True target
+            handle <- openFile (target </> "package") WriteMode
+            hSetEncoding handle utf8
+            Text.IO.hPutStr handle meta
+            hClose handle
         -- The native pipeline takes the whole program, packages included.
         whole all = do
           all <- stage1 debug all

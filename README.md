@@ -49,8 +49,8 @@ Haskell features are missing, only a test Javascript backend is implemented.
 # Quickstart
 
 Ensure that GHC 9.14 and Cabal 3.16 are downloaded. Other GHC and Cabal versions
-will probably work too but aren't tested regularly. The generated Javascript is
-run with [Bun](https://bun.sh).
+will probably work too but aren't tested regularly. Programs are compiled to
+native code, which wants `clang` and `cargo`.
 
 ```sh
 # (optional) Tell Cabal to use GHC 9.14
@@ -143,7 +143,7 @@ which include `:load PATH`, `:sequent EXPR` and `:axcut EXPR`.
 
 `:ir EXPR` opens a full-screen viewer on an expression, or on a definition if
 it is given the name of one, with a page for each form the compiler puts it
-in: Core, the sequent calculus, AxCut, LLVM IR and Javascript. Tab moves to the next
+in: Core, the sequent calculus, AxCut and LLVM IR. Tab moves to the next
 page, Shift-Tab to the one before, the arrow keys and Page Up and Page Down
 scroll, and `q` closes it. The viewer is the small library in `viewer`, which
 wraps the `brick` package.
@@ -176,14 +176,14 @@ make test            # run the tests
 # Packages
 
 Hazy has a bare minimum package system at the moment. A package is a directory
-with three subfiles:
+with these in it:
 * `$PACKAGE/package`: This contains the package metadata. As of now, it only
    includes the default extensions and the list of Haskell files in the package.
 * `$PACKAGE/header`: This contains the compiler generated header files that are
    not looked at for code generation. As of now, these files are just copies of
    their original source files.
-* `$PACKAGE/artifacts`: This contains the generated Javascript that Hazy needs
-   to copy when generating a final executable.
+* `$PACKAGE/native.o`: The package compiled to native code, which a program
+   that uses the package is linked with.
 
 To generate a package, just compile a set of modules and pass `--pack`.
 
@@ -193,8 +193,7 @@ hazy Module.hs modules/ -o mypackage --pack
 ```
 This will generate a package into a directory with the specified name.
 
-For a package to be used by a native program it also needs a native object,
-which is made separately and kept in the package as `native.o`:
+The native object is made separately and kept in the package as `native.o`:
 ```sh
 hazy Module.hs modules/ --native-object mypackage/native.o
 ```
@@ -209,8 +208,8 @@ hazy --package pkg ... # system package
 hazy --package ./mypackage ... # specific package
 ```
 This causes of all of the packages modules to be added to the module list and,
-when generating a full executable, and causes the package's Javascript to be
-copied to the final program.
+when generating a full executable, the package's native object to be linked
+into the final program.
 
 As of now, compiled packages have to be manually moved to into system packages
 folder (`$DIST/lib/hazy/packages`) to be easily loadable by `--package`.

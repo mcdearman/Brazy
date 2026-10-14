@@ -137,99 +137,17 @@ executable hazy
     Generate.Context
     Generate.Global
     Generate.GlobalType
-    Generate.Go.Declarations
-    Generate.Go.Evidence
-    Generate.Go.Expression
-    Generate.Go.Instance
-    Generate.Go.Module
-    Generate.Go.Statements
     Generate.Info
+    Generate.Keywords
     Generate.LocalType
     Generate.Mangle
     Generate.Mangle.Builtin
     Generate.Precontext
-    Generate.Target
     Generate.Variable
     Graph.StronglyConnected
     Graph.Topological
     Graph.Topological1
     Graph.Topological2
-    Javascript.Keywords
-    Javascript.Printer
-    Javascript.Printer.Lexer
-    Javascript.Printer.Tree.AdditiveExpression
-    Javascript.Printer.Tree.ArgumentList
-    Javascript.Printer.Tree.Arguments
-    Javascript.Printer.Tree.ArrayLiteral
-    Javascript.Printer.Tree.ArrowFunction
-    Javascript.Printer.Tree.ArrowParameters
-    Javascript.Printer.Tree.AssignmentExpression
-    Javascript.Printer.Tree.BindingElement
-    Javascript.Printer.Tree.BindingList
-    Javascript.Printer.Tree.BitwiseANDExpression
-    Javascript.Printer.Tree.BitwiseORExpression
-    Javascript.Printer.Tree.BitwiseXORExpression
-    Javascript.Printer.Tree.Block
-    Javascript.Printer.Tree.BreakStatement
-    Javascript.Printer.Tree.CallExpression
-    Javascript.Printer.Tree.ClassElementName
-    Javascript.Printer.Tree.ConciseBody
-    Javascript.Printer.Tree.ConditionalExpression
-    Javascript.Printer.Tree.Declaration
-    Javascript.Printer.Tree.ElementList
-    Javascript.Printer.Tree.Elision
-    Javascript.Printer.Tree.EqualityExpression
-    Javascript.Printer.Tree.ExponentiationExpression
-    Javascript.Printer.Tree.ExportDeclaration
-    Javascript.Printer.Tree.ExportsList
-    Javascript.Printer.Tree.ExportSpecifier
-    Javascript.Printer.Tree.Expression
-    Javascript.Printer.Tree.FormalParameterList
-    Javascript.Printer.Tree.FormalParameters
-    Javascript.Printer.Tree.FromClause
-    Javascript.Printer.Tree.IfStatement
-    Javascript.Printer.Tree.ImportClause
-    Javascript.Printer.Tree.ImportDeclaration
-    Javascript.Printer.Tree.ImportsList
-    Javascript.Printer.Tree.ImportSpecifier
-    Javascript.Printer.Tree.Initializer
-    Javascript.Printer.Tree.LabelledItem
-    Javascript.Printer.Tree.LabelledStatement
-    Javascript.Printer.Tree.LeftHandSideExpression
-    Javascript.Printer.Tree.LetOrConst
-    Javascript.Printer.Tree.LexicalBinding
-    Javascript.Printer.Tree.LexicalDeclaration
-    Javascript.Printer.Tree.Literal
-    Javascript.Printer.Tree.LiteralPropertyName
-    Javascript.Printer.Tree.LogicalANDExpression
-    Javascript.Printer.Tree.LogicalORExpression
-    Javascript.Printer.Tree.MemberExpression
-    Javascript.Printer.Tree.MethodDefinition
-    Javascript.Printer.Tree.ModuleExportName
-    Javascript.Printer.Tree.ModuleItem
-    Javascript.Printer.Tree.MultiplicativeExpression
-    Javascript.Printer.Tree.NamedExports
-    Javascript.Printer.Tree.NamedImports
-    Javascript.Printer.Tree.NewExpression
-    Javascript.Printer.Tree.ObjectLiteral
-    Javascript.Printer.Tree.PrimaryExpression
-    Javascript.Printer.Tree.PropertyDefinition
-    Javascript.Printer.Tree.PropertyDefinitionList
-    Javascript.Printer.Tree.PropertyName
-    Javascript.Printer.Tree.RelationExpression
-    Javascript.Printer.Tree.ReturnStatement
-    Javascript.Printer.Tree.ShiftExpression
-    Javascript.Printer.Tree.ShortCircuitExpression
-    Javascript.Printer.Tree.SingleNameBinding
-    Javascript.Printer.Tree.Statement
-    Javascript.Printer.Tree.StatementListItem
-    Javascript.Printer.Tree.UnaryExpression
-    Javascript.Printer.Tree.UpdateExpression
-    Javascript.Printer.Tree.WithClause
-    Javascript.Tree.Expression
-    Javascript.Tree.Field
-    Javascript.Tree.Module
-    Javascript.Tree.Statement
     LLVM.FromAxCut
     Order
     Package

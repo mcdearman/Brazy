@@ -14,23 +14,14 @@ data Binding scope = Binding
     -- evidence. A definition that takes evidence is a function of it and
     -- nothing to evaluate, but a name for what a newtype wraps is whatever
     -- was wrapped, and that is evaluated to the function first.
-    delayed :: !Bool,
-    -- | The form of the variable that takes every argument at once, if it
-    -- is a definition with one, and how many arguments that is: see
-    -- @uncurried@ in "Generate.Go.Expression".
-    worker :: !(Maybe (Variable, Int))
+    delayed :: !Bool
   }
 
 binding :: Variable -> Binding scope
-binding name = Binding {name, strict = False, delayed = False, worker = Nothing}
-
--- |
--- A definition, which may have a form that takes every argument at once.
-defined :: Variable -> Maybe (Variable, Int) -> Binding scope
-defined name worker = Binding {name, strict = False, delayed = False, worker}
+binding name = Binding {name, strict = False, delayed = False}
 
 instance Shift0.Functor Binding where
   map = Shift.mapDefault
 
 instance Shift.Functor Binding where
-  map _ Binding {name, strict, delayed, worker} = Binding {name, strict, delayed, worker}
+  map _ Binding {name, strict, delayed} = Binding {name, strict, delayed}

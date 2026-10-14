@@ -1220,19 +1220,29 @@ now. These are what went by Javascript, in the order they are moved.
 - [x] Hazy's own source is made into an executable to run Hazy's tests,
       and not into Javascript (`tools/upstream.sh`). Hazy makes Javascript
       and nothing else, so its tests still run what it makes with Bun
-- [ ] What still makes Javascript or is made of it:
-  - A package is kept as Javascript, its `artifacts`, beside the headers
-    and the native object. `--pack` makes both
-  - With nothing asked of it the compiler makes Javascript: `-o` is where
-    it goes. Native code is asked for with `--native`
-  - The interactive session shows a definition as Javascript among its
-    other forms
-  - `tools/bootstrap.sh` can still be asked for `javascript`
-- [ ] Take out what makes Javascript: `Generate.Go.*`, `Javascript.*`, the
-      runtime in `runtime/javascript`, and what of `Generate.*` the
-      sequent calculus does not use. `Generate.Context`, `Generate.Mangle`
-      and the bindings are used by `Sequent.FromCore` and stay
-- [ ] Bun is then only wanted for Hazy's own tests
+- [x] What made Javascript is taken out: `Generate.Go.*`, `Javascript.*`
+      and the runtime in `runtime/javascript`, 82 modules of the compiler's
+      467. With it went everything that was Javascript or went by it:
+  - A package is its headers, what says which they are, and its native
+    object. It has no `artifacts`
+  - `-o` makes a native executable, as `--native` does, and with `--pack`
+    writes a package. A package is checked when it is written. `-c` is
+    gone
+  - The interactive session shows a definition as Core, the sequent
+    calculus, AxCut and LLVM
+  - `tools/bootstrap.sh` does one thing
+  - What the sequent calculus shared with the generator stays, under
+    `Generate.*`: the names of definitions (`Generate.Precontext`), the
+    bindings and `Generate.Context`
+- [ ] What is left over from it. `Generate.Mangle` still has what a name is
+      in Javascript, and its fresh names still keep off Javascript's
+      keywords (`Generate.Keywords`), which keeps what is generated as it
+      was. `Generate.Context` still counts the builtin names a module of
+      Javascript used. The form of a definition that takes every argument at
+      once, which Javascript had its own of, is the sequent calculus's
+      alone again
+- [ ] Bun is only wanted for Hazy's own tests, which run the Javascript that
+      Hazy makes
 
 ## Track A: Hazy's own list
 

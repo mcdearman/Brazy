@@ -1,4 +1,4 @@
-module Javascript.Keywords where
+module Generate.Keywords where
 
 import Data.Set (Set)
 import qualified Data.Set as Set

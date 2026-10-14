@@ -1,8 +1,7 @@
 -- |
 -- The @Hazy@ module, written in the sequent calculus.
 --
--- For Javascript these definitions are in @runtime/javascript/Hazy.mjs@.
--- Here each is written over the primitives of "Sequent.Primitive", so that
+-- Each is written over the primitives of "Sequent.Primitive", so that
 -- the runtime has only those to provide.
 module Sequent.Runtime
   ( hazy,
@@ -572,9 +571,8 @@ unpackx =
       $ Apply [variable "text"] (covariable "k")
 
 -- |
--- A small language for writing the instances for tuples, which for
--- Javascript are written by hand in @Hazy.mjs@. It is translated the way
--- "Sequent.FromCore" translates Core.
+-- A small language for writing the instances for tuples. It is translated
+-- the way "Sequent.FromCore" translates Core.
 data Term
   = -- | A variable that may hold a thunk.
     Lazy String

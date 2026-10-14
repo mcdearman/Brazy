@@ -39,7 +39,7 @@ import qualified Data.Set as Set
 import Data.Text (Text, pack, unpack)
 import qualified Data.Text as Text (isPrefixOf, snoc)
 import qualified Data.Text.Lazy as Lazy (Text)
-import qualified Data.Text.Lazy as Lazy.Text (length, pack, toStrict, unpack)
+import qualified Data.Text.Lazy as Lazy.Text (length, pack, toStrict)
 import qualified Data.Text.Lazy.Builder as Builder
 import qualified Data.Text.Lazy.IO as Text.Lazy.IO
 import Data.Vector (Vector)
@@ -49,12 +49,8 @@ import Error (HazyError (HazyError))
 import qualified Error (report)
 import Generate.Global (Global)
 import qualified Generate.Global as Global (Global (..))
-import qualified Generate.Go.Module as Javascript (Module (..), generate)
 import qualified Generate.Mangle as Mangle (mangle)
-import qualified Javascript.Printer.Lexer as Javascript (print, run)
 import qualified LLVM.FromAxCut as LLVM (arm64, generateBody, generateDefinitions)
-import qualified Javascript.Tree.Module as Module (print)
-import qualified Javascript.Tree.Statement as Javascript (Statement (..))
 import Lambline
   ( Candidate,
     Cmd (Insert),
@@ -464,35 +460,7 @@ forms =
     Form "LLVM" llvmWords $ \selection modules ->
       Builder.toLazyText $ case selection of
         Definition _ -> LLVM.generateDefinitions LLVM.arm64 (AxCut.lower (chosen selection modules))
-        Asked -> LLVM.generateBody LLVM.arm64 (AxCut.lower (chosen selection modules)),
-    Form "Javascript" ["const", "let", "return", "if", "break", "export", "import", "from", "this"] $
-      \selection modules ->
-        let home = case selection of
-              Definition Global.Global {path} -> path
-              Asked -> Global.path entry
-            -- Javascript is generated a module at a time. A definition is
-            -- the constant the module exports under its name.
-            chosen' statements = case selection of
-              Asked -> statements
-              Definition Global.Global {name = wanted} ->
-                let sources = [source | Javascript.Export source target <- statements, target == wanted]
-                    keep = \case
-                      Javascript.Const source _ -> source `elem` sources
-                      Javascript.Export _ target -> target == wanted
-                      _ -> False
-                 in filter keep statements
-         in Lazy.Text.pack $ concat $ do
-              Javascript.Module {name, statements} <- toList (Javascript.generate modules)
-              if name == home
-                then
-                  [ reflow $
-                      Lazy.Text.unpack $
-                        Builder.toLazyText $
-                          Javascript.run $
-                            Javascript.print $
-                              Module.print (chosen' statements)
-                  ]
-                else []
+        Asked -> LLVM.generateBody LLVM.arm64 (AxCut.lower (chosen selection modules))
   ]
   where
     axcutWords =
