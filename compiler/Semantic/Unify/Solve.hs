@@ -20,7 +20,7 @@ import Semantic.Scope (Environment)
 import qualified Semantic.Shift0 as Shift0
 import qualified Semantic.Index.Evidence as Index.Evidence (Index (Direct))
 import qualified Semantic.Index.Type2 as Type2
-import qualified Semantic.Unify.Evidence as Evidence (Box (..), Fallback (..), Logical (..), classOf)
+import qualified Semantic.Unify.Evidence as Evidence (Box (..), Fallback (..), Logical (..), classOf, typeOf)
 import Semantic.Unify.Type (Logical, defaultFrom)
 import qualified Semantic.Unify.Type as Type (Box (..), Logical (..))
 
@@ -142,16 +142,17 @@ instance SolveEvidence EvidenceF where
       Solve (readSTRef reference) >>= \case
         Evidence.Solved evidence -> Shift0.map category <$> solveEvidence position evidence
         -- The type the evidence is for was never worked out. If it may be
-        -- taken to be Integer, this is the evidence of Integer's instance.
+        -- taken to be Integer or Double, this is the evidence of that type's
+        -- instance.
         Evidence.Unsolved {fallback = Just Evidence.Fallback {classx, permitted}} ->
           Solve permitted >>= \case
-            True ->
+            Just typex ->
               pure
                 Evidence.Variable
-                  { variable = Index.Evidence.Direct (Evidence.classOf classx) Type2.Integer,
+                  { variable = Index.Evidence.Direct (Evidence.classOf classx) (Evidence.typeOf typex),
                     instanciation = Mono
                   }
-            False -> unsupportedFeatureConstraintedTypeDefaulting position
+            Nothing -> unsupportedFeatureConstraintedTypeDefaulting position
         Evidence.Unsolved {fallback = Nothing} -> unsupportedFeatureConstraintedTypeDefaulting position
 
 instance SolveEvidence InstanciationF where

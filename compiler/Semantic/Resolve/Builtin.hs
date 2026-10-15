@@ -5,6 +5,7 @@ import {-# SOURCE #-} qualified Builtin.Bool as Bool
 import {-# SOURCE #-} qualified Builtin.Bounded as Bounded
 import {-# SOURCE #-} qualified Builtin.Enum as Enum
 import {-# SOURCE #-} qualified Builtin.Eq as Eq
+import {-# SOURCE #-} qualified Builtin.Floating as Floating
 import {-# SOURCE #-} qualified Builtin.Fractional as Fractional
 import {-# SOURCE #-} qualified Builtin.Functor as Functor
 import {-# SOURCE #-} qualified Builtin.Integral as Integral
@@ -18,6 +19,8 @@ import {-# SOURCE #-} qualified Builtin.Ord as Ord
 import {-# SOURCE #-} qualified Builtin.Ordering as Ordering
 import {-# SOURCE #-} qualified Builtin.Ratio as Ratio
 import {-# SOURCE #-} qualified Builtin.Real as Real
+import {-# SOURCE #-} qualified Builtin.RealFloat as RealFloat
+import {-# SOURCE #-} qualified Builtin.RealFrac as RealFrac
 import {-# SOURCE #-} qualified Builtin.Semigroup as Semigroup
 import {-# SOURCE #-} qualified Builtin.Show as Show
 import Data.Functor.Identity (Identity (..))
@@ -75,6 +78,7 @@ builtin =
       Bounded.bindings,
       Enum.bindings,
       Eq.bindings,
+      Floating.bindings,
       Fractional.bindings,
       Functor.bindings,
       Integral.bindings,
@@ -89,6 +93,8 @@ builtin =
       Ratio.bindings,
       Read.bindings,
       Real.bindings,
+      RealFloat.bindings,
+      RealFrac.bindings,
       Semigroup.bindings,
       Show.bindings
     ]
@@ -122,6 +128,8 @@ builtin =
                 builtinType "ST" $ Type3.Index Type2.ST,
                 builtinType "Integer" $ Type3.Index Type2.Integer,
                 builtinType "Int" $ Type3.Index Type2.Int,
+                builtinType "Float" $ Type3.Index Type2.Float,
+                builtinType "Double" $ Type3.Index Type2.Double,
                 builtinType "Lazy" $ Type3.Index Type2.Lazy,
                 builtinType "Strict" $ Type3.Index Type2.Strict,
                 builtinType "Every" $ Type3.Index Type2.Every,

@@ -69,6 +69,7 @@ executable hazy
     Builtin.Bounded
     Builtin.Enum
     Builtin.Eq
+    Builtin.Floating
     Builtin.Fractional
     Builtin.Functor
     Builtin.Integral
@@ -83,6 +84,8 @@ executable hazy
     Builtin.Ratio
     Builtin.Read
     Builtin.Real
+    Builtin.RealFloat
+    Builtin.RealFrac
     Builtin.Semigroup
     Builtin.Show
     Builtin.Tuple
