@@ -1102,8 +1102,6 @@ The order to take it in:
   - Exceptions are told apart by a name each type gives itself
     (`exceptionTag`). Types that give none are taken for each other. An
     exit is an exception, as in GHC's library, and `error` is not one
-  - `Double` and `Float` have no arithmetic. `Status` in the compiler now
-    counts time in whole numbers for that reason
   - `Viewer` is a placeholder, and `Lambline` reads lines without editing
     them
   - `toUpper` and `toLower` change the letters of Latin-1 only
@@ -1360,6 +1358,19 @@ Missing:
       through the ordinary instance lookup. That gives `default`
       declarations and classes of a program's own. When it is done, the
       `Fallback` in `Semantic.Unify.Evidence` goes. Not now
+- [x] Floating point. A `Float` or a `Double` is a block of its own in the
+      native heap, which holds the 64 bits of a double; a `Float` is kept
+      as the double it is exactly, and what is worked out of it is worked
+      out in single precision and widened again. Arithmetic, the functions
+      of `Floating`, comparison, `decodeFloat` and `encodeFloat` are
+      primitives in Rust and in the AxCut machine (`float_*`, in
+      `Sequent.Primitive`). Over them the Prelude has every class the
+      report gives the two, `Numeric` has `showEFloat`, `showFFloat`,
+      `showGFloat`, `floatToDigits`, `fromRat`, `readFloat` and the
+      readers of other bases, and showing and reading are GHC's: the
+      shortest digits that read back the same, with `NaN`, `Infinity` and
+      negative zero (tests `floating-point` and `floating-edges`, which
+      agree with GHC). `showHFloat` is still a placeholder
 - [x] GADTs: see M6
 - [x] Polymorphic components: see M6
 - [ ] Strict functions

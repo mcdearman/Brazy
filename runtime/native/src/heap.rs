@@ -24,6 +24,8 @@
 //! * `TEXT`: its length in bytes, and then the bytes, as UTF-8.
 //! * `SLICE`: part of a text: the text, where the part starts in its bytes,
 //!   and how many bytes it is. The text is a `TEXT`, never another part.
+//! * `FLOAT`: a floating-point number, as the bits of a double. A `Float`
+//!   is kept as the double it is exactly.
 //! * `ARRAY`: how many places it has, and then the places, each a value as
 //!   it was given, evaluated or not. Its length has a word of its own: a
 //!   header has room for fewer fields than an array may have.
@@ -85,6 +87,8 @@ pub const HUSK: u64 = 7;
 pub const SLICE: u64 = 8;
 /// Places one after another, which a vector is made of.
 pub const ARRAY: u64 = 9;
+/// A floating-point number.
+pub const FLOAT: u64 = 10;
 /// A slot that holds no block.
 const FREE: u64 = 15;
 
@@ -159,6 +163,7 @@ unsafe fn words(block: *mut u64) -> usize {
         TEXT => 2 + (*block.add(1) as usize + 7) / 8,
         SLICE => 4,
         ARRAY => 2 + *block.add(1) as usize,
+        FLOAT => 2,
         kind => panic!("a block of an unknown kind: {kind}"),
     }
 }

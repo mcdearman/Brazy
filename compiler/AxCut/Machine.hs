@@ -65,6 +65,8 @@ data Value
     Box !(IORef Value)
   | -- | Places one after another, each of which can be changed.
     Array !(IORef (Vector Value))
+  | -- | A floating-point number. A Float is kept as the Double it is.
+    Floating !Double
 
 -- |
 -- What a program has of the world outside while it runs: what catches a
@@ -316,6 +318,46 @@ apply world primitive arguments = case (primitive, arguments) of
       exitFailure
 
 -- |
+-- A floating-point number of a precision: 32 for a Float, worked out as a
+-- Float, and 64 for a Double.
+precise :: Int32 -> Double -> Float -> Value
+precise precision double float
+  | precision == 32 = Floating (realToFrac float)
+  | otherwise = Floating double
+
+single :: Double -> Float
+single = realToFrac
+
+-- | The functions of floating point, by number, as the runtime has them.
+function :: (Floating a) => Int32 -> a -> a
+function = \case
+  3 -> exp
+  4 -> log
+  5 -> sqrt
+  6 -> sin
+  7 -> cos
+  8 -> tan
+  9 -> asin
+  10 -> acos
+  11 -> atan
+  12 -> sinh
+  13 -> cosh
+  14 -> tanh
+  15 -> asinh
+  16 -> acosh
+  17 -> atanh
+  operation -> error $ "no such function of floating point: " ++ show operation
+
+operator :: (Floating a) => Int32 -> a -> a -> a
+operator = \case
+  0 -> (+)
+  1 -> (-)
+  2 -> (*)
+  3 -> (/)
+  4 -> (**)
+  operation -> error $ "no such operator of floating point: " ++ show operation
+
+-- |
 -- What a place of an array holds.
 placed :: IORef (Vector Value) -> Int32 -> IO Value
 placed array index = do
@@ -339,6 +381,28 @@ outside World {catching, files, building} name arguments = case (name, arguments
     _ <- placed array index
     unit <$ modifyIORef array (Vector.// [(fromIntegral index, value)])
   ("array_length", [Array array]) -> Int . fromIntegral . Vector.length <$> readIORef array
+  ("float_from_integer", [Int precision, Integer number]) -> pure $ precise precision (fromInteger number) (fromInteger number)
+  ("float_unary", [Int precision, Int operation, Floating x]) -> pure $ case operation of
+    0 -> Floating (negate x)
+    1 -> Floating (abs x)
+    2 -> Floating (if x > 0 then 1 else if x < 0 then -1 else x)
+    _ -> precise precision (function operation x) (function operation (single x))
+  ("float_binary", [Int precision, Int operation, Floating x, Floating y]) ->
+    pure $ precise precision (operator operation x y) (operator operation (single x) (single y))
+  ("float_compare", [Floating x, Floating y]) ->
+    pure $ Int $ if x < y then 0 else if x == y then 1 else if x > y then 2 else 3
+  ("float_test", [Int precision, Int test, Floating x]) -> pure $ bool $ case test of
+    0 -> isNaN x
+    1 -> isInfinite x
+    2 -> if precision == 32 then isDenormalized (single x) else isDenormalized x
+    _ -> isNegativeZero x
+  ("float_mantissa", [Int precision, Floating x]) ->
+    pure $ Integer $ fst $ if precision == 32 then decodeFloat (single x) else decodeFloat x
+  ("float_exponent", [Int precision, Floating x]) ->
+    pure $ Int $ fromIntegral $ snd $ if precision == 32 then decodeFloat (single x) else decodeFloat x
+  ("float_encode", [Int precision, Integer mantissa, Int exponent]) ->
+    pure $ precise precision (encodeFloat mantissa (fromIntegral exponent)) (encodeFloat mantissa (fromIntegral exponent))
+  ("float_truncate", [Floating x]) -> pure $ Integer $ truncate x
   -- A program on the machine is given no arguments.
   ("arg_count", []) -> pure $ Int 0
   ("get_env", [Text variable]) -> do
