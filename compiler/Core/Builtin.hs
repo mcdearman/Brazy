@@ -5,6 +5,7 @@ import {-# SOURCE #-} qualified Builtin.Bool as Bool
 import {-# SOURCE #-} qualified Builtin.Bounded as Bounded
 import {-# SOURCE #-} qualified Builtin.Enum as Enum
 import {-# SOURCE #-} qualified Builtin.Eq as Eq
+import {-# SOURCE #-} qualified Builtin.Floating as Floating
 import {-# SOURCE #-} qualified Builtin.Fractional as Fractional
 import {-# SOURCE #-} qualified Builtin.Functor as Functor
 import {-# SOURCE #-} qualified Builtin.Integral as Integral
@@ -18,6 +19,8 @@ import {-# SOURCE #-} qualified Builtin.Ord as Ord
 import {-# SOURCE #-} qualified Builtin.Ordering as Ordering
 import {-# SOURCE #-} qualified Builtin.Ratio as Ratio
 import {-# SOURCE #-} qualified Builtin.Real as Real
+import {-# SOURCE #-} qualified Builtin.RealFloat as RealFloat
+import {-# SOURCE #-} qualified Builtin.RealFrac as RealFrac
 import {-# SOURCE #-} qualified Builtin.Semigroup as Semigroup
 import {-# SOURCE #-} qualified Builtin.Show as Show
 import qualified Builtin.Tuple as Tuple
@@ -54,6 +57,8 @@ kind pure typex constructor = \case
     Type2.Arrow -> Type.typex -#> Type.typex -#> Type.typex
     Type2.Integer -> Type.typex
     Type2.Int -> Type.typex
+    Type2.Float -> Type.typex
+    Type2.Double -> Type.typex
     Type2.Num -> classKind
     Type2.Enum -> classKind
     Type2.Bounded -> classKind
@@ -62,6 +67,9 @@ kind pure typex constructor = \case
     Type2.Real -> classKind
     Type2.Integral -> classKind
     Type2.Fractional -> classKind
+    Type2.Floating -> classKind
+    Type2.RealFrac -> classKind
+    Type2.RealFloat -> classKind
     Type2.Functor -> classKind
     Type2.Applicative -> classKind
     Type2.Monad -> classKind
@@ -106,6 +114,9 @@ instance Builtin Class where
     Type2.Real -> pure Real.definition
     Type2.Integral -> pure Integral.definition
     Type2.Fractional -> pure Fractional.definition
+    Type2.Floating -> pure Floating.definition
+    Type2.RealFrac -> pure RealFrac.definition
+    Type2.RealFloat -> pure RealFloat.definition
     Type2.Functor -> pure Functor.definition
     Type2.Applicative -> pure Applicative.definition
     Type2.Monad -> pure Monad.definition
@@ -127,6 +138,9 @@ instance Builtin ClassExtra where
     Type2.Real -> pure Real.extra
     Type2.Integral -> pure Integral.extra
     Type2.Fractional -> pure Fractional.extra
+    Type2.Floating -> pure Floating.extra
+    Type2.RealFrac -> pure RealFrac.extra
+    Type2.RealFloat -> pure RealFloat.extra
     Type2.Functor -> pure Functor.extra
     Type2.Applicative -> pure Applicative.extra
     Type2.Monad -> pure Monad.extra

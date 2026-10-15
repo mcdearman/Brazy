@@ -39,10 +39,14 @@ import {-# SOURCE #-} Semantic.Unify.Error (Error (..), abort)
 import Semantic.Unify.Evidence (Evidence)
 import qualified Semantic.Unify.Evidence as Evidence
   ( Box (..),
+    Default (..),
+    Defaultable (..),
     Fallback (..),
     Logical (..),
     defaultable,
+    fractional,
     numeric,
+    typeOf,
     unify,
     unshift,
   )
@@ -1010,31 +1014,40 @@ unshift context position typex = unshift typex
       abort position $ Unshift context typex
 
 -- |
--- Whether a type variable that was never worked out may be taken to be
--- @Integer@. This is the Haskell report's defaulting, with a default list of
--- @Integer@ alone: every class the variable is constrained by must be one
--- that does not stop it, and at least one must be a class of numbers.
-defaults :: STRef s (Box s scope) -> ST s Bool
+-- What a type variable that was never worked out may be taken to be, if
+-- anything. This is the Haskell report's defaulting, with its default list
+-- of @Integer@ and then @Double@: every class the variable is constrained
+-- by must be one that does not stop it, at least one must be a class of
+-- numbers, and the type is the first of the two that is an instance of
+-- every one.
+defaults :: STRef s (Box s scope) -> ST s (Maybe Evidence.Default)
 defaults reference =
   readSTRef reference >>= \case
     Solved typex -> follow typex
     Unsolved {constraints} -> pure (defaulting constraints)
-    Skolem {} -> pure False
+    Skolem {} -> pure Nothing
   where
     -- The variable may have been made the same as another since.
-    follow :: Type s scope -> ST s Bool
+    follow :: Type s scope -> ST s (Maybe Evidence.Default)
     follow = \case
       Logical (Box reference) -> defaults reference
       Logical (Shift logical) -> follow (Logical logical)
-      _ -> pure False
+      _ -> pure Nothing
 
-defaulting :: Map (Type2.Index scope) [Delay s scope] -> Bool
-defaulting constraints = not (null classes) && all plain (concat (Map.elems constraints)) && any known classes
+defaulting :: Map (Type2.Index scope) [Delay s scope] -> Maybe Evidence.Default
+defaulting constraints = do
+  classes <- traverse Evidence.defaultable (Map.keys constraints)
+  if all plain (concat (Map.elems constraints)) && any Evidence.numeric classes
+    then case (any Evidence.fractional classes, any integral classes) of
+      (False, _) -> Just Evidence.Integer
+      (True, False) -> Just Evidence.Double
+      (True, True) -> Nothing
+    else Nothing
   where
-    classes = Map.keys constraints
     plain Delay {arguments} = null arguments
-    known classx = maybe False Evidence.numeric (Evidence.defaultable classx)
-      && all (\other -> maybe False (const True) (Evidence.defaultable other)) classes
+    integral = \case
+      Evidence.Integral -> True
+      _ -> False
 
 defaultFrom,
   defaultUniverse ::
@@ -1059,12 +1072,12 @@ defaultUniverse position constraints universe = case universe of
       Solved kind -> defaultUniverse position constraints kind
       Unsolved {}
         | null constraints -> pure $ Type Small
-        | defaulting constraints -> pure $ Constructor Type2.Integer
+        | Just typex <- defaulting constraints -> pure $ Constructor (Evidence.typeOf typex)
         | otherwise -> unsupportedFeatureConstraintedTypeDefaulting position
       Skolem {} -> unsupportedFeatureConstraintedTypeDefaulting position
   Small
     | null constraints -> pure $ Constructor (Type2.Tuple 0)
-    | defaulting constraints -> pure $ Constructor Type2.Integer
+    | Just typex <- defaulting constraints -> pure $ Constructor (Evidence.typeOf typex)
     | otherwise -> unsupportedFeatureConstraintedTypeDefaulting position
   Large
     | null constraints -> pure $ Type Small
