@@ -5,7 +5,7 @@
 -- in "Sequent.Runtime".
 module Sequent.Primitive where
 
-import Data.Text (Text)
+import Data.Text (Text, pack)
 
 data Primitive
   = -- | A field of a constructed value, counting from zero.
@@ -64,6 +64,11 @@ outside =
     ("read_ref", 1),
     ("write_ref", 2),
     ("same_ref", 2),
+    ("array_new", 2),
+    ("array_read", 2),
+    ("array_index", 2),
+    ("array_write", 3),
+    ("array_length", 1),
     ("arg_count", 0),
     ("arg", 1),
     ("get_env", 1),
@@ -90,6 +95,16 @@ outside =
     ("pack_append", 2),
     ("pack_done", 1)
   ]
+
+-- |
+-- Whether what a primitive gives back may be yet to be evaluated: what a
+-- place holds, which is whatever it was given. Everything else gives a
+-- value.
+holding :: Primitive -> Bool
+holding = \case
+  Field _ -> True
+  Foreign name _ -> name `elem` map pack ["read_ref", "array_read", "array_index"]
+  _ -> False
 
 arity :: Primitive -> Int
 arity = \case

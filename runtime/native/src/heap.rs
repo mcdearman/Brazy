@@ -24,6 +24,9 @@
 //! * `TEXT`: its length in bytes, and then the bytes, as UTF-8.
 //! * `SLICE`: part of a text: the text, where the part starts in its bytes,
 //!   and how many bytes it is. The text is a `TEXT`, never another part.
+//! * `ARRAY`: how many places it has, and then the places, each a value as
+//!   it was given, evaluated or not. Its length has a word of its own: a
+//!   header has room for fewer fields than an array may have.
 //!
 //! A constructor with no fields is never allocated. There is one block for
 //! each tag in `hazy_nullary`, and it is not counted.
@@ -80,6 +83,8 @@ pub const TEXT: u64 = 6;
 pub const HUSK: u64 = 7;
 /// Part of a text, which it holds a reference to.
 pub const SLICE: u64 = 8;
+/// Places one after another, which a vector is made of.
+pub const ARRAY: u64 = 9;
 /// A slot that holds no block.
 const FREE: u64 = 15;
 
@@ -153,6 +158,7 @@ unsafe fn words(block: *mut u64) -> usize {
         INTEGER => 2,
         TEXT => 2 + (*block.add(1) as usize + 7) / 8,
         SLICE => 4,
+        ARRAY => 2 + *block.add(1) as usize,
         kind => panic!("a block of an unknown kind: {kind}"),
     }
 }
@@ -164,6 +170,7 @@ unsafe fn children(block: *mut u64) -> &'static [Value] {
         DATA => std::slice::from_raw_parts(block.add(1), count(head)),
         CLOSURE | THUNK => std::slice::from_raw_parts(block.add(2), count(head)),
         DONE | SLICE => std::slice::from_raw_parts(block.add(1), 1),
+        ARRAY => std::slice::from_raw_parts(block.add(2), *block.add(1) as usize),
         _ => &[],
     }
 }

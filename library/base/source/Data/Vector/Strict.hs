@@ -4,15 +4,19 @@ import Prelude hiding ((++), all, and, any, break, concat, concatMap, drop, drop
 import qualified Prelude
 import qualified Data.Vector as Lazy
 import Hazy.Prelude (placeholder)
+import Control.Monad.ST (runST)
+import Hazy (primArrayIndex, primArrayNew, primArrayRead, primArrayWrite, primSTBind, primSTPure, primUnsafeCoerce)
 
--- A vector is a tree whose shape its length alone gives: of a tree of so
--- many elements, half, rounded down, are on the left of the root. Every
--- element is evaluated when the vector is.
-data Vector a = Vector !Int !(Tree a)
+-- A vector is an array of the runtime's: its places one after another, so
+-- that an element is found by its index at once. Every element is
+-- evaluated when the vector is.
+data Vector a = Vector !Int !(Array a)
 
-data Tree a
-  = Leaf
-  | Node !(Tree a) !a !(Tree a)
+-- The runtime's array, which has nothing that can be matched; and one that
+-- is being filled in.
+data Array a
+
+data Places s a
 
 instance Functor Vector where
   fmap = map
@@ -55,14 +59,14 @@ null :: Vector a -> Bool
 null (Vector count _) = count == 0
 
 (!) :: Vector a -> Int -> a
-(!) (Vector count tree) index
+(!) (Vector count array) index
   | index < 0 || index >= count = error ("Vector.!: index out of bounds " Prelude.++ show (index, count))
-  | otherwise = at count tree index
+  | otherwise = at array index
 
 (!?) :: Vector a -> Int -> Maybe a
-(!?) (Vector count tree) index
+(!?) (Vector count array) index
   | index < 0 || index >= count = Nothing
-  | otherwise = Just (at count tree index)
+  | otherwise = Just (at array index)
 
 head :: Vector a -> a
 head vector = vector ! 0
@@ -145,23 +149,18 @@ unsafeDrop :: Int -> Vector a -> Vector a
 unsafeDrop = drop
 
 empty :: Vector a
-empty = Vector 0 Leaf
+empty = Vector 0 (filled 0 unfilled)
 
 singleton :: a -> Vector a
-singleton x = Vector 1 (Node Leaf x Leaf)
+singleton x = Vector 1 (filled 1 (\_ -> x))
 
 replicate :: Int -> a -> Vector a
 replicate count x = generate count (\_ -> x)
 
 generate :: Int -> (Int -> a) -> Vector a
-generate count f = Vector size (go 0 size)
+generate count f = Vector size (filled size f)
   where
     size = max 0 count
-    go start count
-      | count <= 0 = Leaf
-      | otherwise =
-          let half = count `div` 2
-           in Node (go start half) (f (start + half)) (go (start + half + 1) (count - half - 1))
 
 iterateN :: Int -> (a -> a) -> a -> Vector a
 iterateN count f x = fromList (Prelude.take count (Prelude.iterate f x))
@@ -237,7 +236,7 @@ force :: Vector a -> Vector a
 force vector = foldl' (\() x -> x `seq` ()) () vector `seq` vector
 
 (//) :: Vector a -> [(Int, a)] -> Vector a
-(//) vector changes = Prelude.foldl (\(Vector count tree) (index, x) -> Vector count (put count tree index (\_ -> x))) vector changes
+(//) vector changes = changed vector (\_ x -> x) changes
 
 update :: Vector a -> Vector (Int, a) -> Vector a
 update vector changes = vector // toList changes
@@ -255,8 +254,7 @@ unsafeUpdate_ :: Vector a -> Vector Int -> Vector a -> Vector a
 unsafeUpdate_ = placeholder
 
 accum :: (a -> b -> a) -> Vector a -> [(Int, b)] -> Vector a
-accum f vector changes =
-  Prelude.foldl (\(Vector count tree) (index, x) -> Vector count (put count tree index (\old -> f old x))) vector changes
+accum f vector changes = changed vector f changes
 
 accumulate :: (a -> b -> a) -> Vector a -> Vector (Int, b) -> Vector a
 accumulate f vector changes = accum f vector (toList changes)
@@ -286,20 +284,10 @@ indexed :: Vector a -> Vector (Int, a)
 indexed = imap (\index x -> (index, x))
 
 map :: (a -> b) -> Vector a -> Vector b
-map f (Vector count tree) = Vector count (go tree)
-  where
-    go = \case
-      Leaf -> Leaf
-      Node l x r -> Node (go l) (f x) (go r)
+map f (Vector count array) = Vector count (filled count (\index -> f (at array index)))
 
 imap :: (Int -> a -> b) -> Vector a -> Vector b
-imap f (Vector count tree) = Vector count (go 0 count tree)
-  where
-    go start count = \case
-      Leaf -> Leaf
-      Node l x r ->
-        let half = count `div` 2
-         in Node (go start half l) (f (start + half) x) (go (start + half + 1) (count - half - 1) r)
+imap f (Vector count array) = Vector count (filled count (\index -> f index (at array index)))
 
 concatMap :: (a -> Vector b) -> Vector a -> Vector b
 concatMap f vector = concat (Prelude.map f (toList vector))
@@ -533,11 +521,11 @@ foldl1' f vector = case toList vector of
   [] -> error "Vector.foldl1': empty vector"
 
 foldr :: (a -> b -> b) -> b -> Vector a -> b
-foldr f z (Vector _ tree) = go tree z
+foldr f z (Vector count array) = go 0
   where
-    go node rest = case node of
-      Leaf -> rest
-      Node l x r -> go l (f x (go r rest))
+    go index
+      | index >= count = z
+      | otherwise = f (at array index) (go (index + 1))
 
 foldr1 :: (a -> a -> a) -> Vector a -> a
 foldr1 f vector = Prelude.foldr1 f (toList vector)
@@ -739,8 +727,7 @@ fromList :: [a] -> Vector a
 fromList xs = fromListN (Prelude.length xs) xs
 
 fromListN :: Int -> [a] -> Vector a
-fromListN count xs = case build size xs of
-  (tree, _) -> Vector size tree
+fromListN count xs = Vector size (listed size xs)
   where
     size = max 0 (min count (Prelude.length xs))
 
@@ -750,39 +737,58 @@ toLazy vector = Lazy.fromListN (length vector) (toList vector)
 fromLazy :: Lazy.Vector a -> Vector a
 fromLazy vector = fromListN (Lazy.length vector) (Lazy.toList vector)
 
--- The element at an index of a tree of so many elements. Half of the
--- elements, rounded down, are on the left of the root.
-at :: Int -> Tree a -> Int -> a
-at count tree index = case tree of
-  Leaf -> error "Vector: index out of bounds"
-  Node l x r ->
-    let half = count `div` 2
-     in case compare index half of
-          LT -> at half l index
-          EQ -> x
-          GT -> at (count - half - 1) r (index - half - 1)
+-- An array of so many places, each holding what a function gives of its
+-- index.
+--
+-- These fill an array in by the primitives of 'ST' themselves, which are
+-- put where they are called, and not by way of the class: each step was
+-- some functions made and called through evidence.
+filled :: Int -> (Int -> a) -> Array a
+filled count f = runST (primSTBind (primArrayNew count unfilled) (\places -> fill places 0))
+  where
+    fill places index
+      | index >= count = primSTPure (primUnsafeCoerce places)
+      | otherwise =
+          let x = f index
+           in primSTBind (seq x (primArrayWrite places index x)) (\_ -> fill places (index + 1))
 
--- A tree with the element at an index changed.
-put :: Int -> Tree a -> Int -> (a -> a) -> Tree a
-put count tree index change = case tree of
-  Leaf -> error "Vector: index out of bounds"
-  Node l x r ->
-    let half = count `div` 2
-     in case compare index half of
-          LT -> Node (put half l index change) x r
-          EQ -> Node l (change x) r
-          GT -> Node l x (put (count - half - 1) r (index - half - 1) change)
+-- An array of the first so many elements of a list.
+listed :: Int -> [a] -> Array a
+listed count xs = runST (primSTBind (primArrayNew count unfilled) (\places -> fill places 0 xs))
+  where
+    fill places index list
+      | index >= count = primSTPure (primUnsafeCoerce places)
+      | otherwise = case list of
+          x : rest -> primSTBind (seq x (primArrayWrite places index x)) (\_ -> fill places (index + 1) rest)
+          [] -> primSTPure (primUnsafeCoerce places)
 
--- A tree of the first so many elements of a list, and the rest of the list.
-build :: Int -> [a] -> (Tree a, [a])
-build count xs
-  | count <= 0 = (Leaf, xs)
-  | otherwise =
-      let half = count `div` 2
-       in case build half xs of
-            (l, x : rest) -> case build (count - half - 1) rest of
-              (r, others) -> (Node l x r, others)
-            (l, []) -> (l, [])
+-- A vector with some of its elements changed, each by a function of what
+-- was there and what it is changed by.
+changed :: Vector a -> (a -> b -> a) -> [(Int, b)] -> Vector a
+changed (Vector count array) f changes =
+  Vector count (runST (primSTBind (primArrayNew count unfilled) (\places -> copy places 0)))
+  where
+    copy places index
+      | index >= count = change places changes
+      | otherwise =
+          let x = at array index
+           in primSTBind (seq x (primArrayWrite places index x)) (\_ -> copy places (index + 1))
+    change places = \case
+      [] -> primSTPure (primUnsafeCoerce places)
+      (index, y) : rest
+        | index < 0 || index >= count -> error ("Vector: index out of bounds " Prelude.++ show (index, count))
+        | otherwise ->
+            primSTBind (primArrayRead places index) $ \old ->
+              let x = f old y
+               in primSTBind (seq x (primArrayWrite places index x)) (\_ -> change places rest)
+
+-- What a place holds before it is filled in. Nothing asks for it.
+unfilled :: a
+unfilled = error "Vector: a place that was never filled in"
+
+-- The element at an index of an array.
+at :: Array a -> Int -> a
+at = primArrayIndex
 
 zipLists4 :: (a -> b -> c -> d -> e) -> [a] -> [b] -> [c] -> [d] -> [e]
 zipLists4 f (a : as) (b : bs) (c : cs) (d : ds) = f a b c d : zipLists4 f as bs cs ds

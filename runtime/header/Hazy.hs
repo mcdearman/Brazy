@@ -63,6 +63,16 @@ primReadRef :: r -> ST s a
 primWriteRef :: r -> a -> ST s ()
 primSameRef :: r -> r -> Bool
 
+-- Places one after another, each holding a value, evaluated or not: so many
+-- of them, each holding one value to begin with. One that is no longer
+-- changed is read without an action. The types are whatever their user
+-- says, as for a place.
+primArrayNew :: Int -> a -> ST s m
+primArrayRead :: m -> Int -> ST s a
+primArrayWrite :: m -> Int -> a -> ST s ()
+primArrayIndex :: v -> Int -> a
+primArrayLength :: v -> Int
+
 -- The world outside a program. A file that is open is known by a number, and
 -- 0, 1 and 2 are what the program reads, writes and complains to.
 primArgCount :: ST s Int
