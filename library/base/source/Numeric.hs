@@ -26,11 +26,23 @@ module Numeric
   )
 where
 
-import Data.Char (intToDigit)
+import Data.Char (digitToInt, intToDigit, isHexDigit, isOctDigit)
 import Hazy.Prelude (placeholder)
-
-showSigned :: (Real a) => (a -> ShowS) -> Int -> a -> ShowS
-showSigned = placeholder
+import Hazy.PreludeNumeric
+  ( floatToDigits,
+    fromRat,
+    lexDigits,
+    readDec,
+    readFloat,
+    readSigned,
+    showEFloat,
+    showFFloat,
+    showFFloatAlt,
+    showFloat,
+    showGFloat,
+    showGFloatAlt,
+    showSigned,
+  )
 
 showIntAtBase :: (Integral a) => a -> (Int -> Char) -> a -> ShowS
 showIntAtBase base digit number rest
@@ -53,53 +65,21 @@ showHex = showIntAtBase 16 intToDigit
 showOct :: (Integral a) => a -> ShowS
 showOct = showIntAtBase 8 intToDigit
 
-showEFloat :: (RealFloat a) => Maybe Int -> a -> ShowS
-showEFloat = placeholder
-
-showFFloat :: (RealFloat a) => Maybe Int -> a -> ShowS
-showFFloat = placeholder
-
-showGFloat :: (RealFloat a) => Maybe Int -> a -> ShowS
-showGFloat = placeholder
-
-showFFloatAlt :: (RealFloat a) => Maybe Int -> a -> ShowS
-showFFloatAlt = placeholder
-
-showGFloatAlt :: (RealFloat a) => Maybe Int -> a -> ShowS
-showGFloatAlt = placeholder
-
-showFloat :: (RealFloat a) => a -> ShowS
-showFloat = placeholder
-
 showHFloat :: (RealFloat a) => a -> ShowS
 showHFloat = placeholder
 
-floatToDigits :: (RealFloat a) => Integer -> a -> ([Int], Int)
-floatToDigits = placeholder
-
-readSigned :: (Real a) => ReadS a -> ReadS a
-readSigned = placeholder
-
 readInt :: (Num a) => a -> (Char -> Bool) -> (Char -> Int) -> ReadS a
-readInt = placeholder
+readInt radix isDigit digit text =
+  [ (foldl1 (\n d -> n * radix + d) (map (fromIntegral . digit) ds), rest)
+  | (ds@(_ : _), rest) <- [span isDigit text]
+  ]
 
 readBin :: (Eq a, Num a) => ReadS a
-readBin = placeholder
-
-readDec :: (Eq a, Num a) => ReadS a
-readDec = placeholder
+readBin = readInt 2 (`elem` "01") digitToInt
 
 readOct :: (Eq a, Num a) => ReadS a
-readOct = placeholder
+readOct = readInt 8 isOctDigit digitToInt
 
 readHex :: (Eq a, Num a) => ReadS a
-readHex = placeholder
+readHex = readInt 16 isHexDigit digitToInt
 
-readFloat :: (RealFrac a) => ReadS a
-readFloat = placeholder
-
-lexDigits :: ReadS String
-lexDigits = placeholder
-
-fromRat :: (RealFloat a) => Rational -> a
-fromRat = placeholder

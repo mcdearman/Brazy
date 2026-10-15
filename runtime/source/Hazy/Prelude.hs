@@ -377,45 +377,163 @@ instance (Monoid a) => Monoid (IO a) where
 
 data Float
 
-instance Eq Float
+-- What the runtime has for a Float: see "Hazy". The functions and
+-- operators are known by number.
+instance Eq Float where
+  x == y = primEqualInt (primFloatCompare x y) 1
+  x /= y = not (x == y)
 
-instance Ord Float
+-- Every comparison is written out: one of a number that is not one is
+-- false, and so not the other way round of another.
+instance Ord Float where
+  x < y = primEqualInt (primFloatCompare x y) 0
+  x <= y = let order = primFloatCompare x y in primEqualInt order 0 || primEqualInt order 1
+  x > y = primEqualInt (primFloatCompare x y) 2
+  x >= y = let order = primFloatCompare x y in primEqualInt order 2 || primEqualInt order 1
+  compare x y = case primFloatCompare x y of
+    0 -> LT
+    1 -> EQ
+    _ -> GT
 
-instance Num Float
+instance Num Float where
+  x + y = primFloatBinary 32 0 x y
+  x - y = primFloatBinary 32 1 x y
+  x * y = primFloatBinary 32 2 x y
+  negate = primFloatUnary 32 0
+  abs = primFloatUnary 32 1
+  signum = primFloatUnary 32 2
+  fromInteger = primFloatFromInteger 32
 
-instance Real Float
+instance Real Float where
+  toRational x = (m % 1) * (2 % 1) ^^ e
+    where
+      (m, e) = decodeFloat x
 
-instance Fractional Float
+instance Fractional Float where
+  x / y = primFloatBinary 32 3 x y
+  fromRational = fromRat
 
-instance Floating Float
+instance Floating Float where
+  pi = 3.141592653589793238
+  exp = primFloatUnary 32 3
+  log = primFloatUnary 32 4
+  sqrt = primFloatUnary 32 5
+  sin = primFloatUnary 32 6
+  cos = primFloatUnary 32 7
+  tan = primFloatUnary 32 8
+  asin = primFloatUnary 32 9
+  acos = primFloatUnary 32 10
+  atan = primFloatUnary 32 11
+  sinh = primFloatUnary 32 12
+  cosh = primFloatUnary 32 13
+  tanh = primFloatUnary 32 14
+  asinh = primFloatUnary 32 15
+  acosh = primFloatUnary 32 16
+  atanh = primFloatUnary 32 17
+  x ** y = primFloatBinary 32 4 x y
 
-instance RealFrac Float
+instance RealFrac Float where
+  properFraction x = (fromInteger whole, x - fromInteger whole)
+    where
+      whole = primFloatTruncate x
+  truncate x = fromInteger (primFloatTruncate x)
 
-instance RealFloat Float
+instance RealFloat Float where
+  floatRadix _ = 2
+  floatDigits _ = 24
+  floatRange _ = (-125, 128)
+  decodeFloat x = (primFloatMantissa 32 x, primFloatExponent 32 x)
+  encodeFloat = primFloatEncode 32
+  isNaN = primFloatTest 32 0
+  isInfinite = primFloatTest 32 1
+  isDenormalized = primFloatTest 32 2
+  isNegativeZero = primFloatTest 32 3
+  isIEEE _ = True
 
+-- A number below nothing is shown with its sign, in brackets if it is
+-- an argument; so is nothing below nothing.
 instance Show Float where
-  showsPrec p = showFloat
+  showsPrec p x
+    | x < 0 || isNegativeZero x = showParen (p > 6) (showChar '-' . showFloat (negate x))
+    | otherwise = showFloat x
 
 instance Read Float where
   readsPrec p = readSigned readFloat
 
 data Double
 
-instance Eq Double
+-- What the runtime has for a Double: see "Hazy". The functions and
+-- operators are known by number.
+instance Eq Double where
+  x == y = primEqualInt (primFloatCompare x y) 1
+  x /= y = not (x == y)
 
-instance Ord Double
+-- Every comparison is written out: one of a number that is not one is
+-- false, and so not the other way round of another.
+instance Ord Double where
+  x < y = primEqualInt (primFloatCompare x y) 0
+  x <= y = let order = primFloatCompare x y in primEqualInt order 0 || primEqualInt order 1
+  x > y = primEqualInt (primFloatCompare x y) 2
+  x >= y = let order = primFloatCompare x y in primEqualInt order 2 || primEqualInt order 1
+  compare x y = case primFloatCompare x y of
+    0 -> LT
+    1 -> EQ
+    _ -> GT
 
-instance Num Double
+instance Num Double where
+  x + y = primFloatBinary 64 0 x y
+  x - y = primFloatBinary 64 1 x y
+  x * y = primFloatBinary 64 2 x y
+  negate = primFloatUnary 64 0
+  abs = primFloatUnary 64 1
+  signum = primFloatUnary 64 2
+  fromInteger = primFloatFromInteger 64
 
-instance Real Double
+instance Real Double where
+  toRational x = (m % 1) * (2 % 1) ^^ e
+    where
+      (m, e) = decodeFloat x
 
-instance Fractional Double
+instance Fractional Double where
+  x / y = primFloatBinary 64 3 x y
+  fromRational = fromRat
 
-instance Floating Double
+instance Floating Double where
+  pi = 3.141592653589793238
+  exp = primFloatUnary 64 3
+  log = primFloatUnary 64 4
+  sqrt = primFloatUnary 64 5
+  sin = primFloatUnary 64 6
+  cos = primFloatUnary 64 7
+  tan = primFloatUnary 64 8
+  asin = primFloatUnary 64 9
+  acos = primFloatUnary 64 10
+  atan = primFloatUnary 64 11
+  sinh = primFloatUnary 64 12
+  cosh = primFloatUnary 64 13
+  tanh = primFloatUnary 64 14
+  asinh = primFloatUnary 64 15
+  acosh = primFloatUnary 64 16
+  atanh = primFloatUnary 64 17
+  x ** y = primFloatBinary 64 4 x y
 
-instance RealFrac Double
+instance RealFrac Double where
+  properFraction x = (fromInteger whole, x - fromInteger whole)
+    where
+      whole = primFloatTruncate x
+  truncate x = fromInteger (primFloatTruncate x)
 
-instance RealFloat Double
+instance RealFloat Double where
+  floatRadix _ = 2
+  floatDigits _ = 53
+  floatRange _ = (-1021, 1024)
+  decodeFloat x = (primFloatMantissa 64 x, primFloatExponent 64 x)
+  encodeFloat = primFloatEncode 64
+  isNaN = primFloatTest 64 0
+  isInfinite = primFloatTest 64 1
+  isDenormalized = primFloatTest 64 2
+  isNegativeZero = primFloatTest 64 3
+  isIEEE _ = True
 
 instance Enum Float where
   succ x = x + 1
@@ -437,8 +555,12 @@ instance Enum Double where
   enumFromTo = numericEnumFromTo
   enumFromThenTo = numericEnumFromThenTo
 
+-- A number below nothing is shown with its sign, in brackets if it is
+-- an argument; so is nothing below nothing.
 instance Show Double where
-  showsPrec p = showFloat
+  showsPrec p x
+    | x < 0 || isNegativeZero x = showParen (p > 6) (showChar '-' . showFloat (negate x))
+    | otherwise = showFloat x
 
 instance Read Double where
   readsPrec p = readSigned readFloat

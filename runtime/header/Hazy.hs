@@ -73,6 +73,19 @@ primArrayWrite :: m -> Int -> a -> ST s ()
 primArrayIndex :: v -> Int -> a
 primArrayLength :: v -> Int
 
+-- Floating point. Each is told its precision, 32 for a Float and 64 for a
+-- Double, and the type is whatever its user says. The functions and the
+-- operators are known by number: see "Hazy.Prelude".
+primFloatFromInteger :: Int -> Integer -> a
+primFloatUnary :: Int -> Int -> a -> a
+primFloatBinary :: Int -> Int -> a -> a -> a
+primFloatCompare :: a -> a -> Int
+primFloatTest :: Int -> Int -> a -> Bool
+primFloatMantissa :: Int -> a -> Integer
+primFloatExponent :: Int -> a -> Int
+primFloatEncode :: Int -> Integer -> Int -> a
+primFloatTruncate :: a -> Integer
+
 -- The world outside a program. A file that is open is known by a number, and
 -- 0, 1 and 2 are what the program reads, writes and complains to.
 primArgCount :: ST s Int

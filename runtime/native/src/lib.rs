@@ -18,9 +18,9 @@
 
 mod heap;
 
-use heap::{hazy_alloc, header, nullary, Value, ARRAY, DATA, INTEGER, SLICE, TEXT};
+use heap::{hazy_alloc, header, nullary, Value, ARRAY, DATA, FLOAT, INTEGER, SLICE, TEXT};
 use num_bigint::BigInt;
-use num_traits::{Signed, ToPrimitive, Zero};
+use num_traits::{FromPrimitive, One, Signed, ToPrimitive, Zero};
 use std::io::Write;
 use unicode_properties::{GeneralCategory, UnicodeGeneralCategory};
 
@@ -503,6 +503,224 @@ pub extern "C" fn hazy_prim_write_ref(reference: Value, value: Value) -> Value {
 #[no_mangle]
 pub extern "C" fn hazy_prim_same_ref(left: Value, right: Value) -> Value {
     boolean(left == right)
+}
+
+// Floating point ---------------------------------------------------------------
+//
+// A number is a block of the bits of a double. A Float is worked out in
+// single precision and kept as the double it is exactly, so each of these
+// is told which it is: 32 for a Float, 64 for a Double.
+
+fn floating(value: Value) -> f64 {
+    f64::from_bits(unsafe { *(value as *const u64).add(1) })
+}
+
+fn from_floating(number: f64) -> Value {
+    let block = hazy_alloc(2, header(FLOAT, 0, 0));
+    unsafe { *block.add(1) = number.to_bits() };
+    block as Value
+}
+
+fn single(precision: Value) -> bool {
+    int(precision) == 32
+}
+
+#[no_mangle]
+pub extern "C" fn hazy_prim_float_from_integer(precision: Value, number: Value) -> Value {
+    let number = integer(number);
+    from_floating(if single(precision) {
+        number.to_f32().map(f64::from).unwrap_or(f64::NAN)
+    } else {
+        number.to_f64().unwrap_or(f64::NAN)
+    })
+}
+
+#[no_mangle]
+pub extern "C" fn hazy_prim_float_unary(precision: Value, operation: Value, value: Value) -> Value {
+    let x = floating(value);
+    let operation = int(operation);
+    macro_rules! apply {
+        ($function:ident) => {
+            if single(precision) {
+                f64::from((x as f32).$function())
+            } else {
+                x.$function()
+            }
+        };
+    }
+    from_floating(match operation {
+        0 => -x,
+        1 => x.abs(),
+        2 => {
+            if x > 0.0 {
+                1.0
+            } else if x < 0.0 {
+                -1.0
+            } else {
+                x
+            }
+        }
+        3 => apply!(exp),
+        4 => apply!(ln),
+        5 => apply!(sqrt),
+        6 => apply!(sin),
+        7 => apply!(cos),
+        8 => apply!(tan),
+        9 => apply!(asin),
+        10 => apply!(acos),
+        11 => apply!(atan),
+        12 => apply!(sinh),
+        13 => apply!(cosh),
+        14 => apply!(tanh),
+        15 => apply!(asinh),
+        16 => apply!(acosh),
+        17 => apply!(atanh),
+        _ => fail(&format!("no such function of floating point: {operation}")),
+    })
+}
+
+#[no_mangle]
+pub extern "C" fn hazy_prim_float_binary(precision: Value, operation: Value, left: Value, right: Value) -> Value {
+    let (x, y) = (floating(left), floating(right));
+    let operation = int(operation);
+    from_floating(if single(precision) {
+        let (x, y) = (x as f32, y as f32);
+        f64::from(match operation {
+            0 => x + y,
+            1 => x - y,
+            2 => x * y,
+            3 => x / y,
+            4 => x.powf(y),
+            _ => fail(&format!("no such operator of floating point: {operation}")),
+        })
+    } else {
+        match operation {
+            0 => x + y,
+            1 => x - y,
+            2 => x * y,
+            3 => x / y,
+            4 => x.powf(y),
+            _ => fail(&format!("no such operator of floating point: {operation}")),
+        }
+    })
+}
+
+/// 0 if the first is less, 1 if they are equal, 2 if it is greater, and 3
+/// if they are not in order, as with a number that is not one.
+#[no_mangle]
+pub extern "C" fn hazy_prim_float_compare(left: Value, right: Value) -> Value {
+    let (x, y) = (floating(left), floating(right));
+    from_int(if x < y {
+        0
+    } else if x == y {
+        1
+    } else if x > y {
+        2
+    } else {
+        3
+    })
+}
+
+#[no_mangle]
+pub extern "C" fn hazy_prim_float_test(precision: Value, test: Value, value: Value) -> Value {
+    let x = floating(value);
+    boolean(match int(test) {
+        0 => x.is_nan(),
+        1 => x.is_infinite(),
+        2 => {
+            if single(precision) {
+                (x as f32).is_subnormal()
+            } else {
+                x.is_subnormal()
+            }
+        }
+        3 => x == 0.0 && x.is_sign_negative(),
+        test => fail(&format!("no such test of floating point: {test}")),
+    })
+}
+
+/// A number as a whole number and the power of two it is multiplied by. The
+/// whole number has as many bits as the precision, unless it is nothing.
+fn decode(single: bool, x: f64) -> (BigInt, i32) {
+    if x == 0.0 {
+        return (BigInt::zero(), 0);
+    }
+    let (negative, mut mantissa, mut exponent, digits) = if single {
+        let bits = (x as f32).to_bits();
+        let biased = ((bits >> 23) & 0xff) as i32;
+        let fraction = (bits & 0x7f_ffff) as u64;
+        let (mantissa, exponent) = if biased == 0 { (fraction, -149) } else { (fraction | 1 << 23, biased - 150) };
+        (bits >> 31 == 1, mantissa, exponent, 24)
+    } else {
+        let bits = x.to_bits();
+        let biased = ((bits >> 52) & 0x7ff) as i32;
+        let fraction = bits & ((1 << 52) - 1);
+        let (mantissa, exponent) = if biased == 0 { (fraction, -1074) } else { (fraction | 1 << 52, biased - 1075) };
+        (bits >> 63 == 1, mantissa, exponent, 53)
+    };
+    while mantissa < 1 << (digits - 1) {
+        mantissa <<= 1;
+        exponent -= 1;
+    }
+    let mantissa = BigInt::from(mantissa);
+    (if negative { -mantissa } else { mantissa }, exponent)
+}
+
+#[no_mangle]
+pub extern "C" fn hazy_prim_float_mantissa(precision: Value, value: Value) -> Value {
+    from_integer(decode(single(precision), floating(value)).0)
+}
+
+#[no_mangle]
+pub extern "C" fn hazy_prim_float_exponent(precision: Value, value: Value) -> Value {
+    from_int(decode(single(precision), floating(value)).1)
+}
+
+/// A whole number times a power of two, rounded to the nearest number of
+/// the precision, ties to even.
+#[no_mangle]
+pub extern "C" fn hazy_prim_float_encode(precision: Value, mantissa: Value, exponent: Value) -> Value {
+    let single = single(precision);
+    let mantissa = integer(mantissa);
+    if mantissa.is_zero() {
+        return from_floating(0.0);
+    }
+    let digits: i64 = if single { 24 } else { 53 };
+    let mut magnitude = mantissa.magnitude().clone();
+    let mut exponent = int(exponent) as i64;
+    // Two bits past the precision are kept, and whether anything below
+    // them was not nothing: then the conversion rounds as the whole would.
+    let bits = magnitude.bits() as i64;
+    if bits > digits + 2 {
+        let shift = bits - (digits + 2);
+        let sticky = (magnitude.trailing_zeros().unwrap_or(0) as i64) < shift;
+        magnitude >>= shift as usize;
+        if sticky {
+            magnitude |= num_bigint::BigUint::one();
+        }
+        exponent += shift;
+    }
+    let kept = magnitude.to_u64().unwrap_or(0);
+    let mut x = if single { f64::from(kept as f32) } else { kept as f64 };
+    while exponent > 1000 {
+        x *= 2f64.powi(1000);
+        exponent -= 1000;
+    }
+    while exponent < -1000 {
+        x *= 2f64.powi(-1000);
+        exponent += 1000;
+    }
+    x *= 2f64.powi(exponent as i32);
+    if single {
+        x = f64::from(x as f32);
+    }
+    from_floating(if mantissa.is_negative() { -x } else { x })
+}
+
+/// The whole number a number is, toward nothing.
+#[no_mangle]
+pub extern "C" fn hazy_prim_float_truncate(value: Value) -> Value {
+    from_integer(BigInt::from_f64(floating(value).trunc()).unwrap_or_default())
 }
 
 /// An array of so many places, each holding the one value it is given.
