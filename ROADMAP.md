@@ -1059,6 +1059,17 @@ The order to take it in:
     - A large block was found, when it was given back, by going through
       every large block there was. That was not what made it slow, but it
       is found by its address now
+    - What refers to itself is worked out again each time it does, so that
+      nothing holds itself (`Sequent.Hoist`). Thirty-three values of the
+      compiler were. Most were functions that call themselves written with
+      nothing before their `=`, as `go = \case ...` is, which came to the
+      sequent calculus as thunks that gave a function: they are functions
+      now (`object`, in `Sequent.FromCore`). One was the table of `loeb`,
+      which Freddy pointed out: every cell that looked at it made it again.
+      It is reached through a reference now, which `loebST` lets go of when
+      it is done (`Graph.Topological`). Nine are left, none of them where
+      much time goes. With that the compiler makes nine in a hundred fewer
+      blocks, and checks the source in about seventy-five seconds
   - It never gives back what refers to itself, and the compiler keeps much
     in references that do: compiling itself takes six gigabytes at most.
     The check of the heap (`HAZY_CHECK`) calls that an error, so the tests

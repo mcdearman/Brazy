@@ -16,6 +16,7 @@ import Core.Tree.Constraints (ConstraintsF (..))
 import Core.Tree.ConstructorInfo (ConstructorInfo (..))
 import Core.Tree.Declaration (Declaration (..))
 import Core.Tree.Declarations (Declarations (..))
+import qualified Core.Tree.Declarations as Declarations (none)
 import Core.Tree.EntryInfo (EntryInfo (EntryInfo))
 import qualified Core.Tree.EntryInfo
 import Core.Tree.Evidence (Evidence)
@@ -572,6 +573,17 @@ object :: Context s scope -> Expression scope -> ST s Producer
 object context = \case
   Core.Lambda {body} -> lambda context body
   Core.Newtype {argument} -> object context argument
+  -- A definition with nothing before its @=@ comes from the check as the
+  -- one way out of a match that matches nothing, inside the definitions of
+  -- a @where@ that has none. What it is is what is inside. A function
+  -- written so was a thunk that gave the function: one that called itself
+  -- referred to itself, and was made again at every call (see
+  -- "Sequent.Hoist"), where written with its arguments it was not.
+  Core.Join {statements = Statements.Done {done}} -> object context done
+  Core.Join {statements = Statements.Let {declarations, letBody = Statements.Done {done}}}
+    | Declarations.none declarations -> do
+        (context, _) <- generateDeclarations context declarations
+        object context done
   expression -> do
     result <- fresh context
     body <- evaluate context expression (Covariable result)
