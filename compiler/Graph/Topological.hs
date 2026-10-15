@@ -61,16 +61,23 @@ initialize = fmap2 $ Morph $ \case
     reference <- newSTRef $! Unmarked {algebra = run, fail = cycle}
     pure (MarkRef reference)
 
-visit :: forall f s. (Functor2 f) => f (MarkRef f s) -> f (ST s)
-visit spreadsheet = table
+-- |
+-- The table of what each cell works out to. A cell works its value out
+-- from the table, and so the table is reached through a reference to it,
+-- which is given it once it is made: were it to refer to itself, a
+-- compiler made by Hazy would make it again every time a cell looked at it
+-- (see "Sequent.Hoist"). What the cells work out never refers back to the
+-- table.
+visit :: forall f s. (Functor2 f) => STRef s (f (ST s)) -> f (MarkRef f s) -> f (ST s)
+visit self spreadsheet = fmap2 (Morph calculate) spreadsheet
   where
-    table = fmap2 (Morph calculate) spreadsheet
     calculate :: MarkRef f s a -> ST s a
     calculate (MarkRef reference) = do
       mark <- readSTRef reference
       case mark of
         Unmarked {fail, algebra} -> do
           writeSTRef reference $! Temporary {fail}
+          table <- readSTRef self
           result <- algebra table
           writeSTRef reference $! Permanent {result}
           pure result
@@ -80,7 +87,20 @@ visit spreadsheet = table
 loebST :: (Traversable2 t) => t (Formula t s) -> ST s (t Identity)
 loebST spreadsheet = do
   spreadsheet <- sequence2 $ initialize spreadsheet
-  sequence2' $ visit spreadsheet
+  self <- newSTRef unmade
+  let table = visit self spreadsheet
+  writeSTRef self table
+  result <- sequence2' table
+  -- The table refers to itself through the reference. Once every cell is
+  -- worked out, it is let go of, so that it can be given back.
+  writeSTRef self finished
+  pure result
+
+-- | What the reference to the table holds before the table is made, and
+-- after it is done with. Nothing asks for it then.
+unmade, finished :: a
+unmade = error "a cell asked for the table before it was made"
+finished = error "a cell asked for the table after it was done with"
 
 -- |
 -- Applicative representing lazy side effects ala the R language. This
@@ -103,10 +123,17 @@ newtype Loeb f a = Loeb (forall s. f (Formula f s))
 
 mapCompose f (Compose x) = Compose (f x)
 
+-- |
+-- The same, worked out as each cell is asked for. Since nothing says when
+-- that is over, the table is never let go of: it is kept as long as what
+-- was worked out from it is.
 loeb :: (Traversable2 f) => Loeb f a -> f Identity
 loeb (Loeb spreadsheet) = unsafePerformIO $ do
   spreadsheet <- runLazyIO $ traverse2 (Morph $ mapCompose $ LazyIO . stToIO) $ initialize spreadsheet
-  runLazyIO $ traverse2' (Morph $ LazyIO . stToIO) $ visit spreadsheet
+  self <- stToIO $ newSTRef unmade
+  let table = visit self spreadsheet
+  stToIO $ writeSTRef self table
+  runLazyIO $ traverse2' (Morph $ LazyIO . stToIO) table
 
 newtype Loeb1 t a = Loeb1 (forall s. t (Formula1 t s a))
 
