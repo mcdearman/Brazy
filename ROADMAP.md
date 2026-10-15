@@ -1045,7 +1045,13 @@ The order to take it in:
   - It is slow. Checking the compiler's source takes it about eighty
     seconds where the one GHC built takes six. Compiling the compiler to
     native code takes it about six minutes where the other takes three,
-    clang's share included. What was measured:
+    clang's share included. A vector is an array of the runtime's now,
+    as Freddy asked: a block of its places, `ARRAY`, made, read and
+    changed by primitives (`array_new`, `array_read`, `array_index`,
+    `array_write`, `array_length`), which `Data.Vector` and
+    `Data.Vector.Strict` fill in by the primitives of `ST`. It was a tree.
+    The compiler makes as many blocks as it did, holds a tenth less, and
+    finds an element at once (test `vector-array`). What was measured:
     - Two thirds of the time is in the runtime, making blocks and giving
       them back: the program makes five and a half thousand million blocks
       to check the source. A block is made and given back quickly. There

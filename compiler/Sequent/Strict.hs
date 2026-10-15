@@ -50,7 +50,7 @@ import Data.Text (Text)
 import qualified Data.Text as Text
 import Data.Traversable (for)
 import qualified Generate.Global as Global (Global)
-import qualified Sequent.Primitive as Primitive (Primitive (..))
+import qualified Sequent.Primitive as Primitive (Primitive (..), holding)
 import Sequent.Tree
   ( Alternative (..),
     Binder (..),
@@ -284,8 +284,9 @@ strengthen' time known definition = do
         Primitive primitive arguments result -> do
           arguments <- traverse (producerx scope) arguments
           case (primitive, result) of
-            -- A field may be a thunk. Everything else gives a value.
-            (Primitive.Field _, _) -> Primitive primitive arguments <$> consumer scope result
+            -- What a place holds may be a thunk. Everything else gives a
+            -- value.
+            _ | Primitive.holding primitive -> Primitive primitive arguments <$> consumer scope result
             (_, MuTilde binder@Binder {name = variable} body) ->
               Primitive primitive arguments . MuTilde (evaluated binder) <$> statement (valued scope variable) body
             _ -> Primitive primitive arguments <$> consumer scope result

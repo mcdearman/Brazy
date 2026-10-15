@@ -25,6 +25,8 @@ import Data.IORef (IORef, modifyIORef, newIORef, readIORef, writeIORef)
 import Data.Int (Int32)
 import Data.List (sort)
 import Data.Map (Map)
+import Data.Vector (Vector)
+import qualified Data.Vector as Vector
 import qualified Data.Map as Map
 import Data.Text (Text, unpack)
 import qualified Data.Text as Text
@@ -61,6 +63,8 @@ data Value
   | Reference !(IORef Cell)
   | -- | A place that holds a value, which can be changed for another.
     Box !(IORef Value)
+  | -- | Places one after another, each of which can be changed.
+    Array !(IORef (Vector Value))
 
 -- |
 -- What a program has of the world outside while it runs: what catches a
@@ -312,6 +316,15 @@ apply world primitive arguments = case (primitive, arguments) of
       exitFailure
 
 -- |
+-- What a place of an array holds.
+placed :: IORef (Vector Value) -> Int32 -> IO Value
+placed array index = do
+  places <- readIORef array
+  case places Vector.!? fromIntegral index of
+    Just value -> pure value
+    Nothing -> bug $ "index " ++ show index ++ " is out of the bounds of an array of " ++ show (Vector.length places)
+
+-- |
 -- What the runtime does under a name of its own, as the machine does it.
 outside :: World -> String -> [Value] -> IO Value
 outside World {catching, files, building} name arguments = case (name, arguments) of
@@ -319,6 +332,13 @@ outside World {catching, files, building} name arguments = case (name, arguments
   ("read_ref", [Box box]) -> readIORef box
   ("write_ref", [Box box, value]) -> unit <$ writeIORef box value
   ("same_ref", [Box left, Box right]) -> pure $ bool $ left == right
+  ("array_new", [Int count, fill]) -> Array <$> newIORef (Vector.replicate (max 0 (fromIntegral count)) fill)
+  ("array_read", [Array array, Int index]) -> placed array index
+  ("array_index", [Array array, Int index]) -> placed array index
+  ("array_write", [Array array, Int index, value]) -> do
+    _ <- placed array index
+    unit <$ modifyIORef array (Vector.// [(fromIntegral index, value)])
+  ("array_length", [Array array]) -> Int . fromIntegral . Vector.length <$> readIORef array
   -- A program on the machine is given no arguments.
   ("arg_count", []) -> pure $ Int 0
   ("get_env", [Text variable]) -> do
