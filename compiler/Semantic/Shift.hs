@@ -1,6 +1,7 @@
 module Semantic.Shift
   ( Category (..),
     Functor (..),
+    grouped,
     mapInstances,
     PartialUnshift (..),
     Unshift (..),
@@ -46,6 +47,9 @@ data Category scope scope' where
     Category scope (Scope.GroupType ':+ scope)
   UngroupTerm ::
     (Int -> Term.Index scope) ->
+    -- What the definitions of the group assume, which a use of one of them
+    -- by another of them is given: see 'grouped'.
+    [Evidence0.Index scope] ->
     Category (Scope.GroupTerm ':+ scope) scope
   UngroupType ::
     (Int -> Type.Index scope) ->
@@ -127,7 +131,7 @@ instance Functor Term.Index where
     | Strict.Just index <- term (Term0.Global global local) = Term.Group index
   map GroupTerm {} index = Term.Shift index
   map GroupType {} index = Term.Shift index
-  map (UngroupTerm term) (Term.Group index) = term index
+  map (UngroupTerm term _) (Term.Group index) = term index
   map UngroupTerm {} (Term.Shift index) = index
   map UngroupType {} (Term.Shift index) = index
   map ReplaceWildcard index = case index of
@@ -303,6 +307,22 @@ lift = \case
   Shift0.Id -> Id
   Shift0.Shift -> Shift
   after Shift0.:. before -> lift after :. lift before
+
+-- |
+-- The evidence that a use of a definition is given, if the use is of a
+-- definition of a group that is being taken apart, by one of the group,
+-- and the group requires something: all that the group's definitions
+-- assume, as it is where the use is.
+--
+-- Inside the definitions of a group, one of them is of one type, as the
+-- Haskell report has it, and so it requires what they all require: the
+-- very evidence they were given. A use of one of them there was checked as
+-- a use of one type, that is given nothing.
+grouped :: Category scope scope' -> Term.Index scope -> Maybe [Evidence0.Index scope']
+grouped category index = case (category, index) of
+  (UngroupTerm _ evidence@(_ : _), Term.Group _) -> Just evidence
+  (Over category, Term.Shift index) -> (\evidence -> [shift assumed | assumed <- evidence]) <$> grouped category index
+  _ -> Nothing
 
 class PartialUnshift f where
   partialUnshift :: (Applicative m) => m Void -> f (scope ':+ scopes) -> m (f scopes)
