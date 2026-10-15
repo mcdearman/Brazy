@@ -277,6 +277,11 @@ definitions =
             ("primReadRef", effect "read_ref"),
             ("primWriteRef", writeRef),
             ("primSameRef", wrap (outside "same_ref")),
+            ("primArrayNew", newArray),
+            ("primArrayRead", effect "array_read"),
+            ("primArrayWrite", writeArray),
+            ("primArrayIndex", indexArray),
+            ("primArrayLength", wrap (outside "array_length")),
             ("primArgCount", effect "arg_count"),
             ("primArg", effect "arg"),
             ("primGetEnv", effect "get_env"),
@@ -360,6 +365,61 @@ writeRef =
                   Primitive (outside "write_ref") [variable "place", variable "value"] (covariable "done")
             )
             (covariable "k1")
+      )
+      (covariable "k")
+
+-- An array's places hold whatever they are given, evaluated or not. How
+-- many places there are is evaluated when the array is made.
+--
+-- > primArrayNew count fill = \() -> new (force count) fill
+newArray :: Producer
+newArray =
+  function "count" "k" $
+    Cut
+      ( function "fill" "k1" $
+          Cut
+            ( action "done" $
+                force "count" "n" $
+                  Primitive (outside "array_new") [variable "n", variable "fill"] (covariable "done")
+            )
+            (covariable "k1")
+      )
+      (covariable "k")
+
+-- > primArrayWrite array index value = \() -> write (force array) (force index) value
+writeArray :: Producer
+writeArray =
+  function "array" "k" $
+    Cut
+      ( function "index" "k1" $
+          Cut
+            ( function "value" "k2" $
+                Cut
+                  ( action "done" $
+                      force "array" "a" $
+                        force "index" "i" $
+                          Primitive (outside "array_write") [variable "a", variable "i", variable "value"] (covariable "done")
+                  )
+                  (covariable "k2")
+            )
+            (covariable "k1")
+      )
+      (covariable "k")
+
+-- What a place of an array that is no longer changed holds. It is what it
+-- was given, which may be yet to be evaluated: it is evaluated before it is
+-- given on.
+--
+-- > primArrayIndex array index = force (index (force array) (force index))
+indexArray :: Producer
+indexArray =
+  function "array" "k" $
+    Cut
+      ( function "index" "k1" $
+          force "array" "a" $
+            force "index" "i" $
+              Primitive (outside "array_index") [variable "a", variable "i"] $
+                MuTilde (byNeed "x") (Cut (variable "x") (Force (covariable "k1")))
       )
       (covariable "k")
 

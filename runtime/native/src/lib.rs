@@ -18,7 +18,7 @@
 
 mod heap;
 
-use heap::{hazy_alloc, header, nullary, Value, DATA, INTEGER, SLICE, TEXT};
+use heap::{hazy_alloc, header, nullary, Value, ARRAY, DATA, INTEGER, SLICE, TEXT};
 use num_bigint::BigInt;
 use num_traits::{Signed, ToPrimitive, Zero};
 use std::io::Write;
@@ -503,6 +503,56 @@ pub extern "C" fn hazy_prim_write_ref(reference: Value, value: Value) -> Value {
 #[no_mangle]
 pub extern "C" fn hazy_prim_same_ref(left: Value, right: Value) -> Value {
     boolean(left == right)
+}
+
+/// An array of so many places, each holding the one value it is given.
+#[no_mangle]
+pub extern "C" fn hazy_prim_array_new(count: Value, fill: Value) -> Value {
+    let count = int(count).max(0) as usize;
+    let block = hazy_alloc(2 + count as u64, header(ARRAY, 0, 0));
+    unsafe {
+        *block.add(1) = count as u64;
+        for index in 0..count {
+            *block.add(2 + index) = heap::share(fill);
+        }
+    }
+    block as Value
+}
+
+/// The place of an array at an index.
+fn place(array: Value, index: Value) -> *mut u64 {
+    let block = array as *mut u64;
+    let length = unsafe { *block.add(1) } as i64;
+    let index = int(index) as i64;
+    if index < 0 || index >= length {
+        fail(&format!("index {index} is out of the bounds of an array of {length}"));
+    }
+    unsafe { block.add(2 + index as usize) }
+}
+
+#[no_mangle]
+pub extern "C" fn hazy_prim_array_read(array: Value, index: Value) -> Value {
+    heap::share(unsafe { *place(array, index) })
+}
+
+/// The same, of an array that is no longer changed.
+#[no_mangle]
+pub extern "C" fn hazy_prim_array_index(array: Value, index: Value) -> Value {
+    heap::share(unsafe { *place(array, index) })
+}
+
+#[no_mangle]
+pub extern "C" fn hazy_prim_array_write(array: Value, index: Value, value: Value) -> Value {
+    let place = place(array, index);
+    let old = unsafe { *place };
+    unsafe { *place = heap::share(value) };
+    heap::release(old);
+    unit()
+}
+
+#[no_mangle]
+pub extern "C" fn hazy_prim_array_length(array: Value) -> Value {
+    from_int(unsafe { *(array as *const u64).add(1) } as i32)
 }
 
 #[no_mangle]
