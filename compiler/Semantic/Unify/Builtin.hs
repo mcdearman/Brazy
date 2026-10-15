@@ -160,6 +160,31 @@ constrain fallthough constrain classx head = table classx head
       integral <- constrain Type2.Integral element
       element <- constrain Type2.Read element
       call [integral, element]
+    table Type2.RealFrac Type2.Ratio [integer] = do
+      integer <- constrain Type2.Integral integer
+      call [integer]
+    table Type2.Eq Type2.Float [] = single
+    table Type2.Ord Type2.Float [] = single
+    table Type2.Num Type2.Float [] = single
+    table Type2.Real Type2.Float [] = single
+    table Type2.Fractional Type2.Float [] = single
+    table Type2.Floating Type2.Float [] = single
+    table Type2.RealFrac Type2.Float [] = single
+    table Type2.RealFloat Type2.Float [] = single
+    table Type2.Enum Type2.Float [] = single
+    table Type2.Show Type2.Float [] = single
+    table Type2.Read Type2.Float [] = single
+    table Type2.Eq Type2.Double [] = single
+    table Type2.Ord Type2.Double [] = single
+    table Type2.Num Type2.Double [] = single
+    table Type2.Real Type2.Double [] = single
+    table Type2.Fractional Type2.Double [] = single
+    table Type2.Floating Type2.Double [] = single
+    table Type2.RealFrac Type2.Double [] = single
+    table Type2.RealFloat Type2.Double [] = single
+    table Type2.Enum Type2.Double [] = single
+    table Type2.Show Type2.Double [] = single
+    table Type2.Read Type2.Double [] = single
     table _ _ _ = fallthough
 
     single = pure $ Variable (Evidence.Direct classx head) Mono

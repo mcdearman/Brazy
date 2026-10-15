@@ -25,19 +25,32 @@ data Box s scope
   = Solved !(Evidence s scope)
   | -- | Evidence that is not known yet, because the type it is for is not.
     -- If the type is never known, the evidence may still be had by taking
-    -- the type to be @Integer@: see 'Fallback'.
+    -- the type to be @Integer@ or @Double@: see 'Fallback'.
     Unsolved {fallback :: !(Maybe (Fallback s))}
 
 -- |
 -- What evidence is when the type it is for is never worked out and is taken
--- to be @Integer@, as the Haskell report's defaulting has it. The class is
--- one that @Integer@ is a builtin instance of, and the action says whether
--- the type may be defaulted: that depends on every class the type is
--- constrained by, which is only known at the end.
+-- to be @Integer@ or @Double@, as the Haskell report's defaulting has it.
+-- The class is one that both are builtin instances of where they can be,
+-- and the action says which the type is taken to be, if either: that
+-- depends on every class the type is constrained by, which is only known at
+-- the end.
 data Fallback s = Fallback
   { classx :: !Defaultable,
-    permitted :: ST s Bool
+    permitted :: ST s (Maybe Default)
   }
+
+-- |
+-- What a type may be taken to be, in the order the report's default
+-- declaration, @default (Integer, Double)@, tries them.
+data Default
+  = Integer
+  | Double
+
+typeOf :: Default -> Type2.Index scope
+typeOf = \case
+  Integer -> Type2.Integer
+  Double -> Type2.Double
 
 -- |
 -- The classes whose constraints do not stop a type from being defaulted.
@@ -45,6 +58,10 @@ data Defaultable
   = Num
   | Real
   | Integral
+  | Fractional
+  | Floating
+  | RealFrac
+  | RealFloat
   | Enum
   | Eq
   | Ord
@@ -56,6 +73,10 @@ defaultable = \case
   Type2.Num -> Just Num
   Type2.Real -> Just Real
   Type2.Integral -> Just Integral
+  Type2.Fractional -> Just Fractional
+  Type2.Floating -> Just Floating
+  Type2.RealFrac -> Just RealFrac
+  Type2.RealFloat -> Just RealFloat
   Type2.Enum -> Just Enum
   Type2.Eq -> Just Eq
   Type2.Ord -> Just Ord
@@ -71,6 +92,21 @@ numeric = \case
   Num -> True
   Real -> True
   Integral -> True
+  Fractional -> True
+  Floating -> True
+  RealFrac -> True
+  RealFloat -> True
+  _ -> False
+
+-- |
+-- Whether a class is one that @Integer@ is not an instance of, and
+-- @Double@ is.
+fractional :: Defaultable -> Bool
+fractional = \case
+  Fractional -> True
+  Floating -> True
+  RealFrac -> True
+  RealFloat -> True
   _ -> False
 
 classOf :: Defaultable -> Type2.Index scope
@@ -78,6 +114,10 @@ classOf = \case
   Num -> Type2.Num
   Real -> Type2.Real
   Integral -> Type2.Integral
+  Fractional -> Type2.Fractional
+  Floating -> Type2.Floating
+  RealFrac -> Type2.RealFrac
+  RealFloat -> Type2.RealFloat
   Enum -> Type2.Enum
   Eq -> Type2.Eq
   Ord -> Type2.Ord

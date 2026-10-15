@@ -19,6 +19,8 @@ data Index scope
   | Int
   | Ordering
   | Ratio
+  | Float
+  | Double
   | Num
   | Enum
   | Bounded
@@ -27,6 +29,9 @@ data Index scope
   | Real
   | Integral
   | Fractional
+  | Floating
+  | RealFrac
+  | RealFloat
   | Functor
   | Applicative
   | Monad
@@ -60,6 +65,8 @@ split = \case
   Int -> Builtin Int
   Ordering -> Builtin Ordering
   Ratio -> Builtin Ratio
+  Float -> Builtin Float
+  Double -> Builtin Double
   Num -> Builtin Num
   Enum -> Builtin Enum
   Bounded -> Builtin Bounded
@@ -68,6 +75,9 @@ split = \case
   Real -> Builtin Real
   Integral -> Builtin Integral
   Fractional -> Builtin Fractional
+  Floating -> Builtin Floating
+  RealFrac -> Builtin RealFrac
+  RealFloat -> Builtin RealFloat
   Functor -> Builtin Functor
   Applicative -> Builtin Applicative
   Monad -> Builtin Monad

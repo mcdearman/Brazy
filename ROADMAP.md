@@ -1339,15 +1339,23 @@ Found while comparing the two backends:
 
 Missing:
 
-- [x] Constrained type defaulting, to `Integer`. A type that is never
-      worked out is taken to be `Integer` when every class it is constrained
-      by is one of `Num`, `Real`, `Integral`, `Enum`, `Eq`, `Ord`, `Show` and
-      `Read`, and at least one is a class of numbers. There is no `default`
-      declaration, and nothing defaults to a fraction, since there is no
-      `Double`
+- [x] Constrained type defaulting, to `Integer` and then `Double`, as the
+      report's `default (Integer, Double)` has it. A type that is never
+      worked out is taken to be one of them when every class it is
+      constrained by is one of `Num`, `Real`, `Integral`, `Fractional`,
+      `Floating`, `RealFrac`, `RealFloat`, `Enum`, `Eq`, `Ord`, `Show` and
+      `Read`, and at least one is a class of numbers: `Integer` if none is
+      a class of fractions, `Double` if one is and `Integral` is not, and
+      neither if both are (tests `defaulting-double` and
+      `IntegralFraction`).
+      There is no `default` declaration. For this `Float` and `Double` are
+      builtin types, and `Floating`, `RealFrac` and `RealFloat` builtin
+      classes, as `Int` and `Fractional` are: their instances are newtypes
+      in `Hazy.Helper`, as the other builtin types' are
 - [ ] Defaulting done Freddy's way. What is there now is a stopgap: it knows
-      only `Integer` and eight builtin classes, because nothing is at hand to
-      look an instance up with when types are finally worked out. Freddy's
+      only `Integer`, `Double` and twelve builtin classes, because nothing is
+      at hand to look an instance up with when types are finally worked
+      out. Freddy's
       plan, which will be followed here, is to do away with most of
       `Semantic.Check.Temporary` and make it `Semantic.Check.Go`, where
       checking gives back `ST s (Unify.Solve s ..)`. The inner step then
