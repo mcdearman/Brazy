@@ -1034,7 +1034,12 @@ The order to take it in:
       was read again. Twenty pairs took four seconds, and an instance
       derived for a record of eighty fields did not end. A section and an
       expression are read together now (`parseOpen`, test `brackets`)
-- [ ] `- 1 + 2` is refused as an illegal fixity. It is `(- 1) + 2`
+- [x] `- 1 + 2` was refused as an illegal fixity. It is `(- 1) + 2`: a
+      negation at the start of an operand is the left operand of what
+      follows it at the same precedence (`Semantic.Resolve.Temporary.Infix`,
+      test `negation`). After an operator of the same precedence it is
+      refused still, as Haskell has it (tests `BadNegateAfterLeft` and
+      `BadNegateAfterRight`)
 - [ ] What a compiler made by Hazy does not do as well as the one GHC
       builds:
   - It is slow. Checking the compiler's source takes it about eighty

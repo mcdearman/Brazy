@@ -72,9 +72,7 @@ fixWith make' make associativity precedence infixed =
       Token x _ -> Invalid $ illegalFixity $ position x
       Pretoken x _ -> Invalid $ illegalFixity $ position' x
       Done -> error "done not reachable"
-    fixWith _ precedence (Pretoken x stream)
-      | precedence == fixity' x = make' x `map` fixWith Nothing (precedence + 1) stream
-    fixWith associativity precedence stream = case fixWith Nothing (precedence + 1) stream of
+    fixWith associativity precedence stream = case operand of
       Valid e (Token x stream)
         | Fixity {associativity = associativity', precedence = precedence'} <- fixity x,
           match associativity associativity',
@@ -90,3 +88,15 @@ fixWith make' make associativity precedence infixed =
                         left (make e x e2) x2 stream
                   result -> map (make e x) result
       result -> result
+      where
+        -- The first operand at this precedence. A prefix operator of this
+        -- precedence, as negation is, takes what is above it, and is then
+        -- the left operand of what follows: @- 1 + 2@ is @(- 1) + 2@. It
+        -- was given back by itself, and the @+@ was left over. It cannot
+        -- come after an operator of the same precedence that groups to the
+        -- right, as it cannot after one that groups to the left.
+        operand = case (associativity, stream) of
+          (Just Right, _) -> fixWith Nothing (precedence + 1) stream
+          (_, Pretoken x rest)
+            | precedence == fixity' x -> make' x `map` fixWith Nothing (precedence + 1) rest
+          _ -> fixWith Nothing (precedence + 1) stream
