@@ -1,0 +1,26 @@
+io-errors.missing: openFile: does not exist (No such file or directory)
+(True,False,Just "io-errors.missing")
+("openFile","does not exist",True)
+Left user error (boom)
+caught: caught True
+(True,False)
+there: here: end of file
+file: where: user error (x)
+Left user error (changed)
+an IOException
+some exception: user error (any)
+(13,'h','\233','\233',"llo",7,"world",True)
+Left io-errors.scratch: hGetLine: end of file
+Left io-errors.scratch: hGetChar: end of file
+("h\233llo",True,False,True)
+True
+("h\233llo",'o',False)
+héllo
+world
+more
+héllo
+world
+more
+end
+True
+"inappropriate type"

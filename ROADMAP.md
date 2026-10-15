@@ -1104,8 +1104,9 @@ The order to take it in:
   - `toUpper` and `toLower` change the letters of Latin-1 only
   - An `Int` is 32 bits in both runtimes, and `Int64` is no wider
   - Whatever is read from a handle is read at once, not as it is wanted
-  - Many functions of `Data.Map`, `Data.Vector`, `System.IO` and
-    `System.Directory` that the compiler does not use are placeholders yet
+  - Many functions of `Data.Map`, `Data.Vector` and `System.Directory`
+    that the compiler does not use are placeholders yet. Of `System.IO`,
+    only the ones that read and write through a `Ptr` are
 - [x] The type variables of an instance, in its methods. A type written
       after an expression in a method meant the wrong variable, or none:
       the method's own type variables were put outside the instance's where
@@ -1368,6 +1369,22 @@ Missing:
       shortest digits that read back the same, with `NaN`, `Infinity` and
       negative zero (tests `floating-point` and `floating-edges`, which
       agree with GHC). `showHFloat` is still a placeholder
+- [x] What goes wrong with input and output. An `IOError` is GHC's
+      `IOException`, a record of the handle, the kind, where, the system's
+      words and the file, shown as GHC shows it, and `ioError`, `userError`
+      and the Prelude's `catch` work. It is thrown as `Control.Exception`
+      throws, which now takes what is thrown from the runtime
+      (`Hazy.PreludeIO`), and is an `Exception` there, `IOException`. A file
+      that cannot be opened or removed is one, with the kind and the words
+      the system gave (`last_failure`), and so is reading past the end.
+      `System.IO.Error` and `GHC.IO.Exception` are new
+  - Under it, a file open in the runtime is read through a buffer, so a
+    character can be looked at before it is taken: `getChar`, `hGetChar`,
+    `hLookAhead`, `hIsEOF`, `hReady`, and a file opened to read and write.
+    `hFileSize`, `hSeek`, `hTell`, `hGetPosn`, `hFlush`, `hIsOpen` and the
+    rest of what the report's `System.IO` asks, `openTempFile`, `fixIO` and
+    `removeFile` work too (test `io-errors`, which agrees with GHC). The
+    AxCut machine reads lines now, which it could not
 - [x] GADTs: see M6
 - [x] Polymorphic components: see M6
 - [ ] Strict functions

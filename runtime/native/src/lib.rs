@@ -457,19 +457,74 @@ pub extern "C" fn hazy_prim_integer_rem(left: Value, right: Value) -> Value {
 // primitive borrows what it is given, so one that keeps a value takes a
 // reference of its own to it.
 
+/// A file that is open: what it was opened as, what reads it, which keeps
+/// what it has read ahead of what the program has taken, and whether it may
+/// be read and written.
+struct Open {
+    path: String,
+    reader: std::io::BufReader<std::fs::File>,
+    readable: bool,
+    writable: bool,
+}
+
 /// The files that are open. A file is known to a program by where it is
 /// here, after the three every program has.
-static mut FILES: Vec<Option<std::fs::File>> = Vec::new();
+static mut FILES: Vec<Option<Open>> = Vec::new();
 
-fn files() -> &'static mut Vec<Option<std::fs::File>> {
+/// What the system said of the last file that could not be opened.
+static mut FAILURE: String = String::new();
+
+fn files() -> &'static mut Vec<Option<Open>> {
     // The program has one thread.
     unsafe { &mut *std::ptr::addr_of_mut!(FILES) }
 }
 
-fn file(descriptor: i32) -> &'static mut std::fs::File {
+fn file(descriptor: i32) -> &'static mut Open {
     match files().get_mut((descriptor - 3) as usize) {
         Some(Some(file)) => file,
         _ => fail(&format!("file {descriptor} is not open")),
+    }
+}
+
+/// Read from standard input or from a file that was opened, through what
+/// keeps what was read ahead.
+fn reading<T>(
+    descriptor: i32,
+    read: impl FnOnce(&mut dyn std::io::BufRead) -> std::io::Result<T>,
+) -> T {
+    let result = match descriptor {
+        0 => read(&mut std::io::stdin().lock()),
+        1 | 2 => fail(&format!("file {descriptor} is not open to read")),
+        descriptor => read(&mut file(descriptor).reader),
+    };
+    match result {
+        Ok(value) => value,
+        Err(error) => fail(&format!("could not read: {error}")),
+    }
+}
+
+/// What kind of failure the system's is, as `Hazy.PreludeIO` numbers them.
+/// They are told apart as GHC tells them apart.
+fn failure(error: &std::io::Error) -> i32 {
+    use std::io::ErrorKind::*;
+    match error.kind() {
+        AlreadyExists => 1,
+        NotFound | NotADirectory => 2,
+        ResourceBusy => 3,
+        StorageFull => 4,
+        PermissionDenied | ReadOnlyFilesystem => 7,
+        IsADirectory => 8,
+        InvalidInput => 9,
+        _ => 0,
+    }
+}
+
+/// What the system says of a failure, without the number it knows it by.
+fn description(error: &std::io::Error) -> String {
+    let said = error.to_string();
+    match said.find(" (os error ") {
+        Some(end) => said[..end].to_string(),
+        None => said,
     }
 }
 
@@ -811,32 +866,81 @@ pub extern "C" fn hazy_prim_exit(code: Value) -> Value {
     std::process::exit(int(code))
 }
 
-/// A file opened to read, to write or to add to, as the mode is 0, 1 or 2.
+/// A file opened to read, to write, to add to, or to read and write, as the
+/// mode is 0, 1, 2 or 3, or made to read and write if it was not there, as
+/// it is 4. A file that cannot be opened is a negative number,
+/// the kind of the failure, and the system's word for it is kept for
+/// `last_failure`.
 #[no_mangle]
 pub extern "C" fn hazy_prim_open(path: Value, mode: Value) -> Value {
+    let mode = int(mode);
     let mut options = std::fs::OpenOptions::new();
-    match int(mode) {
+    match mode {
         0 => options.read(true),
         1 => options.write(true).create(true).truncate(true),
-        _ => options.append(true).create(true),
+        2 => options.append(true).create(true),
+        3 => options.read(true).write(true).create(true),
+        _ => options.read(true).write(true).create_new(true),
     };
-    match options.open(text(path)) {
+    let opened = options.open(text(path)).and_then(|file| {
+        // A directory can be opened, but it is not read as a file is.
+        if file.metadata()?.is_dir() {
+            Err(std::io::Error::new(std::io::ErrorKind::IsADirectory, "is a directory"))
+        } else {
+            Ok(file)
+        }
+    });
+    match opened {
         Ok(file) => {
+            let open = Open {
+                path: text(path).to_string(),
+                reader: std::io::BufReader::new(file),
+                readable: mode == 0 || mode >= 3,
+                writable: mode != 0,
+            };
             let files = files();
             let place = match files.iter().position(|slot| slot.is_none()) {
                 Some(place) => {
-                    files[place] = Some(file);
+                    files[place] = Some(open);
                     place
                 }
                 None => {
-                    files.push(Some(file));
+                    files.push(Some(open));
                     files.len() - 1
                 }
             };
             from_int(place as i32 + 3)
         }
-        Err(error) => fail(&format!("{}: {error}", text(path))),
+        Err(error) => {
+            unsafe { *std::ptr::addr_of_mut!(FAILURE) = description(&error) };
+            from_int(-failure(&error) - 1)
+        }
     }
+}
+
+/// Take a file away: nothing, if it was, or else the negative of the kind
+/// of failure, less one, as `open` has it.
+#[no_mangle]
+pub extern "C" fn hazy_prim_remove_file(path: Value) -> Value {
+    match std::fs::remove_file(text(path)) {
+        Ok(()) => from_int(0),
+        Err(error) => {
+            unsafe { *std::ptr::addr_of_mut!(FAILURE) = description(&error) };
+            from_int(-failure(&error) - 1)
+        }
+    }
+}
+
+/// What a file that is open was opened as.
+#[no_mangle]
+pub extern "C" fn hazy_prim_file_name(descriptor: Value) -> Value {
+    from_text(&file(int(descriptor)).path)
+}
+
+/// What the system said of the last file that could not be opened.
+#[no_mangle]
+pub extern "C" fn hazy_prim_last_failure() -> Value {
+    from_text(unsafe { &*std::ptr::addr_of!(FAILURE) })
 }
 
 #[no_mangle]
@@ -850,8 +954,23 @@ pub extern "C" fn hazy_prim_close(descriptor: Value) -> Value {
     unit()
 }
 
+/// Whether a file is open, and to what: 1 to read, 2 to write and 3 to do
+/// both, or 0 if it is not.
+#[no_mangle]
+pub extern "C" fn hazy_prim_file_state(descriptor: Value) -> Value {
+    from_int(match int(descriptor) {
+        0 => 1,
+        1 | 2 => 2,
+        descriptor => match files().get((descriptor - 3) as usize) {
+            Some(Some(open)) => open.readable as i32 + 2 * open.writable as i32,
+            _ => 0,
+        },
+    })
+}
+
 #[no_mangle]
 pub extern "C" fn hazy_prim_write(descriptor: Value, value: Value) -> Value {
+    use std::io::Seek;
     let bytes = text(value).as_bytes();
     let result = match int(descriptor) {
         1 => std::io::stdout().lock().write_all(bytes),
@@ -860,7 +979,31 @@ pub extern "C" fn hazy_prim_write(descriptor: Value, value: Value) -> Value {
             let _ = std::io::stdout().flush();
             std::io::stderr().lock().write_all(bytes)
         }
-        descriptor => file(descriptor).write_all(bytes),
+        descriptor => {
+            let open = file(descriptor);
+            // What was read ahead is given back first, so that what is
+            // written goes where the program has read to.
+            let back = if open.reader.buffer().is_empty() {
+                Ok(())
+            } else {
+                open.reader.seek(std::io::SeekFrom::Current(0)).map(|_| ())
+            };
+            back.and_then(|()| open.reader.get_mut().write_all(bytes))
+        }
+    };
+    if let Err(error) = result {
+        fail(&format!("could not write: {error}"));
+    }
+    unit()
+}
+
+#[no_mangle]
+pub extern "C" fn hazy_prim_flush(descriptor: Value) -> Value {
+    let result = match int(descriptor) {
+        0 => Ok(()),
+        1 => std::io::stdout().flush(),
+        2 => std::io::stderr().flush(),
+        descriptor => file(descriptor).reader.get_mut().flush(),
     };
     if let Err(error) = result {
         fail(&format!("could not write: {error}"));
@@ -870,15 +1013,11 @@ pub extern "C" fn hazy_prim_write(descriptor: Value, value: Value) -> Value {
 
 #[no_mangle]
 pub extern "C" fn hazy_prim_read_all(descriptor: Value) -> Value {
-    use std::io::Read;
-    let mut bytes = Vec::new();
-    let result = match int(descriptor) {
-        0 => std::io::stdin().lock().read_to_end(&mut bytes),
-        descriptor => file(descriptor).read_to_end(&mut bytes),
-    };
-    if let Err(error) = result {
-        fail(&format!("could not read: {error}"));
-    }
+    let bytes = reading(int(descriptor), |reader| {
+        let mut bytes = Vec::new();
+        reader.read_to_end(&mut bytes)?;
+        Ok(bytes)
+    });
     from_text(&String::from_utf8_lossy(&bytes))
 }
 
@@ -886,41 +1025,124 @@ pub extern "C" fn hazy_prim_read_all(descriptor: Value) -> Value {
 /// nothing left to read.
 #[no_mangle]
 pub extern "C" fn hazy_prim_read_line(descriptor: Value) -> Value {
-    use std::io::{BufRead, Read};
-    let mut bytes = Vec::new();
-    let any = match int(descriptor) {
-        0 => match std::io::stdin().lock().read_until(10, &mut bytes) {
-            Ok(count) => count > 0,
-            Err(error) => fail(&format!("could not read: {error}")),
-        },
-        descriptor => {
-            // A byte at a time, so that nothing past the line is taken.
-            let file = file(descriptor);
-            let mut byte = [0u8; 1];
-            let mut any = false;
-            loop {
-                match file.read(&mut byte) {
-                    Ok(0) => break,
-                    Ok(_) => {
-                        any = true;
-                        bytes.push(byte[0]);
-                        if byte[0] == 10 {
-                            break;
-                        }
-                    }
-                    Err(error) => fail(&format!("could not read: {error}")),
-                }
-            }
-            any
-        }
-    };
-    if !any {
+    let mut bytes = reading(int(descriptor), |reader| {
+        let mut bytes = Vec::new();
+        reader.read_until(10, &mut bytes)?;
+        Ok(bytes)
+    });
+    if bytes.is_empty() {
         return from_text("0");
     }
     if bytes.last() == Some(&10) {
         bytes.pop();
     }
     from_text(&format!("1{}", String::from_utf8_lossy(&bytes)))
+}
+
+/// The character a run of bytes of UTF-8 is, or the one that stands for a
+/// character that cannot be read.
+fn decode_utf8(bytes: &[u8]) -> i32 {
+    match std::str::from_utf8(bytes).ok().and_then(|text| text.chars().next()) {
+        Some(character) => character as i32,
+        None => 0xFFFD,
+    }
+}
+
+/// How many bytes of UTF-8 a character is, from its first.
+fn width(first: u8) -> usize {
+    match first {
+        0xC0..=0xDF => 2,
+        0xE0..=0xEF => 3,
+        0xF0..=0xF7 => 4,
+        _ => 1,
+    }
+}
+
+/// The next character, or -1 if there is nothing left to read.
+#[no_mangle]
+pub extern "C" fn hazy_prim_read_char(descriptor: Value) -> Value {
+    from_int(reading(int(descriptor), |reader| {
+        let mut bytes = [0u8; 4];
+        let mut count = 0;
+        loop {
+            let buffer = reader.fill_buf()?;
+            let Some(&byte) = buffer.first() else { break };
+            // A character ends at the first byte that does not go on with it.
+            if count > 0 && (count == width(bytes[0]) || byte & 0xC0 != 0x80) {
+                break;
+            }
+            bytes[count] = byte;
+            reader.consume(1);
+            count += 1;
+            if count == width(bytes[0]) {
+                break;
+            }
+        }
+        Ok(if count == 0 { -1 } else { decode_utf8(&bytes[..count]) })
+    }))
+}
+
+/// The next character, which is left to be read, or -1 if there is nothing
+/// left to read.
+#[no_mangle]
+pub extern "C" fn hazy_prim_peek_char(descriptor: Value) -> Value {
+    from_int(reading(int(descriptor), |reader| {
+        let buffer = reader.fill_buf()?;
+        Ok(match buffer.first() {
+            None => -1,
+            Some(&first) => decode_utf8(&buffer[..width(first).min(buffer.len())]),
+        })
+    }))
+}
+
+#[no_mangle]
+pub extern "C" fn hazy_prim_is_eof(descriptor: Value) -> Value {
+    boolean(reading(int(descriptor), |reader| Ok(reader.fill_buf()?.is_empty())))
+}
+
+/// How long a file is, in bytes.
+#[no_mangle]
+pub extern "C" fn hazy_prim_file_size(descriptor: Value) -> Value {
+    match file(int(descriptor)).reader.get_ref().metadata() {
+        Ok(metadata) => from_integer(BigInt::from(metadata.len())),
+        Err(error) => fail(&format!("could not find the size: {error}")),
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn hazy_prim_set_file_size(descriptor: Value, size: Value) -> Value {
+    let size = integer(size).to_u64().unwrap_or_else(|| fail("a size that cannot be"));
+    if let Err(error) = file(int(descriptor)).reader.get_ref().set_len(size) {
+        fail(&format!("could not set the size: {error}"));
+    }
+    unit()
+}
+
+/// Go to a place in a file: from its start, from where it is read to, or
+/// from its end, as the mode is 0, 1 or 2.
+#[no_mangle]
+pub extern "C" fn hazy_prim_seek(descriptor: Value, mode: Value, offset: Value) -> Value {
+    use std::io::{Seek, SeekFrom};
+    let offset = integer(offset).to_i64().unwrap_or_else(|| fail("a place that cannot be"));
+    let place = match int(mode) {
+        0 => SeekFrom::Start(offset.max(0) as u64),
+        1 => SeekFrom::Current(offset),
+        _ => SeekFrom::End(offset),
+    };
+    if let Err(error) = file(int(descriptor)).reader.seek(place) {
+        fail(&format!("could not seek: {error}"));
+    }
+    unit()
+}
+
+/// Where in a file it is read to, in bytes from its start.
+#[no_mangle]
+pub extern "C" fn hazy_prim_tell(descriptor: Value) -> Value {
+    use std::io::Seek;
+    match file(int(descriptor)).reader.stream_position() {
+        Ok(place) => from_integer(BigInt::from(place)),
+        Err(error) => fail(&format!("could not tell where: {error}")),
+    }
 }
 
 #[no_mangle]

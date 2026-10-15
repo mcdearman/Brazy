@@ -1,14 +1,16 @@
-module Control.Exception where
+module Control.Exception
+  ( module Control.Exception,
+    IOException,
+  )
+where
 
 import Data.Text (Text, pack, unpack)
 import Hazy (primCatch, primThrow, primUnsafeCoerce)
 import Hazy.Prelude (IO (..))
+import Hazy.PreludeIO (Any, IOException, Thrown (..))
 
 -- What a type of exception is called, to tell it from the others.
 newtype Tag e = Tag String
-
--- Something of any type, as it was thrown.
-data Any
 
 -- |
 -- A type whose values can be thrown. A handler catches the exceptions of
@@ -31,10 +33,8 @@ class (Show e) => Exception e where
   caught :: Any -> Text -> e
   caught thrown _ = primUnsafeCoerce thrown
 
--- What is thrown: the name of its type, what a program that does not catch
--- it exits with, how it is shown, and the value. The runtime looks at the
--- second and the third when nothing catches it.
-data Thrown = Thrown String Int Text Any
+-- What is thrown is a 'Thrown', which the runtime has, so that what goes
+-- wrong with input and output is thrown in the same way.
 
 throw :: (Exception e) => e -> a
 throw exception =
@@ -88,3 +88,7 @@ data AsyncException
 
 instance Exception AsyncException where
   exceptionTag = Tag "AsyncException"
+
+-- What goes wrong with input and output, which the Prelude throws.
+instance Exception IOException where
+  exceptionTag = Tag "IOException"
