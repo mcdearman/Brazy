@@ -140,11 +140,12 @@ check position Solve {solve, logical} reflection information = \case
             -- it is worked out once.
             --
             -- A definition that uses itself, or another that is defined
-            -- with it, is of one type too: the use would have to be given
-            -- the evidence, and is not yet.
+            -- with it, is such a use of one type, and is given the evidence
+            -- the definitions were given when they are taken apart again
+            -- (see 'Shift.grouped').
             recursive <- newSTRef False
             let functions = all (\Element {element} -> Definition3.functional element) set
-                requiring = (functions &&) . not <$> readSTRef recursive
+                requiring = pure functions
             -- A definition that takes apart a value of an indexed type, and
             -- is no function, is put off until what it is inside has been
             -- checked: by then how it is used has said what type it is, and

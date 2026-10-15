@@ -1,7 +1,11 @@
 module Semantic.Tree.CallHead where
 
 import qualified Core.Tree.Evidence as Simple (Evidence)
+import qualified Core.Tree.Evidence as Evidence (EvidenceF (Variable, instanciation, variable))
+import qualified Core.Tree.Instanciation as Instanciation (InstanciationF (Instanciation, Mono))
 import qualified Core.Tree.Instanciation as Simple (Instanciation)
+import qualified Data.Vector.Strict as Strict.Vector (fromList)
+import qualified Semantic.Index.Evidence as Evidence (Index (Index))
 import Data.Kind (Type)
 import Semantic.Check.Simple.ConstructorInfo (ConstructorInfo)
 import Semantic.Check.Simple.MethodInfo (MethodInfo)
@@ -18,7 +22,7 @@ import Semantic.Scope (Environment)
 import qualified Semantic.Shift as Shift
 import qualified Semantic.Shift0 as Shift0
 import Semantic.Stage (Stage)
-import Semantic.Tree.Combinators.Inferred (Inferred)
+import Semantic.Tree.Combinators.Inferred (Inferred (Solved))
 import Syntax.Position (Position)
 
 type CallHead :: Layout -> Stage -> Environment -> Type
@@ -56,7 +60,7 @@ instance Shift.Functor (CallHead layout stage) where
       Variable
         { variablePosition,
           variable = Shift.map category variable,
-          instanciation = Shift.map category instanciation
+          instanciation = given category variable instanciation
         }
     Constructor {constructorPosition, constructor, constructorInfo} ->
       Constructor
@@ -78,6 +82,26 @@ instance Shift.Functor (CallHead layout stage) where
           instanciation = Shift.map category instanciation,
           methodInfo = Shift.map category methodInfo
         }
+
+-- |
+-- What a variable is given, where it is now. A use of a definition by one
+-- of the group it is defined with is given what the group was: see
+-- 'Shift.grouped'.
+given ::
+  Shift.Category scope scope' ->
+  Term.Index scope ->
+  Inferred Simple.Instanciation stage scope ->
+  Inferred Simple.Instanciation stage scope'
+given category variable = \case
+  Solved Instanciation.Mono
+    | Just evidence <- Shift.grouped category variable ->
+        Solved $
+          Instanciation.Instanciation $
+            Strict.Vector.fromList
+              [ Evidence.Variable {variable = Evidence.Index assumed, instanciation = Instanciation.Mono}
+              | assumed <- evidence
+              ]
+  instanciation -> Shift.map category instanciation
 
 instance FreeTermVariables CallHead where
   freeTermVariables target = \case

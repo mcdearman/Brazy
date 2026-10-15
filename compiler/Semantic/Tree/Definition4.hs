@@ -1,5 +1,6 @@
 module Semantic.Tree.Definition4 where
 
+import Core.Tree.Constraints (ConstraintsF (..))
 import Core.Tree.TypeLambda (TypeLambdaOver (..))
 import Data.Functor.Classes (Show1, showsPrec1)
 import Data.Functor.Compose (Compose (getCompose))
@@ -15,6 +16,7 @@ import qualified Semantic.Connect as Connect
 import Semantic.FreeVariables (FreeTermVariables (freeTermVariables))
 import Semantic.Functor2 (Traversable2 (..))
 import qualified Semantic.Index.Link.Term as Term (Link (..))
+import qualified Semantic.Index.Evidence0 as Evidence0
 import qualified Semantic.Index.Term0 as Term0
 import Semantic.Layout (Layout, Normal)
 import qualified Semantic.Layout as Layout
@@ -161,10 +163,15 @@ ungroup index lookup definition = case definition of
           TypeLambdaOver
             { parameters,
               constraints,
-              result = Connect.seperate $ Shift.map (Shift.UngroupTerm original) element
+              result = Connect.seperate $ Shift.map (Shift.UngroupTerm original assumed) element
             }
       where
         original id
           | Element {link} <- set Strict.Vector.! id =
               shift $ Term0.normal $ index link
         Element {element} = set Strict.Vector.! id
+        -- What the definitions assume, which a use of one of them by
+        -- another is given.
+        assumed = case constraints of
+          Constraints required -> [Evidence0.Assumed index | index <- [0 .. length required - 1]]
+          None -> []

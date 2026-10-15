@@ -1005,19 +1005,16 @@ The order to take it in:
     name is by way of, and inside such a group the name is looked into
     where it is met and not asked what it was found to be (`checkCount`,
     in `Semantic.Check.Temporary.Type`)
+- [x] A function that is defined by way of itself, with no type written,
+      is given a type that requires what it requires, as one that is not is
+      (test `requires-recursive`). Inside the definitions of a group one of
+      them is of one type, and a use of one by another was checked as such,
+      given nothing. When the group is taken apart again, such a use is
+      given all that the group's definitions assume, as it is where the use
+      is (`grouped`, in `Semantic.Shift`)
 - [ ] What these three leave undone:
-  - A definition that is defined by way of itself is given a type that
-    requires nothing, as before, and so is one that is not a function. So
-    `go n = if n == 0 then 0 else 1 + go (n - 1)` inside another cannot be
-    used at both `Int` and `Integer`. Why, and what it takes: a use of a
-    definition by itself is a use of one type, and is given no evidence
-    (`TermBinding.group`). After the check the definitions of a group are
-    taken apart again by changing what their names stand for
-    (`Shift.UngroupTerm`, in `Semantic.Tree.Definition4.ungroup`), which
-    cannot give such a use the evidence it then wants. What would: inside
-    the definition, once it requires something, a definition of one type
-    that is its body, which the uses by itself are of, as GHC does it.
-    Then those uses have the definition's own evidence where they are
+  - A definition that is not a function is given a type that requires
+    nothing, so that it is worked out once
   - What is required of a type given other types, as `C a b` is, is not
     made part of a type that is worked out
   - A definition that is checked after what uses it has one type for all
