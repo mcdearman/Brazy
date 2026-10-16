@@ -640,7 +640,7 @@ unsupportedFeatureForeignExport = unsupportedFeature (fromString "foreign export
 unsupportedForeignType :: Position -> a
 unsupportedForeignType =
   unsupportedFeature
-    (fromString "a foreign type other than Int, Double, Float, Char and (), in IO or not")
+    (fromString "a foreign type other than a number, Char, Bool and (), in IO or not")
 
 -- | A foreign import of an address, or of something not named by a C name.
 unsupportedForeignEntity :: Position -> a
