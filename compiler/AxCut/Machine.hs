@@ -21,7 +21,8 @@ import AxCut.Tree
   )
 import qualified AxCut.Tree as Kind (Kind (..))
 import Data.Bits (popCount, shift, xor, (.&.), (.|.))
-import Data.Char (chr, generalCategory, ord)
+import qualified Core.Foreign as Foreign
+import Data.Char (chr, generalCategory, ord, toLower, toUpper)
 import Data.IORef (IORef, modifyIORef, newIORef, readIORef, writeIORef)
 import Data.List (sort)
 import Data.Map (Map)
@@ -273,6 +274,7 @@ execute world globals = go
 apply :: World -> Primitive -> [Value] -> IO Value
 apply world primitive arguments = case (primitive, arguments) of
   (Foreign name _, _) -> outside world (unpack name) arguments
+  (Call call, _) -> callC call arguments
   (Field index, [Data _ fields])
     | index < length fields -> pure $ fields !! index
   (Error, [Text message]) -> do
@@ -392,6 +394,66 @@ placed array index = do
   case places Vector.!? fromIntegral index of
     Just value -> pure value
     Nothing -> bug $ "index " ++ show index ++ " is out of the bounds of an array of " ++ show (Vector.length places)
+
+-- |
+-- A function of C, as the machine does it. The machine cannot call C, and
+-- knows only some of the functions of its library: those of numbers and of
+-- characters, which give the same in either.
+callC :: Foreign.Call -> [Value] -> IO Value
+callC Foreign.Call {symbol, result} given = case (unpack symbol, given) of
+  (name, [Floating x])
+    | Just f <- lookup name doubles -> pure $ floating (f x)
+    | Just f <- single name -> pure $ floating (f x)
+  (name, [Floating x, Floating y])
+    | Just f <- lookup name doubles2 -> pure $ floating (f x y)
+    | Just f <- lookup name singles2 -> pure $ floating (f x y)
+  ("labs", [Int n]) -> pure $ Int (abs n)
+  ("llabs", [Int n]) -> pure $ Int (abs n)
+  ("toupper", [Int c]) -> pure $ Int (fromIntegral (ord (toUpper (chr (fromIntegral c)))))
+  ("tolower", [Int c]) -> pure $ Int (fromIntegral (ord (toLower (chr (fromIntegral c)))))
+  ("srand", [_]) -> pure unit
+  (name, _) -> do
+    hPutStrLn stderr ("the machine cannot call the C function " ++ name ++ "; compile the program to native code to call it")
+    exitFailure
+  where
+    floating x = Floating $ case result of
+      Foreign.Float -> realToFrac (realToFrac x :: Float)
+      _ -> x
+    -- A function of a Float is the one of a Double with an f at the end,
+    -- worked out in single precision.
+    single name = case reverse name of
+      'f' : rest | Just f <- lookup (reverse rest) doubles -> Just (inSingle f)
+      _ -> Nothing
+    inSingle :: (Double -> Double) -> Double -> Double
+    inSingle f x = realToFrac (realToFrac (f (realToFrac (realToFrac x :: Float))) :: Float)
+    singles2 = [(name ++ "f", \x y -> realToFrac (realToFrac (f x y) :: Float)) | (name, f) <- doubles2]
+    doubles =
+      [ ("sin", sin),
+        ("cos", cos),
+        ("tan", tan),
+        ("asin", asin),
+        ("acos", acos),
+        ("atan", atan),
+        ("sinh", sinh),
+        ("cosh", cosh),
+        ("tanh", tanh),
+        ("exp", exp),
+        ("log", log),
+        ("log10", logBase 10),
+        ("sqrt", sqrt),
+        ("fabs", abs),
+        ("floor", fromInteger . floor),
+        ("ceil", fromInteger . ceiling),
+        ("trunc", fromInteger . truncate),
+        ("round", \x -> fromInteger (if x < 0 then negate (floor (0.5 - x)) else floor (x + 0.5)))
+      ]
+    doubles2 =
+      [ ("pow", (**)),
+        ("atan2", atan2),
+        ("hypot", \x y -> sqrt (x * x + y * y)),
+        ("fmin", min),
+        ("fmax", max)
+      ]
 
 -- |
 -- What the runtime does under a name of its own, as the machine does it.

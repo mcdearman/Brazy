@@ -2,6 +2,7 @@ module Core.Tree.Declaration where
 
 import Core.Arity (Arity)
 import qualified Core.Arity as Arity (measure)
+import qualified Core.Foreign as Foreign
 import qualified Core.Substitute as Substitute
 import qualified Core.Temporary.Pattern as Pattern
 import Core.Tree.Expression (Expression)
@@ -63,21 +64,24 @@ simplify = \case
       definition,
       typex
     } ->
-      let simple = case definition of
+      let solved = case typex of Identity (Solved typex) -> typex
+          simple = case definition of
             _ Semantic.::: Identity (Identity (Check definition)) ->
-              TypeLambda.map (TypeLambda.Map definition3) definition
+              TypeLambda.map (TypeLambda.Map (definition3 solved)) definition
        in Declaration
             { name,
               definition = simple,
-              typex = case typex of Identity (Solved typex) -> typex,
+              typex = solved,
               arity = Arity.measure simple
             }
   where
-    definition3 :: Semantic.Definition3 mark Normal Check scope -> Expression scope
-    definition3 (Semantic.Label _ definition) = definition2 definition
+    definition3 :: Forall scope' -> Semantic.Definition3 mark Normal Check scope -> Expression scope
+    definition3 solved (Semantic.Label _ definition) = definition2 solved definition
 
-    definition2 :: Semantic.Definition2 source mark Normal Check scope -> Expression scope
-    definition2 = \case
+    definition2 :: Forall scope' -> Semantic.Definition2 source mark Normal Check scope -> Expression scope
+    definition2 solved = \case
+      Semantic.Definition2.Foreign Semantic.Definition2.ForeignCall {foreignPosition, symbol} ->
+        Expression.Foreign {foreignCall = Foreign.call foreignPosition symbol solved}
       Semantic.Definition definition -> Expression.simplify definition
       Semantic.Piece Semantic.Choice {index, instanciation = Solved instanciation, patternx, bound} ->
         Expression.Join

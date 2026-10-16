@@ -28,7 +28,7 @@ import Hazy
     primSetProgName,
     primUnsetEnv,
   )
-import Hazy.Prelude (IO (..), pack, unpack)
+import Hazy.Prelude (IO (..), pack, runIO, unpack)
 import Hazy.PreludeIO (IOErrorType (NoSuchThing), IOException (..), ioError)
 
 getArgs :: IO [String]

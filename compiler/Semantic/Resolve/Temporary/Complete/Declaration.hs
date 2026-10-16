@@ -86,9 +86,23 @@ merge entries@(entry :| _) =
             [ fmap fst functions,
               fmap fst selection,
               fmap fst method,
-              fmap fst choice
+              fmap fst choice,
+              fmap fst foreignCall
             ] =
           duplicateVariableEntries entries
+      | Just (position, call) <- foreignCall,
+        Just annotation <- annotation =
+          let cast declaration = Real $ Real.locality declaration
+              real =
+                Real.Declaration
+                  { position,
+                    name,
+                    definition =
+                      let body = Real.Resolve (Real.Name properName fixity `Real.Label` Real.Foreign call)
+                       in Real.Annotated (Identity annotation) Real.::: Identity (Identity body),
+                    typex = Identity Inferred
+                  }
+           in cast <$> Verbose.resolving (Variable.printLiteral' properName) real
       | Partial.Shared {shared} :| [] <- entries = pure $ Real shared
       | Just (_, selector) <- selection,
         () <- noAnnotation =
@@ -222,6 +236,15 @@ merge entries@(entry :| _) =
         method = \case
           Partial.Method {position, method} ->
             Just (position, method)
+          _ -> Nothing
+
+    foreignCall = case mapMaybe foreignCall (toList entries) of
+      [] -> Nothing
+      [call] -> Just call
+      calls -> duplicateVariableEntries (map fst calls)
+      where
+        foreignCall = \case
+          Partial.Foreign {position, foreignCall} -> Just (position, foreignCall)
           _ -> Nothing
 
     choice = case mapMaybe choice (toList entries) of

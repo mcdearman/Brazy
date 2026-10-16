@@ -48,7 +48,8 @@ label context = \case
               nonEmpty,
               tuplex,
               ordering,
-              ratio
+              ratio,
+              io
             }
         bool Constructor.False = builtin "False"
         bool Constructor.True = builtin "True"
@@ -71,6 +72,7 @@ label context = \case
         ordering Constructor.EQ = builtin "EQ"
         ordering Constructor.GT = builtin "GT"
         ratio Constructor.MakeRatio = builtin ":%"
+        io Constructor.MakeIO = builtin "IO"
         builtin name =
           Syntax.Lifted
             { startPosition = (),
@@ -93,6 +95,8 @@ label context = \case
     Type2.Bool -> builtin "Bool"
     Type2.Char -> builtin "Char"
     Type2.ST -> builtin "ST"
+    Type2.IO -> builtin "IO"
+    Type2.RealWorld -> builtin "RealWorld"
     Type2.Integer -> builtin "Integer"
     Type2.Int -> builtin "Int"
     Type2.Ratio -> builtin "Ratio"

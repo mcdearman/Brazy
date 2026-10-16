@@ -699,6 +699,7 @@ evaluate context expression consumer = case expression of
   Core.Dictionary {evidence} -> generateEvidence context evidence $ \dictionary ->
     pure $ Cut dictionary consumer
   Core.Helper {helperName} -> pure $ Cut (Global (Runtime.helperGlobal (unpack helperName))) (Force consumer)
+  Core.Foreign {foreignCall} -> pure $ Cut (Runtime.foreignCall foreignCall) consumer
   -- An action is a function of nothing, and what it gives may be yet to be
   -- evaluated.
   Core.Run {imperative} -> evaluate context imperative (Apply [] (Force consumer))

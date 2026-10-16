@@ -17,6 +17,7 @@ import qualified Semantic.Tree.Combinators.Inferred as Inferred
 import Semantic.Tree.Definition (Definition)
 import Semantic.Tree.Pattern (Pattern)
 import Semantic.Tree.RightHandSide (RightHandSide)
+import Data.Text (Text)
 import Syntax.Position (Position)
 
 data Mark
@@ -41,6 +42,7 @@ data Definition2 source mark layout stage scope where
   Definition :: !(Definition layout stage scope) -> Definition2 Single mark layout stage scope
   Piece :: !(Choice stage scope) -> Definition2 Single mark layout stage scope
   Shared :: !(RightHandSide layout stage scope) -> Definition2 Share Inferred layout stage scope
+  Foreign :: !ForeignCall -> Definition2 Single Annotated layout stage scope
 
 instance Scope.Show (Definition2 source mark layout stage) where
   showsPrec = showsPrec
@@ -56,6 +58,8 @@ instance Show (Definition2 source mark layout stage scope) where
     showParen (d > 10) $ showString "Piece " . showsPrec 11 choice
   showsPrec d (Shared definition) =
     showParen (d > 10) $ showString "Shared " . showsPrec 11 definition
+  showsPrec d (Foreign call) =
+    showParen (d > 10) $ showString "Foreign " . showsPrec 11 call
 
 instance Shift0.Functor (Definition2 source mark stage layout) where
   map = Shift.mapDefault
@@ -66,6 +70,7 @@ instance Shift.Functor (Definition2 source mark stage layout) where
     Definition definition -> Definition (Shift.map category definition)
     Piece choice -> Piece (Shift.map category choice)
     Shared definition -> Shared (Shift.map category definition)
+    Foreign call -> Foreign call
 
 instance FreeTermVariables (Definition2 source mark) where
   freeTermVariables target = \case
@@ -74,6 +79,7 @@ instance FreeTermVariables (Definition2 source mark) where
     Definition definition -> freeTermVariables target definition
     Piece Choice {index} -> FreeVariables.term target index
     Shared definition -> freeTermVariables target definition
+    Foreign _ -> mempty
 
 instance Connect (Definition2 source mark) where
   connect = \case
@@ -81,10 +87,21 @@ instance Connect (Definition2 source mark) where
     Definition definition -> Definition (connect definition)
     Piece choice -> Piece choice
     Shared definition -> Shared (connect definition)
+    Foreign call -> Foreign call
   seperate = \case
     Definition definition -> Definition (seperate definition)
     Piece choice -> Piece choice
     Shared definition -> Shared (seperate definition)
+    Foreign call -> Foreign call
+
+-- |
+-- A function of C, by its name there. What it is given and gives is said by
+-- the type written for it.
+data ForeignCall = ForeignCall
+  { foreignPosition :: !Position,
+    symbol :: !Text
+  }
+  deriving (Show)
 
 data Choice stage scope = Choice
   { position :: !Position,

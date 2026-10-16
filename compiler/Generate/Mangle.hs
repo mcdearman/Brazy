@@ -78,6 +78,8 @@ mangleInstance run brand name target = Text.Lazy.toStrict $ Builder.toLazyText b
       Type2.Bool -> fromString "Hazy.Bool"
       Type2.Char -> fromString "Hazy.Char"
       Type2.ST -> fromString "Hazy.ST"
+      Type2.IO -> fromString "Hazy.IO"
+      Type2.RealWorld -> fromString "Hazy.RealWorld"
       Type2.Arrow -> fromString "(->)"
       Type2.List -> fromString "[]"
       Type2.NonEmpty -> fromString "NonEmpty"

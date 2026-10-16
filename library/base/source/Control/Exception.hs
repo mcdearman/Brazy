@@ -6,7 +6,7 @@ where
 
 import Data.Text (Text, pack, unpack)
 import Hazy (primCatch, primThrow, primUnsafeCoerce)
-import Hazy.Prelude (IO (..))
+import Hazy.Prelude (IO (..), runIO)
 import Hazy.PreludeIO (Any, IOException, Thrown (..))
 
 -- What a type of exception is called, to tell it from the others.

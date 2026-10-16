@@ -69,6 +69,7 @@ import qualified Semantic.Tree.RightHandSide as Semantic (RightHandSide)
 import qualified Semantic.Tree.Select as Semantic (Select (..))
 import qualified Semantic.Tree.Statements as Semantic (Evidence, Statements, Syntax)
 import qualified Semantic.Tree.Statements as Semantic.Statements
+import qualified Core.Foreign as Foreign
 import qualified Syntax.StringLiteral as StringLiteral
 import Prelude hiding (compare, fail)
 
@@ -132,6 +133,10 @@ data Expression scope
     Helper
       { helperName :: !Text
       }
+  | -- | A function of C, called as its type says.
+    Foreign
+      { foreignCall :: !Foreign.Call
+      }
   | -- | A value of a type with a @forall@ of its own, for a constructor to
     -- hold. If the type requires something, the value is a function of the
     -- evidence for it, as a definition of such a type is.
@@ -155,6 +160,7 @@ instance Shift.Functor Expression where
 instance Substitute.Functor Expression where
   map category = \case
     Helper {helperName} -> Helper {helperName}
+    Foreign {foreignCall} -> Foreign {foreignCall}
     Variable {variable, instanciation} ->
       Variable
         { variable = Substitute.map category variable,
