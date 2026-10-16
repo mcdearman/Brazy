@@ -260,14 +260,37 @@ instance Enum HelperInt where
   pred (Int x) = Int (x - 1)
   toEnum = Int
   fromEnum (Int x) = x
-  enumFrom (Int x) = [Int x .. Int maxBound]
-  enumFromTo (Int x) (Int y) = [Int x, Int (x + 1) .. Int y]
-  enumFromThen (Int x) (Int y) = [Int x, Int y .. Int maxBound]
-  enumFromThenTo (Int from) (Int thenx) (Int to) = run from
+  enumFrom (Int x) = enumFromTo (Int x) maxBound
+  enumFromTo (Int x) (Int y) = go x
     where
-      run from | from > to = []
-      run from = Int from : run (from + step)
-      step = thenx - from
+      go x
+        | x > y = []
+        | x == y = [Int x]
+        | otherwise = Int x : go (x + 1)
+  enumFromThen (Int x) (Int y) = enumFromThenTo (Int x) (Int y) (if y >= x then maxBound else minBound)
+  -- As GHC has it: up or down as the second is, and never past the bounds
+  -- of an Int, where adding the step would come round to the other end.
+  enumFromThenTo (Int x1) (Int x2) (Int y)
+    | x2 >= x1 =
+        if y < x2
+          then (if y < x1 then [] else [Int x1])
+          else
+            let delta = x2 - x1
+                y' = y - delta
+                up x
+                  | x > y' = [Int x]
+                  | otherwise = Int x : up (x + delta)
+             in Int x1 : up x2
+    | otherwise =
+        if y > x2
+          then (if y > x1 then [] else [Int x1])
+          else
+            let delta = x2 - x1
+                y' = y - delta
+                down x
+                  | x < y' = [Int x]
+                  | otherwise = Int x : down (x + delta)
+             in Int x1 : down x2
 
 instance Bounded HelperInt where
   minBound = Int primIntMinBound
@@ -355,10 +378,16 @@ instance Enum HelperInteger where
     where
       run from = Integer from : run (from + step)
       step = thenx - from
-  enumFromThenTo (Integer from) (Integer thenx) (Integer to) = run from
+  enumFromThenTo (Integer from) (Integer thenx) (Integer to)
+    | thenx >= from = up from
+    | otherwise = down from
     where
-      run from | from > to = []
-      run from = Integer from : run (from + step)
+      up from
+        | from > to = []
+        | otherwise = Integer from : up (from + step)
+      down from
+        | from < to = []
+        | otherwise = Integer from : down (from + step)
       step = thenx - from
 
 instance Num HelperInteger where

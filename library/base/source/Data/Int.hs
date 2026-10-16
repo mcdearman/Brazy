@@ -11,7 +11,7 @@ where
 -- would be.
 wrap :: Int -> Int -> Int
 wrap bits x
-  | bits >= 32 = x
+  | bits >= 63 = x
   | reduced >= half = reduced - 2 * half
   | otherwise = reduced
   where
@@ -135,11 +135,21 @@ instance Integral Int32 where
   toInteger (Int32 x) = toInteger x
 
 instance Bounded Int32 where
-  minBound = Int32 minBound
-  maxBound = Int32 maxBound
+  minBound = Int32 (negate (2 ^ (32 - 1 :: Int)))
+  maxBound = Int32 (2 ^ (32 - 1 :: Int) - 1)
 
-newtype Int64 = Int64 Int
+-- Wider than an Int, which is 63 bits, so kept as an Integer.
+newtype Int64 = Int64 Integer
   deriving (Eq, Ord)
+
+-- An Integer brought into the range of 64 bits.
+wrap64 :: Integer -> Integer
+wrap64 x
+  | reduced >= half = reduced - 2 * half
+  | otherwise = reduced
+  where
+    half = 2 ^ (63 :: Int)
+    reduced = x `mod` (2 * half)
 
 instance Show Int64 where
   showsPrec d (Int64 x) = showsPrec d x
@@ -148,17 +158,17 @@ instance Read Int64 where
   readsPrec d text = [(fromInteger x, rest) | (x, rest) <- readsPrec d text]
 
 instance Num Int64 where
-  Int64 a + Int64 b = Int64 (wrap 64 (a + b))
-  Int64 a - Int64 b = Int64 (wrap 64 (a - b))
-  Int64 a * Int64 b = Int64 (wrap 64 (a * b))
-  negate (Int64 a) = Int64 (wrap 64 (negate a))
-  abs (Int64 a) = Int64 (wrap 64 (abs a))
+  Int64 a + Int64 b = Int64 (wrap64 (a + b))
+  Int64 a - Int64 b = Int64 (wrap64 (a - b))
+  Int64 a * Int64 b = Int64 (wrap64 (a * b))
+  negate (Int64 a) = Int64 (wrap64 (negate a))
+  abs (Int64 a) = Int64 (wrap64 (abs a))
   signum (Int64 a) = Int64 (signum a)
-  fromInteger x = Int64 (wrap 64 (fromInteger x))
+  fromInteger x = Int64 (wrap64 x)
 
 instance Enum Int64 where
-  toEnum x = Int64 (wrap 64 x)
-  fromEnum (Int64 x) = x
+  toEnum x = Int64 (toInteger x)
+  fromEnum (Int64 x) = fromInteger x
   enumFrom x = enumFromTo x maxBound
   enumFromThen x y = enumFromThenTo x y (if y >= x then maxBound else minBound)
   enumFromTo (Int64 a) (Int64 b) = map Int64 (enumFromTo a b)
@@ -169,11 +179,11 @@ instance Real Int64 where
 
 instance Integral Int64 where
   quotRem (Int64 a) (Int64 b) = case quotRem a b of
-    (q, r) -> (Int64 (wrap 64 q), Int64 r)
+    (q, r) -> (Int64 (wrap64 q), Int64 r)
   divMod (Int64 a) (Int64 b) = case divMod a b of
-    (q, r) -> (Int64 (wrap 64 q), Int64 r)
-  toInteger (Int64 x) = toInteger x
+    (q, r) -> (Int64 (wrap64 q), Int64 r)
+  toInteger (Int64 x) = x
 
 instance Bounded Int64 where
-  minBound = Int64 minBound
-  maxBound = Int64 maxBound
+  minBound = Int64 (negate (2 ^ (63 :: Int)))
+  maxBound = Int64 (2 ^ (63 :: Int) - 1)

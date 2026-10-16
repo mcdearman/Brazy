@@ -40,6 +40,8 @@ import Sequent.Tree
     Producer (..),
     Statement (..),
     Strategy (..),
+    intMaxBound,
+    intMinBound,
     separator,
   )
 import Syntax.Lexer (FullQualifiers (..), Qualifiers (..), constructorIdentifier)
@@ -233,8 +235,8 @@ definitions =
             ("primCharToInt", identity),
             ("primEqualInt", wrap IntEqual),
             ("primLessThenEqualInt", wrap IntLessThenEqual),
-            ("primIntMinBound", constant (Int minBound)),
-            ("primIntMaxBound", constant (Int maxBound)),
+            ("primIntMinBound", constant (Int intMinBound)),
+            ("primIntMaxBound", constant (Int intMaxBound)),
             ("primIntAdd", wrap IntAdd),
             ("primIntMinus", wrap IntMinus),
             ("primIntMultiply", wrap IntMultiply),

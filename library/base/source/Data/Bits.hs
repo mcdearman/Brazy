@@ -206,23 +206,24 @@ rotated signed width x i = sized signed width ((u `shiftL` n) .|. (u `shiftR` (w
     n = i `mod` width
     u = unsigned width x
 
+-- An Int is 63 bits.
 instance Bits Int where
-  x .&. y = sized True 32 (toInteger x .&. toInteger y)
-  x .|. y = sized True 32 (toInteger x .|. toInteger y)
-  xor x y = sized True 32 (toInteger x `xor` toInteger y)
+  x .&. y = sized True 63 (toInteger x .&. toInteger y)
+  x .|. y = sized True 63 (toInteger x .|. toInteger y)
+  xor x y = sized True 63 (toInteger x `xor` toInteger y)
   complement x = negate x - 1
-  shift x i = sized True 32 (toInteger x `shift` i)
-  rotate = rotated True 32
+  shift x i = sized True 63 (toInteger x `shift` i)
+  rotate = rotated True 63
   zeroBits = 0
-  bit i = sized True 32 (bit i)
+  bit i = sized True 63 (bit i)
   testBit x i = testBit (toInteger x) i
-  bitSizeMaybe _ = Just 32
-  bitSize _ = 32
+  bitSizeMaybe _ = Just 63
+  bitSize _ = 63
   isSigned _ = True
-  popCount x = popCount (unsigned 32 x)
+  popCount x = popCount (unsigned 63 x)
 
 instance FiniteBits Int where
-  finiteBitSize _ = 32
+  finiteBitSize _ = 63
 
 instance Bits Int8 where
   x .&. y = sized True 8 (toInteger x .&. toInteger y)
@@ -278,24 +279,23 @@ instance Bits Int32 where
 instance FiniteBits Int32 where
   finiteBitSize _ = 32
 
--- An Int64 is no wider than an Int: see Data.Int.
 instance Bits Int64 where
-  x .&. y = sized True 32 (toInteger x .&. toInteger y)
-  x .|. y = sized True 32 (toInteger x .|. toInteger y)
-  xor x y = sized True 32 (toInteger x `xor` toInteger y)
-  complement x = sized True 32 (complement (toInteger x))
-  shift x i = sized True 32 (toInteger x `shift` i)
-  rotate = rotated True 32
+  x .&. y = sized True 64 (toInteger x .&. toInteger y)
+  x .|. y = sized True 64 (toInteger x .|. toInteger y)
+  xor x y = sized True 64 (toInteger x `xor` toInteger y)
+  complement x = sized True 64 (complement (toInteger x))
+  shift x i = sized True 64 (toInteger x `shift` i)
+  rotate = rotated True 64
   zeroBits = 0
-  bit i = sized True 32 (bit i)
+  bit i = sized True 64 (bit i)
   testBit x i = testBit (toInteger x) i
-  bitSizeMaybe _ = Just 32
-  bitSize _ = 32
+  bitSizeMaybe _ = Just 64
+  bitSize _ = 64
   isSigned _ = True
-  popCount x = popCount (unsigned 32 x)
+  popCount x = popCount (unsigned 64 x)
 
 instance FiniteBits Int64 where
-  finiteBitSize _ = 32
+  finiteBitSize _ = 64
 
 instance Bits Word where
   x .&. y = sized False 64 (toInteger x .&. toInteger y)
