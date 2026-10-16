@@ -63,6 +63,7 @@ where
 import Hazy (primCreateDirectory, primListDirectory, primPathKind)
 import Hazy.Prelude (IO (..), pack, unpack)
 import Hazy.Prelude (placeholder)
+import qualified Hazy.PreludeIO
 
 createDirectory :: FilePath -> IO ()
 createDirectory path = IO (primCreateDirectory (pack path))
@@ -126,7 +127,7 @@ getTemporaryDirectory :: IO FilePath
 getTemporaryDirectory = placeholder
 
 removeFile :: FilePath -> IO ()
-removeFile = placeholder
+removeFile = Hazy.PreludeIO.removeFile
 
 renameFile :: FilePath -> FilePath -> IO ()
 renameFile = placeholder

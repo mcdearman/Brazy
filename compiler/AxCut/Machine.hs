@@ -37,22 +37,35 @@ import Sequent.Primitive (Primitive (..))
 import qualified Sequent.Primitive as Primitive
 import qualified Sequent.Runtime as Runtime
 import qualified Sequent.Tree as Literal (Literal (..))
-import System.Directory (createDirectoryIfMissing, doesDirectoryExist, doesFileExist, listDirectory)
+import GHC.IO.Exception (IOErrorType (..), IOException (..))
+import System.Directory (createDirectoryIfMissing, doesDirectoryExist, doesFileExist, doesPathExist, listDirectory, removeFile)
 import System.Environment (getExecutablePath, lookupEnv)
 import System.Exit (ExitCode (ExitFailure), exitFailure, exitSuccess, exitWith)
 import System.IO
   ( Handle,
-    IOMode (AppendMode, ReadMode, WriteMode),
+    IOMode (AppendMode, ReadMode, ReadWriteMode, WriteMode),
+    SeekMode (AbsoluteSeek, RelativeSeek, SeekFromEnd),
     hClose,
+    hFileSize,
+    hFlush,
+    hGetChar,
+    hIsEOF,
+    hIsReadable,
     hIsTerminalDevice,
+    hIsWritable,
+    hLookAhead,
     hPutStrLn,
+    hSeek,
     hSetEncoding,
+    hSetFileSize,
+    hTell,
     openFile,
     stderr,
     stdin,
     stdout,
     utf8,
   )
+import System.IO.Error (alreadyExistsErrorType, ioeSetErrorString, mkIOError, tryIOError)
 import System.Info (os)
 
 data Value
@@ -70,10 +83,12 @@ data Value
 
 -- |
 -- What a program has of the world outside while it runs: what catches a
--- thrown value, the catch begun last first, and the files that are open.
+-- thrown value, the catch begun last first, the files that are open and
+-- what each was opened as, and what was said of the last that could not be.
 data World = World
   { catching :: !(IORef [(Value, Value)]),
-    files :: !(IORef (Map Int Handle)),
+    files :: !(IORef (Map Int (Text, Handle))),
+    failure :: !(IORef Text),
     -- | The texts that are being built, each as its pieces, the last first.
     building :: !(IORef (Map Int [Text]))
   }
@@ -106,8 +121,9 @@ run Program {definitions, entry} = do
   globals <- traverse (\object -> allocate object []) definitions
   catching <- newIORef []
   files <- newIORef Map.empty
+  failure <- newIORef Text.empty
   building <- newIORef Map.empty
-  execute World {catching, files, building} globals entry []
+  execute World {catching, files, failure, building} globals entry []
 
 allocate :: Object -> Environment -> IO (IORef Cell)
 allocate Object {kind, method, parameters, body} environment = newIORef $ case kind of
@@ -369,7 +385,7 @@ placed array index = do
 -- |
 -- What the runtime does under a name of its own, as the machine does it.
 outside :: World -> String -> [Value] -> IO Value
-outside World {catching, files, building} name arguments = case (name, arguments) of
+outside World {catching, files, failure, building} name arguments = case (name, arguments) of
   ("new_ref", [value]) -> Box <$> newIORef value
   ("read_ref", [Box box]) -> readIORef box
   ("write_ref", [Box box, value]) -> unit <$ writeIORef box value
@@ -414,31 +430,106 @@ outside World {catching, files, building} name arguments = case (name, arguments
   ("exit", [Int code])
     | code == 0 -> exitSuccess
     | otherwise -> exitWith (ExitFailure (fromIntegral code))
+  -- As the runtime has it: a file that cannot be opened is the negative of
+  -- the kind of failure, less one.
   ("open", [Text path, Int mode]) -> do
-    handle <- openFile (unpack path) $ case mode of
-      0 -> ReadMode
-      1 -> WriteMode
-      _ -> AppendMode
-    hSetEncoding handle utf8
+    opened <- tryIOError $ case mode of
+      4 -> do
+        there <- doesPathExist (unpack path)
+        if there
+          then ioError (ioeSetErrorString (mkIOError alreadyExistsErrorType "openFile" Nothing (Just (unpack path))) "File exists")
+          else openFile (unpack path) ReadWriteMode
+      _ -> openFile (unpack path) $ case mode of
+        0 -> ReadMode
+        1 -> WriteMode
+        2 -> AppendMode
+        _ -> ReadWriteMode
+    case opened of
+      Left problem -> do
+        writeIORef failure (Text.pack (ioe_description problem))
+        pure $ Int $ negate (failureNumber (ioe_type problem)) - 1
+      Right handle -> do
+        hSetEncoding handle utf8
+        open <- readIORef files
+        let descriptor = head [number | number <- [3 ..], Map.notMember number open]
+        writeIORef files (Map.insert descriptor (path, handle) open)
+        pure $ Int $ fromIntegral descriptor
+  ("last_failure", []) -> Text <$> readIORef failure
+  ("remove_file", [Text path]) -> do
+    removed <- tryIOError (removeFile (unpack path))
+    case removed of
+      Left problem -> do
+        writeIORef failure (Text.pack (ioe_description problem))
+        pure $ Int $ negate (failureNumber (ioe_type problem)) - 1
+      Right () -> pure $ Int 0
+  ("file_name", [Int descriptor]) -> do
     open <- readIORef files
-    let descriptor = head [number | number <- [3 ..], Map.notMember number open]
-    writeIORef files (Map.insert descriptor handle open)
-    pure $ Int $ fromIntegral descriptor
+    case Map.lookup (fromIntegral descriptor) open of
+      Just (path, _) -> pure $ Text path
+      Nothing -> bug $ "file " ++ show descriptor ++ " is not open"
   ("close", [Int descriptor]) -> do
     open <- readIORef files
     case Map.lookup (fromIntegral descriptor) open of
-      Just handle -> do
+      Just (_, handle) -> do
         hClose handle
         writeIORef files (Map.delete (fromIntegral descriptor) open)
       Nothing -> pure ()
     pure unit
+  ("file_state", [Int descriptor]) -> case descriptor of
+    0 -> pure $ Int 1
+    1 -> pure $ Int 2
+    2 -> pure $ Int 2
+    _ -> do
+      open <- readIORef files
+      case Map.lookup (fromIntegral descriptor) open of
+        Just (_, handle) -> do
+          readable <- hIsReadable handle
+          writable <- hIsWritable handle
+          pure $ Int $ (if readable then 1 else 0) + (if writable then 2 else 0)
+        Nothing -> pure $ Int 0
   ("write", [Int descriptor, Text text]) -> do
     handle <- known descriptor
     Text.IO.hPutStr handle text
     pure unit
+  ("flush", [Int descriptor]) -> do
+    handle <- known descriptor
+    unit <$ hFlush handle
   ("read_all", [Int descriptor]) -> do
     handle <- known descriptor
     Text <$> Text.IO.hGetContents handle
+  ("read_line", [Int descriptor]) -> do
+    handle <- known descriptor
+    end <- hIsEOF handle
+    if end
+      then pure $ Text $ Text.pack "0"
+      else Text . Text.cons '1' <$> Text.IO.hGetLine handle
+  ("read_char", [Int descriptor]) -> do
+    handle <- known descriptor
+    end <- hIsEOF handle
+    if end then pure $ Int (-1) else Int . fromIntegral . ord <$> hGetChar handle
+  ("peek_char", [Int descriptor]) -> do
+    handle <- known descriptor
+    end <- hIsEOF handle
+    if end then pure $ Int (-1) else Int . fromIntegral . ord <$> hLookAhead handle
+  ("is_eof", [Int descriptor]) -> do
+    handle <- known descriptor
+    bool <$> hIsEOF handle
+  ("file_size", [Int descriptor]) -> do
+    handle <- known descriptor
+    Integer <$> hFileSize handle
+  ("set_file_size", [Int descriptor, Integer size]) -> do
+    handle <- known descriptor
+    unit <$ hSetFileSize handle size
+  ("seek", [Int descriptor, Int mode, Integer offset]) -> do
+    handle <- known descriptor
+    let from = case mode of
+          0 -> AbsoluteSeek
+          1 -> RelativeSeek
+          _ -> SeekFromEnd
+    unit <$ hSeek handle from offset
+  ("tell", [Int descriptor]) -> do
+    handle <- known descriptor
+    Integer <$> hTell handle
   ("is_terminal", [Int descriptor]) -> do
     handle <- known descriptor
     terminal <- hIsTerminalDevice handle
@@ -492,5 +583,15 @@ outside World {catching, files, building} name arguments = case (name, arguments
       _ -> do
         open <- readIORef files
         case Map.lookup (fromIntegral descriptor) open of
-          Just handle -> pure handle
+          Just (_, handle) -> pure handle
           Nothing -> bug $ "file " ++ show descriptor ++ " is not open"
+    -- As the runtime numbers the kinds of failure.
+    failureNumber = \case
+      AlreadyExists -> 1
+      NoSuchThing -> 2
+      ResourceBusy -> 3
+      ResourceExhausted -> 4
+      PermissionDenied -> 7
+      InappropriateType -> 8
+      InvalidArgument -> 9
+      _ -> 0

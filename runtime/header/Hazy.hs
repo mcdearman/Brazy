@@ -98,6 +98,18 @@ primClose :: Int -> ST s ()
 primWrite :: Int -> Text -> ST s ()
 primReadAll :: Int -> ST s Text
 primReadLine :: Int -> ST s Text
+primReadChar :: Int -> ST s Int
+primPeekChar :: Int -> ST s Int
+primIsEOF :: Int -> ST s Bool
+primFileState :: Int -> ST s Int
+primFileSize :: Int -> ST s Integer
+primSetFileSize :: Int -> Integer -> ST s ()
+primSeek :: Int -> Int -> Integer -> ST s ()
+primTell :: Int -> ST s Integer
+primFlush :: Int -> ST s ()
+primLastFailure :: ST s Text
+primFileName :: Int -> ST s Text
+primRemoveFile :: Text -> ST s Int
 primIsTerminal :: Int -> ST s Int
 primListDirectory :: Text -> ST s Text
 primCreateDirectory :: Text -> ST s ()
