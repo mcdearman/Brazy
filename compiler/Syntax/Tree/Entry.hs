@@ -48,14 +48,16 @@ parse scheme =
       strict
         <$> (position <* token "!")
         <*> asum
-          [ betweenParens Scheme.parse,
+          [ -- A tuple is in brackets as well, and is a type.
+            try $ betweenParens Scheme.parse,
             Scheme.mono <$> Type.parse3
           ],
       polymorphic
         <$> (position <* token "~!")
         <*> Type.parse3
         <*> asum
-          [ betweenParens Scheme.parse,
+          [ -- A tuple is in brackets as well, and is a type.
+            try $ betweenParens Scheme.parse,
             Scheme.mono <$> Type.parse3
           ]
     ]

@@ -46,9 +46,34 @@ instance (Monoid a) => Applicative (Const a) where
   pure _ = Const mempty
   Const a <*> Const b = Const (a <> b)
 
+instance (Eq a) => Eq (Const a b) where
+  Const a == Const b = a == b
+
+instance (Ord a) => Ord (Const a b) where
+  compare (Const a) (Const b) = compare a b
+
+instance (Show a) => Show (Const a b) where
+  showsPrec d (Const a) = showParen (d > 10) (showString "Const " . showsPrec 11 a)
+
+instance Foldable (Const a) where
+  foldr _ z _ = z
+
+instance Traversable (Const a) where
+  traverse _ (Const a) = pure (Const a)
+
 newtype WrappedMonad m a = WrapMonad
   { unwrapMonad :: m a
   }
+
+instance (Monad m) => Functor (WrappedMonad m) where
+  fmap f (WrapMonad v) = WrapMonad (v >>= \x -> return (f x))
+
+instance (Monad m) => Applicative (WrappedMonad m) where
+  pure = WrapMonad . return
+  WrapMonad f <*> WrapMonad v = WrapMonad (f >>= \g -> v >>= \x -> return (g x))
+
+instance (Monad m) => Monad (WrappedMonad m) where
+  WrapMonad a >>= f = WrapMonad (a >>= unwrapMonad . f)
 
 newtype WrappedArrow a b c = WrapArrow
   { unwrapArrow :: a b c
@@ -57,6 +82,25 @@ newtype WrappedArrow a b c = WrapArrow
 newtype ZipList a = ZipList
   { getZipList :: [a]
   }
+  deriving (Eq, Ord, Show)
+
+-- Lists put together place by place, as long as the shortest.
+instance Functor ZipList where
+  fmap f (ZipList xs) = ZipList (map f xs)
+
+instance Applicative ZipList where
+  pure x = ZipList (repeat x)
+  ZipList fs <*> ZipList xs = ZipList (zipWith id fs xs)
+
+instance Alternative ZipList where
+  empty = ZipList []
+  ZipList xs <|> ZipList ys = ZipList (xs ++ drop (length xs) ys)
+
+instance Foldable ZipList where
+  foldr f z (ZipList xs) = foldr f z xs
+
+instance Traversable ZipList where
+  traverse f (ZipList xs) = fmap ZipList (traverse f xs)
 
 infixl 4 <**>
 

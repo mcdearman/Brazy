@@ -85,6 +85,9 @@ primFloatMantissa :: Int -> a -> Integer
 primFloatExponent :: Int -> a -> Int
 primFloatEncode :: Int -> Integer -> Int -> a
 primFloatTruncate :: a -> Integer
+primIntegerBits :: Int -> Integer -> Integer -> Integer
+primIntegerShift :: Integer -> Int -> Integer
+primIntegerPopCount :: Integer -> Int
 
 -- The world outside a program. A file that is open is known by a number, and
 -- 0, 1 and 2 are what the program reads, writes and complains to.
