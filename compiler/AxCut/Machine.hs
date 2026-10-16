@@ -427,6 +427,14 @@ callC World {memory, blocks} Foreign.Call {symbol, result} given = case (unpack 
   ("hazy_cast_f32_u32", [Floating x]) -> pure $ Integer $ toInteger $ castFloatToWord32 (realToFrac x)
   ("hazy_cast_u64_f64", [Integer bits]) -> pure $ Floating $ castWord64ToDouble (fromInteger bits)
   ("hazy_cast_f64_u64", [Floating x]) -> pure $ Integer $ toInteger $ castDoubleToWord64 x
+  ("strlen", [Int address]) -> Integer . toInteger . length <$> string address
+  ("strcmp", [Int left, Int right]) -> do
+    left <- string left
+    right <- string right
+    pure $ Int $ case compare left right of
+      LT -> -1
+      EQ -> 0
+      GT -> 1
   ("memchr", [Int address, Int byte, Int count]) -> do
     bytes <- for [0 .. count - 1] (\offset -> readBytes (address + offset) 1)
     pure $ Int $ case lookup (toInteger byte `mod` 256) (zip bytes [0 ..]) of
@@ -490,6 +498,10 @@ callC World {memory, blocks} Foreign.Call {symbol, result} given = case (unpack 
     copy target source count = do
       bytes <- for [0 .. count - 1] (\offset -> readBytes (source + offset) 1)
       for_ (zip [0 ..] bytes) (\(offset, byte) -> write (target + offset) 1 byte)
+    -- The bytes from an address up to the first 0.
+    string address = do
+      byte <- readBytes address 1
+      if byte == 0 then pure [] else (byte :) <$> string (address + 1)
     -- What is at an address, little-endian.
     readBytes address count = do
       bytes <- readIORef memory
