@@ -20,6 +20,8 @@ import {-# SOURCE #-} qualified Builtin.Num as Num
 import {-# SOURCE #-} qualified Builtin.Ord as Ord
 import {-# SOURCE #-} qualified Builtin.Ordering as Ordering
 import {-# SOURCE #-} qualified Builtin.IO as IO
+import {-# SOURCE #-} qualified Builtin.Ptr as Ptr
+import {-# SOURCE #-} qualified Builtin.FunPtr as FunPtr
 import {-# SOURCE #-} qualified Builtin.Int8 as Int8
 import {-# SOURCE #-} qualified Builtin.Int16 as Int16
 import {-# SOURCE #-} qualified Builtin.Int32 as Int32
@@ -97,6 +99,8 @@ builtin =
       Functor.bindings,
       Integral.bindings,
       IO.bindings,
+      Ptr.bindings,
+      FunPtr.bindings,
       Int8.bindings,
       Int16.bindings,
       Int32.bindings,

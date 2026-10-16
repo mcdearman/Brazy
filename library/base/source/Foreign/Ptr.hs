@@ -1,3 +1,7 @@
+-- |
+-- Addresses of memory and of functions of C. 'Ptr' and 'FunPtr' are
+-- builtins, kept as an 'Int', which the compiler knows as a foreign
+-- function is given them.
 module Foreign.Ptr
   ( Ptr,
     nullPtr,
@@ -11,63 +15,65 @@ module Foreign.Ptr
     castFunPtrToPtr,
     castPtrToFunPtr,
     freeHaskellFunPtr,
-    IntPtr,
+    IntPtr (..),
     ptrToIntPtr,
     intPtrToPtr,
-    WordPtr,
+    WordPtr (..),
     ptrToWordPtr,
     wordPtrToPtr,
   )
 where
 
-import Hazy.Prelude (placeholder)
-
-data Ptr a
+import Hazy.Prelude (FunPtr (..), Ptr (..))
 
 nullPtr :: Ptr a
-nullPtr = placeholder
+nullPtr = Ptr 0
 
 castPtr :: Ptr a -> Ptr b
-castPtr = placeholder
+castPtr (Ptr address) = Ptr address
 
 plusPtr :: Ptr a -> Int -> Ptr b
-plusPtr = placeholder
+plusPtr (Ptr address) offset = Ptr (address + offset)
 
+-- | The first address from this one that is a multiple of the alignment.
 alignPtr :: Ptr a -> Int -> Ptr a
-alignPtr = placeholder
+alignPtr pointer@(Ptr address) alignment = case address `rem` alignment of
+  0 -> pointer
+  over -> Ptr (address + (alignment - over))
 
 minusPtr :: Ptr a -> Ptr b -> Int
-minusPtr = placeholder
-
-data FunPtr a
+minusPtr (Ptr address) (Ptr address') = address - address'
 
 nullFunPtr :: FunPtr a
-nullFunPtr = placeholder
+nullFunPtr = FunPtr 0
 
 castFunPtr :: FunPtr a -> FunPtr b
-castFunPtr = placeholder
+castFunPtr (FunPtr address) = FunPtr address
 
 castFunPtrToPtr :: FunPtr a -> Ptr b
-castFunPtrToPtr = placeholder
+castFunPtrToPtr (FunPtr address) = Ptr address
 
 castPtrToFunPtr :: Ptr a -> FunPtr b
-castPtrToFunPtr = placeholder
+castPtrToFunPtr (Ptr address) = FunPtr address
 
+-- | Nothing is made by a wrapper yet, so there is nothing to free.
 freeHaskellFunPtr :: FunPtr a -> IO ()
-freeHaskellFunPtr = placeholder
+freeHaskellFunPtr _ = pure ()
 
 newtype IntPtr = IntPtr Int
+  deriving (Eq, Ord, Show)
 
 ptrToIntPtr :: Ptr a -> IntPtr
-ptrToIntPtr = placeholder
+ptrToIntPtr (Ptr address) = IntPtr address
 
 intPtrToPtr :: IntPtr -> Ptr a
-intPtrToPtr = placeholder
+intPtrToPtr (IntPtr address) = Ptr address
 
 newtype WordPtr = WordPtr Word
+  deriving (Eq, Ord, Show)
 
 ptrToWordPtr :: Ptr a -> WordPtr
-ptrToWordPtr = placeholder
+ptrToWordPtr (Ptr address) = WordPtr (fromIntegral address)
 
 wordPtrToPtr :: WordPtr -> Ptr a
-wordPtrToPtr = placeholder
+wordPtrToPtr (WordPtr address) = Ptr (fromIntegral address)

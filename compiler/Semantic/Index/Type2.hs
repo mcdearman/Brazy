@@ -32,6 +32,8 @@ data Index scope
   | Word16
   | Word32
   | Word64
+  | Ptr
+  | FunPtr
   | Num
   | Enum
   | Bounded
@@ -92,6 +94,8 @@ split = \case
   Word16 -> Builtin Word16
   Word32 -> Builtin Word32
   Word64 -> Builtin Word64
+  Ptr -> Builtin Ptr
+  FunPtr -> Builtin FunPtr
   Num -> Builtin Num
   Enum -> Builtin Enum
   Bounded -> Builtin Bounded

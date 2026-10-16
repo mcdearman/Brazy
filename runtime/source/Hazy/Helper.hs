@@ -1078,6 +1078,44 @@ instance Ix HelperWord64 where
     | otherwise = errorWithoutStackTrace ("Ix{Word64}.index: Index " ++ showsPrec 11 i "" ++ " out of range (" ++ showsPrec 11 bounds "" ++ ")")
   inRange (low, high) i = low <= i && i <= high
 
+newtype HelperPtr a = Ptrx (Ptr a)
+
+instance Eq (HelperPtr a) where
+  Ptrx (Ptr a) == Ptrx (Ptr b) = a == b
+
+instance Ord (HelperPtr a) where
+  compare (Ptrx (Ptr a)) (Ptrx (Ptr b)) = compare a b
+  Ptrx (Ptr a) <= Ptrx (Ptr b) = a <= b
+
+-- An address as GHC shows it: 0x and sixteen digits of hexadecimal.
+instance Show (HelperPtr a) where
+  showsPrec _ (Ptrx (Ptr address)) = showString "0x" . showString (pad (hexadecimal address))
+    where
+      pad digits = replicate (16 - length digits) '0' ++ digits
+      hexadecimal n
+        | n < 16 = [digit n]
+        | otherwise = hexadecimal (n `quot` 16) ++ [digit (n `rem` 16)]
+      digit n = "0123456789abcdef" !! n
+
+newtype HelperFunPtr a = FunPtrx (FunPtr a)
+
+instance Eq (HelperFunPtr a) where
+  FunPtrx (FunPtr a) == FunPtrx (FunPtr b) = a == b
+
+instance Ord (HelperFunPtr a) where
+  compare (FunPtrx (FunPtr a)) (FunPtrx (FunPtr b)) = compare a b
+  FunPtrx (FunPtr a) <= FunPtrx (FunPtr b) = a <= b
+
+-- An address as GHC shows it: 0x and sixteen digits of hexadecimal.
+instance Show (HelperFunPtr a) where
+  showsPrec _ (FunPtrx (FunPtr address)) = showString "0x" . showString (pad (hexadecimal address))
+    where
+      pad digits = replicate (16 - length digits) '0' ++ digits
+      hexadecimal n
+        | n < 16 = [digit n]
+        | otherwise = hexadecimal (n `quot` 16) ++ [digit (n `rem` 16)]
+      digit n = "0123456789abcdef" !! n
+
 newtype HelperIO a = IOx {io :: IO a}
 
 instance Functor HelperIO where
