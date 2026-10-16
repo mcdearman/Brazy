@@ -16,9 +16,9 @@ module Data.List
     subsequences,
     permutations,
     foldl,
-    foldl,
+    foldl',
     foldl1,
-    foldl1,
+    foldl1',
     foldr,
     foldr1,
     concat,
@@ -32,7 +32,7 @@ module Data.List
     maximum,
     minimum,
     scanl,
-    scanl,
+    scanl',
     scanl1,
     scanr,
     scanr1,
@@ -148,29 +148,45 @@ transpose ([] : rows) = transpose rows
 transpose ((x : xs) : rows) =
   (x : [h | h : _ <- rows]) : transpose (xs : [t | _ : t <- rows])
 
+-- As GHC has them, so that they come in the same order: each subsequence
+-- of what is before an element comes before it is added.
 subsequences :: [a] -> [[a]]
-subsequences = placeholder
+subsequences xs = [] : nonEmptySubsequences xs
 
+nonEmptySubsequences :: [a] -> [[a]]
+nonEmptySubsequences [] = []
+nonEmptySubsequences (x : xs) = [x] : foldr f [] (nonEmptySubsequences xs)
+  where
+    f ys r = ys : (x : ys) : r
+
+-- As GHC has them, in the same order.
 permutations :: [a] -> [[a]]
-permutations = placeholder
+permutations xs0 = xs0 : perms xs0 []
+  where
+    perms [] _ = []
+    perms (t : ts) is' = foldr interleave (perms ts (t : is')) (permutations is')
+      where
+        interleave xs r = let (_, zs) = interleave' id xs r in zs
+        interleave' _ [] r = (ts, r)
+        interleave' f (y : ys) r =
+          let (us, zs) = interleave' (f . (y :)) ys r
+           in (y : us, f (t : y : us) : zs)
 
-scanl :: (b -> a -> b) -> b -> [a] -> [b]
-scanl = placeholder
-
+-- Each is worked out before the next is given.
 scanl' :: (b -> a -> b) -> b -> [a] -> [b]
-scanl' = placeholder
+scanl' f q xs =
+  q `seq`
+    ( q : case xs of
+        [] -> []
+        x : rest -> scanl' f (f q x) rest
+    )
 
-scanl1 :: (a -> a -> a) -> [a] -> [a]
-scanl1 = placeholder
-
-scanr :: (a -> b -> b) -> b -> [a] -> [b]
-scanr = placeholder
-
-scanr1 :: (a -> a -> a) -> [a] -> [a]
-scanr1 = placeholder
+foldl1' :: (a -> a -> a) -> [a] -> a
+foldl1' f (x : xs) = foldl' f x xs
+foldl1' _ [] = errorWithoutStackTrace "Prelude.foldl1': empty list"
 
 iterate' :: (a -> a) -> a -> [a]
-iterate' = placeholder
+iterate' f x = x `seq` (x : iterate' f (f x))
 
 unfoldr :: (b -> Maybe (a, b)) -> b -> [a]
 unfoldr f seed = case f seed of
@@ -210,7 +226,11 @@ isInfixOf :: (Eq a) => [a] -> [a] -> Bool
 isInfixOf needle haystack = any (isPrefixOf needle) (tails haystack)
 
 isSubsequenceOf :: (Eq a) => [a] -> [a] -> Bool
-isSubsequenceOf = placeholder
+isSubsequenceOf [] _ = True
+isSubsequenceOf _ [] = False
+isSubsequenceOf a@(x : a') (y : b)
+  | x == y = isSubsequenceOf a' b
+  | otherwise = isSubsequenceOf a b
 
 partition :: (a -> Bool) -> [a] -> ([a], [a])
 partition p = foldr (\x both -> if p x then (x : fst both, snd both) else (fst both, x : snd both)) ([], [])
@@ -219,7 +239,7 @@ elemIndex :: (Eq a) => a -> [a] -> Maybe Int
 elemIndex x = findIndex (== x)
 
 elemIndices :: (Eq a) => a -> [a] -> [Int]
-elemIndices = placeholder
+elemIndices x = findIndices (x ==)
 
 findIndex :: (a -> Bool) -> [a] -> Maybe Int
 findIndex p xs = case [index | (index, x) <- zip [0 ..] xs, p x] of
@@ -227,44 +247,61 @@ findIndex p xs = case [index | (index, x) <- zip [0 ..] xs, p x] of
   [] -> Nothing
 
 findIndices :: (a -> Bool) -> [a] -> [Int]
-findIndices = placeholder
+findIndices p xs = [i | (x, i) <- zip xs [0 ..], p x]
 
 zip4 :: [a] -> [b] -> [c] -> [d] -> [(a, b, c, d)]
 zip4 = zipWith4 (\a b c d -> (a, b, c, d))
 
 zip5 :: [a] -> [b] -> [c] -> [d] -> [e] -> [(a, b, c, d, e)]
-zip5 = placeholder
+zip5 = zipWith5 (,,,,)
 
 zip6 :: [a] -> [b] -> [c] -> [d] -> [e] -> [f] -> [(a, b, c, d, e, f)]
-zip6 = placeholder
+zip6 = zipWith6 (,,,,,)
 
 zip7 :: [a] -> [b] -> [c] -> [d] -> [e] -> [f] -> [g] -> [(a, b, c, d, e, f, g)]
-zip7 = placeholder
+zip7 = zipWith7 (,,,,,,)
 
 zipWith4 :: (a -> b -> c -> d -> e) -> [a] -> [b] -> [c] -> [d] -> [e]
 zipWith4 f (a : as) (b : bs) (c : cs) (d : ds) = f a b c d : zipWith4 f as bs cs ds
 zipWith4 _ _ _ _ _ = []
 
 zipWith5 :: (a -> b -> c -> d -> e -> f) -> [a] -> [b] -> [c] -> [d] -> [e] -> [f]
-zipWith5 = placeholder
+zipWith5 z (a : as) (b : bs) (c : cs) (d : ds) (e : es) = z a b c d e : zipWith5 z as bs cs ds es
+zipWith5 _ _ _ _ _ _ = []
 
 zipWith6 :: (a -> b -> c -> d -> e -> f -> g) -> [a] -> [b] -> [c] -> [d] -> [e] -> [f] -> [g]
-zipWith6 = placeholder
+zipWith6 z (a : as) (b : bs) (c : cs) (d : ds) (e : es) (f : fs) =
+  z a b c d e f : zipWith6 z as bs cs ds es fs
+zipWith6 _ _ _ _ _ _ _ = []
 
 zipWith7 :: (a -> b -> c -> d -> e -> f -> g -> h) -> [a] -> [b] -> [c] -> [d] -> [e] -> [f] -> [g] -> [h]
-zipWith7 = placeholder
+zipWith7 z (a : as) (b : bs) (c : cs) (d : ds) (e : es) (f : fs) (g : gs) =
+  z a b c d e f g : zipWith7 z as bs cs ds es fs gs
+zipWith7 _ _ _ _ _ _ _ _ = []
 
 unzip4 :: [(a, b, c, d)] -> ([a], [b], [c], [d])
-unzip4 = placeholder
+unzip4 =
+  foldr (\(a, b, c, d) ~(as, bs, cs, ds) -> (a : as, b : bs, c : cs, d : ds)) ([], [], [], [])
 
 unzip5 :: [(a, b, c, d, e)] -> ([a], [b], [c], [d], [e])
-unzip5 = placeholder
+unzip5 =
+  foldr
+    (\(a, b, c, d, e) ~(as, bs, cs, ds, es) -> (a : as, b : bs, c : cs, d : ds, e : es))
+    ([], [], [], [], [])
 
 unzip6 :: [(a, b, c, d, e, f)] -> ([a], [b], [c], [d], [e], [f])
-unzip6 = placeholder
+unzip6 =
+  foldr
+    (\(a, b, c, d, e, f) ~(as, bs, cs, ds, es, fs) -> (a : as, b : bs, c : cs, d : ds, e : es, f : fs))
+    ([], [], [], [], [], [])
 
 unzip7 :: [(a, b, c, d, e, f, g)] -> ([a], [b], [c], [d], [e], [f], [g])
-unzip7 = placeholder
+unzip7 =
+  foldr
+    ( \(a, b, c, d, e, f, g) ~(as, bs, cs, ds, es, fs, gs) ->
+        (a : as, b : bs, c : cs, d : ds, e : es, f : fs, g : gs)
+    )
+    ([], [], [], [], [], [], [])
 
 nub :: (Eq a) => [a] -> [a]
 nub = nubBy (==)
@@ -305,7 +342,7 @@ deleteBy _ _ [] = []
 deleteBy equal x (y : ys) = if equal x y then ys else y : deleteBy equal x ys
 
 deleteFirstsBy :: (a -> a -> Bool) -> [a] -> [a] -> [a]
-deleteFirstsBy = placeholder
+deleteFirstsBy eq = foldl (flip (deleteBy eq))
 
 unionBy :: (a -> a -> Bool) -> [a] -> [a] -> [a]
 unionBy equal xs ys = xs ++ foldl (\rest x -> deleteBy equal x rest) (nubBy equal ys) xs
@@ -354,16 +391,24 @@ genericLength :: (Num i) => [a] -> i
 genericLength = foldr (\_ n -> n + 1) 0
 
 genericTake :: (Integral i) => i -> [a] -> [a]
-genericTake = placeholder
+genericTake n _ | n <= 0 = []
+genericTake _ [] = []
+genericTake n (x : xs) = x : genericTake (n - 1) xs
 
 genericDrop :: (Integral i) => i -> [a] -> [a]
-genericDrop = placeholder
+genericDrop n xs | n <= 0 = xs
+genericDrop _ [] = []
+genericDrop n (_ : xs) = genericDrop (n - 1) xs
 
 genericSplitAt :: (Integral i) => i -> [a] -> ([a], [a])
-genericSplitAt = placeholder
+genericSplitAt n xs = (genericTake n xs, genericDrop n xs)
 
 genericIndex :: (Integral i) => [a] -> i -> a
-genericIndex = placeholder
+genericIndex (x : _) 0 = x
+genericIndex (_ : xs) n
+  | n > 0 = genericIndex xs (n - 1)
+  | otherwise = error "List.genericIndex: negative argument."
+genericIndex _ _ = error "List.genericIndex: index too large."
 
 genericReplicate :: (Integral i) => i -> a -> [a]
-genericReplicate = placeholder
+genericReplicate n x = genericTake n (repeat x)

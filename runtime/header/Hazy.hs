@@ -91,6 +91,12 @@ primFloatTruncate :: a -> Integer
 primArgCount :: ST s Int
 primArg :: Int -> ST s Text
 primGetEnv :: Text -> ST s Text
+primSetArgs :: Text -> ST s ()
+primProgName :: ST s Text
+primSetProgName :: Text -> ST s ()
+primSetEnv :: Text -> Text -> ST s ()
+primUnsetEnv :: Text -> ST s ()
+primEnvironment :: ST s Text
 primExecutablePath :: ST s Text
 primExit :: Int -> ST s a
 primOpen :: Text -> Int -> ST s Int

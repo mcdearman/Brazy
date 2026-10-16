@@ -830,15 +830,94 @@ pub extern "C" fn hazy_prim_array_length(array: Value) -> Value {
 
 #[no_mangle]
 pub extern "C" fn hazy_prim_arg_count() -> Value {
-    from_int(std::env::args_os().count() as i32 - 1)
+    from_int(arguments().len() as i32)
 }
 
 #[no_mangle]
 pub extern "C" fn hazy_prim_arg(index: Value) -> Value {
-    match std::env::args_os().nth(int(index) as usize + 1) {
-        Some(argument) => from_text(&argument.to_string_lossy()),
+    match arguments().get(int(index) as usize) {
+        Some(argument) => from_text(argument),
         None => fail("there is no such argument"),
     }
+}
+
+/// The arguments the program is given, and what it is called, unless the
+/// program has said they are others for a while (`withArgs`, `withProgName`).
+static mut ARGUMENTS: Option<Vec<String>> = None;
+static mut PROGRAM_NAME: Option<String> = None;
+
+fn arguments() -> &'static Vec<String> {
+    let place = unsafe { &mut *std::ptr::addr_of_mut!(ARGUMENTS) };
+    place.get_or_insert_with(|| {
+        std::env::args_os()
+            .skip(1)
+            .map(|argument| argument.to_string_lossy().into_owned())
+            .collect()
+    })
+}
+
+/// Arguments in place of the program's, each ended by a nothing.
+#[no_mangle]
+pub extern "C" fn hazy_prim_set_args(given: Value) -> Value {
+    let given = text(given).split_terminator('\0').map(str::to_string).collect();
+    unsafe { *std::ptr::addr_of_mut!(ARGUMENTS) = Some(given) };
+    unit()
+}
+
+/// What the program is called: the last part of the name it was run by,
+/// without `.exe`, as GHC has it.
+#[no_mangle]
+pub extern "C" fn hazy_prim_prog_name() -> Value {
+    let place = unsafe { &mut *std::ptr::addr_of_mut!(PROGRAM_NAME) };
+    let name = place.get_or_insert_with(|| {
+        let run = std::env::args_os().next().unwrap_or_default();
+        let path = std::path::Path::new(&run);
+        let name = path.file_name().unwrap_or_default().to_string_lossy().into_owned();
+        match name.strip_suffix(".exe") {
+            Some(stem) if cfg!(windows) => stem.to_string(),
+            _ => name,
+        }
+    });
+    from_text(name)
+}
+
+#[no_mangle]
+pub extern "C" fn hazy_prim_set_prog_name(name: Value) -> Value {
+    unsafe { *std::ptr::addr_of_mut!(PROGRAM_NAME) = Some(text(name).to_string()) };
+    unit()
+}
+
+/// Set an environment variable, or unset it if it is given nothing, as GHC
+/// does.
+#[no_mangle]
+pub extern "C" fn hazy_prim_set_env(name: Value, value: Value) -> Value {
+    // The program has one thread.
+    if text(value).is_empty() {
+        std::env::remove_var(text(name));
+    } else {
+        std::env::set_var(text(name), text(value));
+    }
+    unit()
+}
+
+#[no_mangle]
+pub extern "C" fn hazy_prim_unset_env(name: Value) -> Value {
+    std::env::remove_var(text(name));
+    unit()
+}
+
+/// Every environment variable, as its name and its value, each ended by a
+/// nothing.
+#[no_mangle]
+pub extern "C" fn hazy_prim_environment() -> Value {
+    let mut all = String::new();
+    for (name, value) in std::env::vars_os() {
+        all.push_str(&name.to_string_lossy());
+        all.push('\0');
+        all.push_str(&value.to_string_lossy());
+        all.push('\0');
+    }
+    from_text(&all)
 }
 
 /// The value of an environment variable after a 1, or a 0 alone if it is

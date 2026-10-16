@@ -1316,7 +1316,7 @@ Known bugs:
       names, where the declarations are parsed. The instance requires the
       class of every parameter of the type, which is more than Haskell asks
       of some types: see the README (test `derive-clause`)
-- [ ] `Read` and `Ix` cannot be derived
+- [ ] `Ix` cannot be derived. (`Read` can: see `Syntax.Tree.Derived`)
 
 Found while comparing the two backends:
 
@@ -1336,7 +1336,32 @@ Found while comparing the two backends:
       `Debug.Trace`. It has one now
 - [ ] Much of `library/base` is placeholders that fail when called
       (`Data.List.sort`, `Data.Char.toUpper`, `Data.Maybe.fromMaybe`), which
-      shows up quickly at the prompt
+      shows up quickly at the prompt. What is done:
+  - The modules every program reaches for have none left: `Data.List`,
+    `Control.Monad`, `Data.Foldable`, `Data.Traversable`, `Data.Functor`,
+    `Data.Either`, `Data.Tuple`, `Data.Bool`, `Data.Ratio`, `Text.Show`,
+    `Data.Semigroup`, `Data.Monoid`, `Control.Arrow`, `Control.Monad.ST`
+    and its unsafe half, `System.IO.Unsafe` and `System.Environment`
+    (test `library-core`, which agrees with GHC). `Data.Monoid`'s types
+    had no instances, and gave out only their fields, so `Sum 3` was not
+    in scope; it now has GHC's, and `Data.Semigroup` gives out the same
+    types and has its own `Min`, `Max`, `First`, `Last` and `Arg`.
+    `Control.Arrow` has the instances for functions and `Kleisli`. Names
+    the environment can change for a while, `withArgs` and `withProgName`,
+    are kept by the runtime (`set_args`, `set_prog_name`)
+  - Two modules that give one name gave two things, as GHC's do not, so a
+    program that imported both could not use it: `scanl` and its kin
+    (`Data.List` and the Prelude), `forM`, `forM_`, `sequence_`, `void`
+    and `notElem`. Each has one definition now, which the others give out.
+    A program that imports the standard modules together and names all
+    they give is resolved to find them. And `foldl'`, `foldl1'` and
+    `scanl'` were not given out by `Data.List` at all
+  - Left: `Text.Read`'s `ReadPrec` half and `Text.ParserCombinators`,
+    `Data.Map` and `Data.Set`, `Data.List.NonEmpty`, `Data.Vector`,
+    `System.FilePath`, `System.Directory`, `Data.Bifoldable`,
+    `Data.Bitraversable`, `Data.Text`, and what reads and writes through
+    a `Ptr`. `Data.Ix`, `Data.Array`, `Data.Bits` and `Data.Complex` are
+    not there at all
 
 Missing:
 

@@ -8,9 +8,7 @@ module Data.Tuple
   )
 where
 
-import Hazy.Prelude (placeholder)
-
 data Solo a = Solo a
 
 swap :: (a, b) -> (b, a)
-swap = placeholder
+swap (a, b) = (b, a)

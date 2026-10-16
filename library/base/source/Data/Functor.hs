@@ -7,17 +7,15 @@ module Data.Functor
   )
 where
 
-import Hazy.Prelude (placeholder)
-
 infixl 4 $>
 
 ($>) :: (Functor f) => f a -> b -> f b
-($>) = placeholder
+x $> y = fmap (const y) x
 
 infixl 1 <&>
 
 (<&>) :: (Functor f) => f a -> (a -> b) -> f b
-(<&>) = placeholder
+x <&> f = fmap f x
 
 void :: (Functor f) => f a -> f ()
-void = placeholder
+void = fmap (const ())

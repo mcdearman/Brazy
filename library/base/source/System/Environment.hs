@@ -13,9 +13,23 @@ module System.Environment
   )
 where
 
-import Hazy (primArg, primArgCount, primExecutablePath, primGetEnv)
+import Hazy
+  ( primArg,
+    primArgCount,
+    primCatch,
+    primSTBind,
+    primThrow,
+    primEnvironment,
+    primExecutablePath,
+    primGetEnv,
+    primProgName,
+    primSetArgs,
+    primSetEnv,
+    primSetProgName,
+    primUnsetEnv,
+  )
 import Hazy.Prelude (IO (..), pack, unpack)
-import Hazy.Prelude (placeholder)
+import Hazy.PreludeIO (IOErrorType (NoSuchThing), IOException (..), ioError)
 
 getArgs :: IO [String]
 getArgs = IO $ do
@@ -23,10 +37,10 @@ getArgs = IO $ do
   mapM (\index -> fmap unpack (primArg index)) [0 .. count - 1]
 
 getProgName :: IO String
-getProgName = placeholder
+getProgName = IO (fmap unpack primProgName)
 
 executablePath :: Maybe (IO (Maybe FilePath))
-executablePath = placeholder
+executablePath = Just (fmap Just getExecutablePath)
 
 getExecutablePath :: IO FilePath
 getExecutablePath = IO (fmap unpack primExecutablePath)
@@ -36,7 +50,15 @@ getEnv name = do
   found <- lookupEnv name
   case found of
     Just value -> pure value
-    Nothing -> error ("System.Environment.getEnv: " ++ name ++ " is not set")
+    Nothing ->
+      ioError
+        IOError
+          { ioe_handle = Nothing,
+            ioe_type = NoSuchThing,
+            ioe_location = "getEnv",
+            ioe_description = "no environment variable",
+            ioe_filename = Just name
+          }
 
 lookupEnv :: String -> IO (Maybe String)
 lookupEnv name = IO $ do
@@ -46,16 +68,43 @@ lookupEnv name = IO $ do
     _ -> Nothing
 
 setEnv :: String -> String -> IO ()
-setEnv = placeholder
+setEnv name value = IO (primSetEnv (pack name) (pack value))
 
 unsetEnv :: String -> IO ()
-unsetEnv = placeholder
+unsetEnv name = IO (primUnsetEnv (pack name))
 
+-- Run an action with other arguments, and give the program its own back
+-- after, however the action ends.
 withArgs :: [String] -> IO a -> IO a
-withArgs = placeholder
+withArgs given action = do
+  old <- getArgs
+  setArgs given
+  restoring (setArgs old) action
+  where
+    setArgs arguments = IO (primSetArgs (pack (concatMap (++ "\0") arguments)))
 
 withProgName :: String -> IO a -> IO a
-withProgName = placeholder
+withProgName name action = do
+  old <- getProgName
+  setName name
+  restoring (setName old) action
+  where
+    setName given = IO (primSetProgName (pack given))
+
+-- Run an action, and then another however the first ends: if something is
+-- thrown, it is thrown on as it was.
+restoring :: IO () -> IO a -> IO a
+restoring restore (IO action) = do
+  result <- IO (primCatch action (\thrown -> primSTBind (runIO restore) (\() -> primThrow thrown)))
+  restore
+  pure result
 
 getEnvironment :: IO [(String, String)]
-getEnvironment = placeholder
+getEnvironment = IO (fmap (pairs . split . unpack) primEnvironment)
+  where
+    split text = case break (== '\0') text of
+      ("", "") -> []
+      (part, _ : rest) -> part : split rest
+      (part, "") -> [part]
+    pairs (name : value : rest) = (name, value) : pairs rest
+    pairs _ = []

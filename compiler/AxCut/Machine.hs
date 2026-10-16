@@ -39,7 +39,7 @@ import qualified Sequent.Runtime as Runtime
 import qualified Sequent.Tree as Literal (Literal (..))
 import GHC.IO.Exception (IOErrorType (..), IOException (..))
 import System.Directory (createDirectoryIfMissing, doesDirectoryExist, doesFileExist, doesPathExist, listDirectory, removeFile)
-import System.Environment (getExecutablePath, lookupEnv)
+import System.Environment (getEnvironment, getExecutablePath, lookupEnv, setEnv, unsetEnv)
 import System.Exit (ExitCode (ExitFailure), exitFailure, exitSuccess, exitWith)
 import System.IO
   ( Handle,
@@ -89,6 +89,10 @@ data World = World
   { catching :: !(IORef [(Value, Value)]),
     files :: !(IORef (Map Int (Text, Handle))),
     failure :: !(IORef Text),
+    -- | The arguments and the name of the program, which it can change for
+    -- a while.
+    arguments :: !(IORef [Text]),
+    programName :: !(IORef Text),
     -- | The texts that are being built, each as its pieces, the last first.
     building :: !(IORef (Map Int [Text]))
   }
@@ -122,8 +126,10 @@ run Program {definitions, entry} = do
   catching <- newIORef []
   files <- newIORef Map.empty
   failure <- newIORef Text.empty
+  arguments <- newIORef []
+  programName <- newIORef (Text.pack "<interactive>")
   building <- newIORef Map.empty
-  execute World {catching, files, failure, building} globals entry []
+  execute World {catching, files, failure, arguments, programName, building} globals entry []
 
 allocate :: Object -> Environment -> IO (IORef Cell)
 allocate Object {kind, method, parameters, body} environment = newIORef $ case kind of
@@ -385,7 +391,7 @@ placed array index = do
 -- |
 -- What the runtime does under a name of its own, as the machine does it.
 outside :: World -> String -> [Value] -> IO Value
-outside World {catching, files, failure, building} name arguments = case (name, arguments) of
+outside World {catching, files, failure, building, arguments, programName} name given = case (name, given) of
   ("new_ref", [value]) -> Box <$> newIORef value
   ("read_ref", [Box box]) -> readIORef box
   ("write_ref", [Box box, value]) -> unit <$ writeIORef box value
@@ -419,8 +425,19 @@ outside World {catching, files, failure, building} name arguments = case (name, 
   ("float_encode", [Int precision, Integer mantissa, Int exponent]) ->
     pure $ precise precision (encodeFloat mantissa (fromIntegral exponent)) (encodeFloat mantissa (fromIntegral exponent))
   ("float_truncate", [Floating x]) -> pure $ Integer $ truncate x
-  -- A program on the machine is given no arguments.
-  ("arg_count", []) -> pure $ Int 0
+  -- A program on the machine is given no arguments, until it sets some.
+  ("arg_count", []) -> Int . fromIntegral . length <$> readIORef arguments
+  ("arg", [Int index]) -> Text . (!! fromIntegral index) <$> readIORef arguments
+  ("set_args", [Text list]) -> unit <$ writeIORef arguments (nulled list)
+  ("prog_name", []) -> Text <$> readIORef programName
+  ("set_prog_name", [Text name]) -> unit <$ writeIORef programName name
+  ("set_env", [Text variable, Text value])
+    | Text.null value -> unit <$ unsetEnv (unpack variable)
+    | otherwise -> unit <$ setEnv (unpack variable) (unpack value)
+  ("unset_env", [Text variable]) -> unit <$ unsetEnv (unpack variable)
+  ("environment", []) -> do
+    variables <- getEnvironment
+    pure $ Text $ Text.pack $ concat [name ++ "\0" ++ value ++ "\0" | (name, value) <- variables]
   ("get_env", [Text variable]) -> do
     found <- lookupEnv (unpack variable)
     pure $ Text $ Text.pack $ case found of
@@ -585,6 +602,7 @@ outside World {catching, files, failure, building} name arguments = case (name, 
         case Map.lookup (fromIntegral descriptor) open of
           Just (_, handle) -> pure handle
           Nothing -> bug $ "file " ++ show descriptor ++ " is not open"
+    nulled = filter (not . Text.null) . Text.splitOn (Text.pack "\0")
     -- As the runtime numbers the kinds of failure.
     failureNumber = \case
       AlreadyExists -> 1

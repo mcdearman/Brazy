@@ -38,19 +38,22 @@ module Control.Monad
   )
 where
 
-import Control.Applicative (Alternative (empty))
-import Data.Foldable (msum)
-import Hazy.Prelude (ap, join, liftM, placeholder)
+import Control.Applicative (Alternative (empty, (<|>)))
+import Data.Foldable (forM_, msum)
+import Data.Functor (void)
+import Data.Traversable (forM)
+import Hazy.Prelude (ap, join, liftM)
 
 class (Alternative m, Monad m) => MonadPlus m where
   mzero :: m a
+  mzero = empty
+
   mplus :: m a -> m a -> m a
+  mplus = (<|>)
 
-forM :: (Traversable t, Monad m) => t a -> (a -> m b) -> m (t b)
-forM xs f = mapM f xs
+instance MonadPlus Maybe
 
-forM_ :: (Foldable t, Monad m) => t a -> (a -> m b) -> m ()
-forM_ xs f = mapM_ f xs
+instance MonadPlus []
 
 infixr 1 >=>
 
@@ -65,11 +68,10 @@ infixr 1 <=<
 forever :: (Applicative f) => f a -> f b
 forever a = a *> forever a
 
-void :: (Functor f) => f a -> f ()
-void = fmap (const ())
-
 mfilter :: (MonadPlus m) => (a -> Bool) -> m a -> m a
-mfilter = placeholder
+mfilter p ma = do
+  a <- ma
+  if p a then pure a else mzero
 
 filterM :: (Applicative m) => (a -> m Bool) -> [a] -> m [a]
 filterM p = foldr (\x rest -> (\keep -> if keep then (x :) else id) <$> p x <*> rest) (pure [])
@@ -118,10 +120,21 @@ liftM3 f a b c = do
   pure (f x y z)
 
 liftM4 :: (Monad m) => (a1 -> a2 -> a3 -> a4 -> r) -> m a1 -> m a2 -> m a3 -> m a4 -> m r
-liftM4 = placeholder
+liftM4 f a b c d = do
+  x <- a
+  y <- b
+  z <- c
+  w <- d
+  pure (f x y z w)
 
 liftM5 :: (Monad m) => (a1 -> a2 -> a3 -> a4 -> a5 -> r) -> m a1 -> m a2 -> m a3 -> m a4 -> m a5 -> m r
-liftM5 = placeholder
+liftM5 f a b c d e = do
+  x <- a
+  y <- b
+  z <- c
+  w <- d
+  v <- e
+  pure (f x y z w v)
 
 infixl 4 <$!>
 

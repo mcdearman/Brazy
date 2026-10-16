@@ -48,20 +48,14 @@ asum = foldr (<|>) empty
 forM_ :: (Foldable t, Monad m) => t a -> (a -> m b) -> m ()
 forM_ xs f = traverse_ f xs
 
-sequence_ :: (Foldable t, Monad m) => t (m a) -> m ()
-sequence_ = foldr (\x rest -> x >> rest) (pure ())
-
 msum :: (Foldable t, MonadPlus m) => t (m a) -> m a
-msum = placeholder
+msum = asum
 
 maximumBy :: (Foldable t) => (a -> a -> Ordering) -> t a -> a
 maximumBy order = foldr1 (\a b -> if order a b == LT then b else a)
 
 minimumBy :: (Foldable t) => (a -> a -> Ordering) -> t a -> a
 minimumBy order = foldr1 (\a b -> if order a b == GT then b else a)
-
-notElem :: (Foldable t, Eq a) => a -> t a -> Bool
-notElem x = not . elem x
 
 find :: (Foldable t) => (a -> Bool) -> t a -> Maybe a
 find p = foldr (\x rest -> if p x then Just x else rest) Nothing

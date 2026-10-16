@@ -331,8 +331,9 @@ asTypeOf = const
 error :: String -> a
 error = errorText . pack
 
+-- There is no stack trace to leave out.
 errorWithoutStackTrace :: [Char] -> a
-errorWithoutStackTrace = placeholder
+errorWithoutStackTrace = error
 
 undefined :: a
 undefined = error "Prelude.undefined"

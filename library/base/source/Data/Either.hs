@@ -11,25 +11,30 @@ module Data.Either
   )
 where
 
-import Hazy.Prelude (placeholder)
-
 lefts :: [Either a b] -> [a]
-lefts = placeholder
+lefts xs = [a | Left a <- xs]
 
 rights :: [Either a b] -> [b]
-rights = placeholder
+rights xs = [b | Right b <- xs]
 
 isLeft :: Either a b -> Bool
-isLeft = placeholder
+isLeft (Left _) = True
+isLeft (Right _) = False
 
 isRight :: Either a b -> Bool
-isRight = placeholder
+isRight (Left _) = False
+isRight (Right _) = True
 
 fromLeft :: a -> Either a b -> a
-fromLeft = placeholder
+fromLeft _ (Left a) = a
+fromLeft a _ = a
 
 fromRight :: b -> Either a b -> b
-fromRight = placeholder
+fromRight _ (Right b) = b
+fromRight b _ = b
 
 partitionEithers :: [Either a b] -> ([a], [b])
-partitionEithers = placeholder
+partitionEithers = foldr (either left right) ([], [])
+  where
+    left a ~(l, r) = (a : l, r)
+    right a ~(l, r) = (l, a : r)
