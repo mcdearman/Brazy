@@ -163,6 +163,7 @@ executable hazy
     Semantic.Check.Derive.Bounded
     Semantic.Check.Derive.Enum
     Semantic.Check.Derive.Eq
+    Semantic.Check.Derive.Functor
     Semantic.Check.Derive.Ord
     Semantic.Check.Derive.Show
     Semantic.Check.EntryInstance

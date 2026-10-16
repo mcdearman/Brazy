@@ -46,6 +46,7 @@ import qualified Semantic.Check.Context as Context
 import qualified Semantic.Check.Derive.Bounded as Bounded
 import qualified Semantic.Check.Derive.Enum as Enum
 import qualified Semantic.Check.Derive.Eq as Eq
+import qualified Semantic.Check.Derive.Functor as Functor
 import qualified Semantic.Check.Derive.Ord as Ord
 import qualified Semantic.Check.Derive.Show as Show
 import Semantic.Check.Go.Definition4 (Solve (..))
@@ -134,6 +135,10 @@ requirements Context {typeEnvironment} derived self datax
       found <- within [(shift derived, shift self)] (shift derived) (held datax)
       pure (Just (once [] (reverse found)))
   where
+    -- A class of types that take an argument is had for everything the
+    -- type holds by having it for the types its last parameter is the last
+    -- argument of.
+    functorial = derived `elem` [Type2.Functor, Type2.Foldable, Type2.Traversable]
     indexed :: Core.Data.Data scope' -> Bool
     indexed Core.Data.Data {constructors} = any telling constructors
     telling Core.Constructor.Constructor {shape} = case shape of
@@ -141,11 +146,16 @@ requirements Context {typeEnvironment} derived self datax
       Core.Constructor.Indexed {} -> True
     -- The types of what a type holds, in the type's own parameters.
     held :: Core.Data.Data scope' -> [Core.Type (Local ':+ scope')]
-    held Core.Data.Data {constructors} =
-      [ Shift.map (Shift.Unshift $ error "a type variable that nothing binds") result
+    held Core.Data.Data {parameters = typeParameters, constructors} =
+      [ found
       | Core.Constructor.Constructor {entries} <- toList constructors,
         Core.Entry.Entry {entry = Core.ForallOver {parameters, constraints = Core.Constraints.None, result}} <- toList entries,
-        null parameters
+        null parameters,
+        let typex = Shift.map (Shift.Unshift $ error "a type variable that nothing binds") result,
+        found <-
+          if functorial
+            then Functor.inner (length typeParameters - 1) typex
+            else [typex]
       ]
     -- Each thing that is required, once, and the last time it was found.
     -- There are thousands for a type that holds many types, most of them
@@ -402,6 +412,12 @@ checkMethod Method {context, position} (Derive Type2.Bounded typeIndex datax) in
     Method.MaxBound -> Bounded.maxBound context position typeIndex datax
 checkMethod Method {context, position} (Derive Type2.Show typeIndex datax) index _ _
   | Method.ShowsPrec <- toEnum index = Show.showsPrec context position typeIndex datax
+checkMethod Method {context, position} (Derive Type2.Functor typeIndex datax) index scheme _
+  | Method.Fmap <- toEnum index = Functor.fmap context position typeIndex datax scheme
+checkMethod Method {context, position} (Derive Type2.Foldable typeIndex datax) index scheme _
+  | Method.Foldr <- toEnum index = Functor.foldr context position typeIndex datax scheme
+checkMethod Method {context, position} (Derive Type2.Traversable typeIndex datax) index scheme _
+  | Method.Traverse <- toEnum index = Functor.traverse context position typeIndex datax scheme
 checkMethod Method {context, position, base, self, extra} source index scheme Generated {} = do
   case source of
     Manual -> pure ()
@@ -410,6 +426,9 @@ checkMethod Method {context, position, base, self, extra} source index scheme Ge
       Type2.Ord -> pure ()
       Type2.Enum -> pure ()
       Type2.Show -> pure ()
+      Type2.Functor -> pure ()
+      Type2.Foldable -> pure ()
+      Type2.Traversable -> pure ()
       _ ->
         let labelContext = Context.label context
             resolve =

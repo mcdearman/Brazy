@@ -151,6 +151,36 @@ fmap = Index Type2.Functor $ Prelude.fromEnum Fmap
 
 fconst = Index Type2.Functor $ Prelude.fromEnum Fconst
 
+data Foldable
+  = Fold
+  | FoldMap
+  | FoldMap'
+  | Foldr
+  | Foldl
+  | Foldl'
+  | Foldr1
+  | Foldl1
+  | ToList
+  | Null
+  | Length
+  | Elem
+  | Maximum
+  | Minimum
+  | Sum
+  | Product
+  deriving (Prelude.Enum, Prelude.Bounded, Prelude.Show)
+
+foldr = Index Type2.Foldable $ Prelude.fromEnum Foldr
+
+data Traversable
+  = Traverse
+  | SequenceA
+  | MapM
+  | Sequence
+  deriving (Prelude.Enum, Prelude.Bounded, Prelude.Show)
+
+traverse = Index Type2.Traversable $ Prelude.fromEnum Traverse
+
 data Applicative
   = Pure
   | Ap

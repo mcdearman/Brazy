@@ -19,7 +19,13 @@ import qualified Semantic.Resolve.Core as Core (CoreF (..))
 import qualified Semantic.Resolve.Go.Instance as Real (resolve)
 import qualified Semantic.Stage as Semantic
 import qualified Semantic.Tree.Instance as Real (Instance)
+import qualified Data.Vector.Strict as Strict (Vector)
+import qualified Data.Vector.Strict as Strict.Vector
 import Syntax.Position (Position)
+import qualified Syntax.Tree.Constraint as Constraint
+import qualified Syntax.Tree.Constraints as Constraints
+import qualified Syntax.Tree.InstanceDeclarations as InstanceDeclarations
+import qualified Syntax.Tree.TypePattern as TypePattern
 import qualified Syntax.Tree.Declaration as Syntax
 import Syntax.Tree.InstanceHead (InstanceHead (Head))
 import qualified Syntax.Tree.InstanceHead as InstanceHead
@@ -52,10 +58,10 @@ resolve ::
 resolve context lookup = \case
   Syntax.Instance
     { startPosition,
-      prerequisites,
+      prerequisites = prerequisites',
       classPosition,
       className,
-      instanceHead = Head {typeName = Local :=. datax, parameters},
+      instanceHead = Head {typeName = Local :=. datax, parameters = written},
       instanceDefinition
     }
       | Just dataIndex <- lookup datax,
@@ -63,6 +69,7 @@ resolve context lookup = \case
           let Type.Header {fields} Type.:@ Identity Type.Binding {index, methods} =
                 context !=. classPosition :@ className
               classIndex = Type3.toType2 (illegalInstanceClass classPosition) index
+              (parameters, prerequisites) = shortened classIndex instanceDefinition written prerequisites'
               -- A method can be given a definition if it can be seen: it
               -- came with the class, or it is in scope by its own name,
               -- with any qualifiers or with none.
@@ -95,3 +102,31 @@ resolve context lookup = \case
               False
           | otherwise = True
   _ -> []
+
+-- |
+-- The parameters and prerequisites of an instance that a clause asks for,
+-- once its class is known. One of a class of types that take an argument
+-- is of the type without its last parameter, and requires nothing of it.
+shortened ::
+  Type2.Index scope ->
+  InstanceDeclarations.InstanceDeclarations Position ->
+  Strict.Vector (TypePattern.TypePattern Position) ->
+  Constraints.Constraints Position ->
+  (Strict.Vector (TypePattern.TypePattern Position), Constraints.Constraints Position)
+shortened classIndex declarations parameters prerequisites
+  | InstanceDeclarations.DerivingClause <- declarations,
+    classIndex `elem` [Type2.Functor, Type2.Foldable, Type2.Traversable],
+    not (null parameters) =
+      let lastName = TypePattern.name (Strict.Vector.last parameters)
+          other = \case
+            Constraint.Constraint {typeVariable = _ :@ name} -> name /= lastName
+            Constraint.Equality {} -> True
+       in ( Strict.Vector.init parameters,
+            case prerequisites of
+              Constraints.Constraints wanted
+                | kept <- Strict.Vector.filter other wanted,
+                  not (null kept) ->
+                    Constraints.Constraints kept
+              _ -> Constraints.None
+          )
+  | otherwise = (parameters, prerequisites)
