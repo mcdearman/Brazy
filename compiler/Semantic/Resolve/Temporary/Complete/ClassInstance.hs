@@ -85,7 +85,7 @@ resolve context lookup = \case
                   | index <- context !=*~ startPosition :@ constructorName ->
                       resolve (Type2.Lifted index) parameters
                 InstanceHead.TupleN {count, parameters} ->
-                  resolve (Type2.Tuple count) parameters
+                  resolve (Type2.Tuple (count + 1)) parameters
                 InstanceHead.Tuple {parameters} ->
                   resolve (Type2.Tuple (length parameters)) parameters
                 InstanceHead.List0 {} ->
