@@ -1,16 +1,18 @@
 module Control.Monad.ST.Unsafe where
 
 import Control.Monad.ST (ST)
-import Hazy.Prelude (placeholder)
+import Hazy (primUnsafeCoerce)
+import Hazy.Prelude (IO (..), runST)
 
+-- An action that is not run until its result is wanted.
 unsafeInterleaveST :: ST s a -> ST s a
-unsafeInterleaveST = placeholder
+unsafeInterleaveST action = pure (runST (primUnsafeCoerce action))
 
 unsafeDupableInterleaveST :: ST s a -> ST s a
-unsafeDupableInterleaveST = placeholder
+unsafeDupableInterleaveST = unsafeInterleaveST
 
 unsafeIOToST :: IO a -> ST s a
-unsafeIOToST = placeholder
+unsafeIOToST (IO action) = primUnsafeCoerce action
 
 unsafeSTToIO :: ST s a -> IO a
-unsafeSTToIO = placeholder
+unsafeSTToIO action = IO (primUnsafeCoerce action)

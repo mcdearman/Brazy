@@ -6,8 +6,9 @@ module System.IO.Unsafe
   )
 where
 
+import Data.IORef (newIORef, readIORef, writeIORef)
 import Hazy (primUnsafeCoerce)
-import Hazy.Prelude (IO (..), placeholder, runST)
+import Hazy.Prelude (IO (..), runST)
 
 -- An action run where its result is wanted, as if it were no action.
 unsafePerformIO :: IO a -> a
@@ -21,4 +22,9 @@ unsafeInterleaveIO :: IO a -> IO a
 unsafeInterleaveIO action = pure (unsafePerformIO action)
 
 unsafeFixIO :: (a -> IO a) -> IO a
-unsafeFixIO = placeholder
+unsafeFixIO action = do
+  place <- newIORef (error "System.IO.Unsafe.unsafeFixIO: the result was needed before it was made")
+  result <- unsafeInterleaveIO (readIORef place)
+  made <- action result
+  writeIORef place made
+  pure made

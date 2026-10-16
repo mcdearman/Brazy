@@ -8,7 +8,6 @@ module Data.Bool
   )
 where
 
-import Hazy.Prelude (placeholder)
-
 bool :: a -> a -> Bool -> a
-bool = placeholder
+bool f _ False = f
+bool _ t True = t
