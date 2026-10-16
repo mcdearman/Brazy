@@ -81,6 +81,28 @@ constrain fallthough constrain classx head = table classx head
       integer <- constrain Type2.Integral integer
       call [integer]
     table Type2.Integral Type2.Int [] = single
+    table Type2.Ix Type2.Char [] = single
+    table Type2.Ix Type2.Int [] = single
+    table Type2.Ix Type2.Integer [] = single
+    table Type2.Ix Type2.Bool [] = single
+    table Type2.Ix Type2.Ordering [] = single
+    table Type2.Ix (Type2.Tuple 0) [] = single
+    table Type2.Ix (Type2.Tuple 2) types
+      | length types == 2 = do
+          types <- traverse (constrain Type2.Ix) types
+          call types
+    table Type2.Ix (Type2.Tuple 3) types
+      | length types == 3 = do
+          types <- traverse (constrain Type2.Ix) types
+          call types
+    table Type2.Ix (Type2.Tuple 4) types
+      | length types == 4 = do
+          types <- traverse (constrain Type2.Ix) types
+          call types
+    table Type2.Ix (Type2.Tuple 5) types
+      | length types == 5 = do
+          types <- traverse (constrain Type2.Ix) types
+          call types
     table Type2.Integral Type2.Integer [] = single
     table Type2.Fractional Type2.Ratio [integer] = do
       integer <- constrain Type2.Integral integer

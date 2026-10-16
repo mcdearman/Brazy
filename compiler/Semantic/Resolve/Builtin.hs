@@ -10,6 +10,7 @@ import {-# SOURCE #-} qualified Builtin.Foldable as Foldable
 import {-# SOURCE #-} qualified Builtin.Fractional as Fractional
 import {-# SOURCE #-} qualified Builtin.Functor as Functor
 import {-# SOURCE #-} qualified Builtin.Integral as Integral
+import {-# SOURCE #-} qualified Builtin.Ix as Ix
 import {-# SOURCE #-} qualified Builtin.List as List
 import {-# SOURCE #-} qualified Builtin.Monad as Monad
 import {-# SOURCE #-} qualified Builtin.MonadFail as MonadFail
@@ -85,6 +86,7 @@ builtin =
       Fractional.bindings,
       Functor.bindings,
       Integral.bindings,
+      Ix.bindings,
       List.bindings,
       Monad.bindings,
       Monoid.bindings,

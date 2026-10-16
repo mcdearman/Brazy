@@ -28,6 +28,7 @@ data Index scope
   | Ord
   | Real
   | Integral
+  | Ix
   | Fractional
   | Floating
   | RealFrac
@@ -76,6 +77,7 @@ split = \case
   Ord -> Builtin Ord
   Real -> Builtin Real
   Integral -> Builtin Integral
+  Ix -> Builtin Ix
   Fractional -> Builtin Fractional
   Floating -> Builtin Floating
   RealFrac -> Builtin RealFrac

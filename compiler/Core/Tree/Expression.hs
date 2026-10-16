@@ -35,6 +35,7 @@ import qualified Data.Kind
 import Data.List.Reverse (List (..))
 import qualified Data.List.Reverse as Reverse
 import Data.Ratio (denominator, numerator)
+import Data.Text (Text)
 import qualified Data.Strict.Maybe as Strict (Maybe (..))
 import qualified Data.Vector.Strict as Strict (Vector)
 import qualified Data.Vector.Strict as Strict.Vector
@@ -126,6 +127,11 @@ data Expression scope
     Run
       { imperative :: !(Expression scope)
       }
+  | -- | A definition in @Hazy.Helper@, by its name. Only what the compiler
+    -- makes names one: what it derives that the runtime does for it.
+    Helper
+      { helperName :: !Text
+      }
   | -- | A value of a type with a @forall@ of its own, for a constructor to
     -- hold. If the type requires something, the value is a function of the
     -- evidence for it, as a definition of such a type is.
@@ -148,6 +154,7 @@ instance Shift.Functor Expression where
 
 instance Substitute.Functor Expression where
   map category = \case
+    Helper {helperName} -> Helper {helperName}
     Variable {variable, instanciation} ->
       Variable
         { variable = Substitute.map category variable,

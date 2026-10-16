@@ -105,6 +105,7 @@ label context = \case
     Type2.Ord -> builtin "Ord"
     Type2.Real -> builtin "Real"
     Type2.Integral -> builtin "Integral"
+    Type2.Ix -> builtin "Ix"
     Type2.Fractional -> builtin "Fractional"
     Type2.Floating -> builtin "Floating"
     Type2.RealFrac -> builtin "RealFrac"

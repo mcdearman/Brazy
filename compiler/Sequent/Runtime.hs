@@ -13,6 +13,7 @@ module Sequent.Runtime
     fixed,
     generated,
     member,
+    helperGlobal,
     showGlobal,
   )
 where

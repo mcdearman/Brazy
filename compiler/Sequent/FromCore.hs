@@ -40,7 +40,7 @@ import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
-import Data.Text (Text, pack)
+import Data.Text (Text, pack, unpack)
 import qualified Data.Text as Text (takeWhile)
 import Data.Traversable (for)
 import Data.Vector (Vector)
@@ -698,6 +698,7 @@ evaluate context expression consumer = case expression of
   Core.Newtype {argument} -> evaluate context argument consumer
   Core.Dictionary {evidence} -> generateEvidence context evidence $ \dictionary ->
     pure $ Cut dictionary consumer
+  Core.Helper {helperName} -> pure $ Cut (Global (Runtime.helperGlobal (unpack helperName))) (Force consumer)
   -- An action is a function of nothing, and what it gives may be yet to be
   -- evaluated.
   Core.Run {imperative} -> evaluate context imperative (Apply [] (Force consumer))
