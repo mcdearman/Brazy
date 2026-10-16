@@ -48,6 +48,7 @@ import qualified Semantic.Check.Derive.Enum as Enum
 import qualified Semantic.Check.Derive.Eq as Eq
 import qualified Semantic.Check.Derive.Functor as Functor
 import qualified Semantic.Check.Derive.Ix as Ix
+import qualified Semantic.Check.Derive.Read as Read
 import qualified Semantic.Check.Derive.Ord as Ord
 import qualified Semantic.Check.Derive.Show as Show
 import Semantic.Check.Go.Definition4 (Solve (..))
@@ -420,6 +421,8 @@ checkMethod Method {context, position} (Derive Type2.Ix typeIndex datax) index _
       Method.IxInRange -> Just Ix.inRange
       Method.IxRangeSize -> Nothing =
       derived context position typeIndex datax
+checkMethod Method {context, position} (Derive Type2.Read typeIndex datax) index _ _
+  | Method.ReadsPrec <- toEnum index = Read.readsPrec context position typeIndex datax
 checkMethod Method {context, position} (Derive Type2.Functor typeIndex datax) index scheme _
   | Method.Fmap <- toEnum index = Functor.fmap context position typeIndex datax scheme
 checkMethod Method {context, position} (Derive Type2.Foldable typeIndex datax) index scheme _
@@ -438,6 +441,7 @@ checkMethod Method {context, position, base, self, extra} source index scheme Ge
       Type2.Foldable -> pure ()
       Type2.Traversable -> pure ()
       Type2.Ix -> pure ()
+      Type2.Read -> pure ()
       _ ->
         let labelContext = Context.label context
             resolve =

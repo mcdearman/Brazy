@@ -26,6 +26,17 @@ minilexSingle c' s = [((), t) | (c, t) <- minilex s, c == c']
 bindRead :: [(a, String)] -> (a -> String -> [(b, String)]) -> [(b, String)]
 bindRead as f = concatMap (\(a, s) -> f a s) as
 
+-- What a derived Read instance has the runtime do: read a word as lex has
+-- it, read something in brackets or not, and go on from what was read.
+derivedExpect :: String -> String -> [((), String)]
+derivedExpect word s = [((), t) | (found, t) <- lex s, found == word]
+
+derivedParen :: Bool -> (String -> [(a, String)]) -> String -> [(a, String)]
+derivedParen = readParen
+
+derivedBind :: [(a, String)] -> (a -> String -> [(b, String)]) -> [(b, String)]
+derivedBind = bindRead
+
 data Strict a = Strict !a
 
 enumEqual :: (Enum a) => a -> a -> Bool
