@@ -225,12 +225,13 @@ patternx ! Bound.Select index bound = case patternx of
   Polymorphic {} -> error "bad index"
 
 augment :: Pattern s scope -> Context s scope -> Context s (Scope.Pattern ':+ scope)
-augment patternx Context {termEnvironment, localEnvironment, typeEnvironment, equalities} =
+augment patternx Context {termEnvironment, localEnvironment, typeEnvironment, equalities, defaulting} =
   Context
     { termEnvironment = Term.Pattern (augmentPattern patternx) termEnvironment,
       localEnvironment = Local.Pattern localEnvironment,
       typeEnvironment = Type.Pattern typeEnvironment,
-      equalities = fmap shiftEquality (learnt patternx ++ equalities) ++ given id patternx
+      equalities = fmap shiftEquality (learnt patternx ++ equalities) ++ given id patternx,
+      defaulting
     }
 
 -- |
@@ -360,8 +361,8 @@ within context position datax typeIndex instancex
 -- |
 -- A context in which more is known of type variables.
 knowing :: [Equality s scope] -> Context s scope -> Context s scope
-knowing found Context {termEnvironment, localEnvironment, typeEnvironment, equalities} =
-  Context {termEnvironment, localEnvironment, typeEnvironment, equalities = found ++ equalities}
+knowing found Context {termEnvironment, localEnvironment, typeEnvironment, equalities, defaulting} =
+  Context {termEnvironment, localEnvironment, typeEnvironment, equalities = found ++ equalities, defaulting}
 
 -- |
 -- Check the pattern for something a constructor holds.

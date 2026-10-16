@@ -8,7 +8,9 @@ import qualified Data.Vector as Vector
 import Data.Void (Void)
 import Graph.Topological (Loeb (..), loeb)
 import qualified Graph.Topological as Topological
-import Semantic.Check.Context (Context, globalBindings)
+import Error (unsupportedFeatureConstraintedTypeDefaulting)
+import Semantic.Check.Context (Context (..), globalBindings)
+import qualified Semantic.Default as Default
 import qualified Semantic.Check.Go.Declarations as Declarations
 import Semantic.Check.Go.Definition4 (now)
 import Semantic.Functor2 (Proper (..))
@@ -76,9 +78,10 @@ checkModule ::
   Int ->
   Module Identity Group Resolve Global ->
   Module (Topological.Formula (Proper ModuleSet Group Check Global) s) Group Check Global
-checkModule written global Module {name, declarations} =
+checkModule written global Module {name, declarations, defaultDeclaration} =
   Module
     { name,
+      defaultDeclaration,
       declarations =
         Declarations.checkImpl
           Link.Type.unglobal
@@ -89,9 +92,32 @@ checkModule written global Module {name, declarations} =
           lookupType
           (lookupDataInstance global)
           (lookupClassInstance global)
-          (globals written)
+          (\set -> (globals written set) {defaulting = listed})
           declarations
     }
 
+      where
+        -- The types the module's default declaration lists, or the
+        -- report's when it has none.
+        listed = case defaultDeclaration of
+          Nothing -> Default.standard
+          Just (position, types) -> map (known position) types
+        known position = \case
+          Type2.Integer -> Default.Integer
+          Type2.Int -> Default.Int
+          Type2.Double -> Default.Double
+          Type2.Float -> Default.Float
+          _ -> unsupportedFeatureConstraintedTypeDefaulting position
+
 check :: Vector (Module Identity Group Resolve Global) -> Vector (Module Identity Group Check Global)
-check modules = runModuleSet $ runProper $ loeb $ Loeb $ Proper $ ModuleSet $ Vector.imap (checkModule modules) modules
+check modules =
+  Vector.map listable $
+    runModuleSet $ runProper $ loeb $ Loeb $ Proper $ ModuleSet $ Vector.imap (checkModule modules) modules
+  where
+    -- What a default declaration lists is known to be types it can list
+    -- once the module is checked, whether or not anything is taken to be
+    -- one. It cannot be looked at while modules are resolved: what the
+    -- names in it are is what is being worked out then.
+    listable modulex@Module {defaultDeclaration} = case defaultDeclaration of
+      Just (_, types) -> foldr seq () types `seq` modulex
+      Nothing -> modulex

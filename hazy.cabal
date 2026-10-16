@@ -169,6 +169,7 @@ executable hazy
     Semantic.Check.Derive.Ord
     Semantic.Check.Derive.Read
     Semantic.Check.Derive.Show
+    Semantic.Default
     Semantic.Check.EntryInstance
     Semantic.Check.Go.Declaration
     Semantic.Check.Go.Declarations
