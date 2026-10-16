@@ -249,54 +249,6 @@ either f g (Right y) = g y
 runIO :: IO a -> ST RealWorld a
 runIO (IO action) = action
 
--- A number of 64 bits with no sign, which Data.Word gives out as well.
-newtype Word = Word Integer
-  deriving (Eq, Ord)
-
-instance Show Word where
-  showsPrec d (Word x) = showsPrec d x
-
-instance Read Word where
-  readsPrec d text = [(fromInteger x, rest) | (x, rest) <- readsPrec d text]
-
-instance Num Word where
-  Word a + Word b = fromInteger (a + b)
-  Word a - Word b = fromInteger (a - b)
-  Word a * Word b = fromInteger (a * b)
-  negate (Word a) = fromInteger (negate a)
-  abs word = word
-  signum (Word a) = Word (signum a)
-  fromInteger x = Word (x `mod` 2 ^ (64 :: Int))
-
-instance Enum Word where
-  toEnum x = fromInteger (toInteger x)
-  fromEnum (Word x) = fromInteger x
-  enumFrom x = enumFromTo x maxBound
-  enumFromThen x y = enumFromThenTo x y (if y >= x then maxBound else minBound)
-  enumFromTo (Word a) (Word b) = map Word (enumFromTo a b)
-  enumFromThenTo (Word a) (Word b) (Word c) = map Word (enumFromThenTo a b c)
-
-instance Real Word where
-  toRational (Word x) = toRational x
-
-instance Integral Word where
-  quotRem (Word a) (Word b) = case quotRem a b of
-    (q, r) -> (Word q, Word r)
-  divMod (Word a) (Word b) = case divMod a b of
-    (q, r) -> (Word q, Word r)
-  toInteger (Word x) = x
-
-instance Ix Word where
-  range (low, high) = [low .. high]
-  index bounds@(low, high) i
-    | low <= i && i <= high = fromInteger (toInteger i - toInteger low)
-    | otherwise = errorWithoutStackTrace ("Ix{Word}.index: Index " ++ showsPrec 11 i "" ++ " out of range (" ++ showsPrec 11 bounds "" ++ ")")
-  inRange (low, high) i = low <= i && i <= high
-
-instance Bounded Word where
-  minBound = Word 0
-  maxBound = Word (2 ^ (64 :: Int) - 1)
-
 numericEnumFrom :: (Fractional a) => a -> [a]
 numericEnumFromThen :: (Fractional a) => a -> a -> [a]
 numericEnumFromTo :: (Fractional a, Ord a) => a -> a -> [a]

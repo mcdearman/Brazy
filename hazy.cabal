@@ -84,6 +84,15 @@ executable hazy
     Builtin.Ord
     Builtin.Ordering
     Builtin.IO
+    Builtin.Int8
+    Builtin.Int16
+    Builtin.Int32
+    Builtin.Int64
+    Builtin.Word
+    Builtin.Word8
+    Builtin.Word16
+    Builtin.Word32
+    Builtin.Word64
     Builtin.Ratio
     Builtin.Read
     Builtin.Real

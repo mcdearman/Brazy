@@ -23,6 +23,15 @@ data Index scope
   | Ratio
   | Float
   | Double
+  | Int8
+  | Int16
+  | Int32
+  | Int64
+  | Word
+  | Word8
+  | Word16
+  | Word32
+  | Word64
   | Num
   | Enum
   | Bounded
@@ -74,6 +83,15 @@ split = \case
   Ratio -> Builtin Ratio
   Float -> Builtin Float
   Double -> Builtin Double
+  Int8 -> Builtin Int8
+  Int16 -> Builtin Int16
+  Int32 -> Builtin Int32
+  Int64 -> Builtin Int64
+  Word -> Builtin Word
+  Word8 -> Builtin Word8
+  Word16 -> Builtin Word16
+  Word32 -> Builtin Word32
+  Word64 -> Builtin Word64
   Num -> Builtin Num
   Enum -> Builtin Enum
   Bounded -> Builtin Bounded
