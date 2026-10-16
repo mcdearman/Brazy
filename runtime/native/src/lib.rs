@@ -28,14 +28,20 @@ fn kind(block: Value) -> u64 {
     unsafe { *(block as *const u64) & 0xf }
 }
 
-fn int(value: Value) -> i32 {
+/// An Int is 63 bits, kept above a 1 in the word: so arithmetic on the
+/// word's 64 bits and then this comes round at the Int's bounds.
+fn int(value: Value) -> i64 {
     debug_assert!(value & 1 == 1, "not an Int");
-    ((value as i64) >> 1) as i32
+    (value as i64) >> 1
 }
 
-fn from_int(number: i32) -> Value {
-    (((number as i64) << 1) | 1) as u64
+fn from_int(number: impl Into<i64>) -> Value {
+    (number.into().wrapping_shl(1) | 1) as u64
 }
+
+/// The bounds of an Int.
+const INT_MIN: i64 = -(1 << 62);
+const INT_MAX: i64 = (1 << 62) - 1;
 
 fn boolean(value: bool) -> Value {
     nullary(value as u64)
@@ -163,7 +169,7 @@ pub extern "C" fn hazy_prim_text_null(value: Value) -> Value {
 #[no_mangle]
 pub extern "C" fn hazy_prim_text_head(value: Value) -> Value {
     match text(value).chars().next() {
-        Some(character) => from_int(character as i32),
+        Some(character) => from_int(character as i64),
         None => fail("head of an empty Text"),
     }
 }
@@ -203,11 +209,11 @@ pub extern "C" fn hazy_prim_text_compare(left: Value, right: Value) -> Value {
 
 #[no_mangle]
 pub extern "C" fn hazy_prim_text_length(value: Value) -> Value {
-    from_int(text(value).chars().count() as i32)
+    from_int(text(value).chars().count() as i64)
 }
 
 /// Where in a text so many characters end, in bytes.
-fn after(string: &str, count: i32) -> usize {
+fn after(string: &str, count: i64) -> usize {
     if count <= 0 {
         return 0;
     }
@@ -377,7 +383,7 @@ pub extern "C" fn hazy_prim_int_to_integer(value: Value) -> Value {
 
 #[no_mangle]
 pub extern "C" fn hazy_prim_integer_cast_to_int(value: Value) -> Value {
-    match integer(value).to_i32() {
+    match integer(value).to_i64().filter(|number| (INT_MIN..=INT_MAX).contains(number)) {
         Some(number) => from_int(number),
         None => fail("Enum Integer Overflow"),
     }
@@ -387,9 +393,9 @@ pub extern "C" fn hazy_prim_integer_cast_to_int(value: Value) -> Value {
 #[no_mangle]
 pub extern "C" fn hazy_prim_integer_truncate_to_int(value: Value) -> Value {
     let number = integer(value);
-    let low = number.iter_u32_digits().next().unwrap_or(0);
+    let low = number.iter_u64_digits().next().unwrap_or(0);
     let low = if number.is_negative() { low.wrapping_neg() } else { low };
-    from_int(low as i32)
+    from_int(low as i64)
 }
 
 #[no_mangle]
@@ -514,7 +520,7 @@ fn files() -> &'static mut Vec<Option<Open>> {
     unsafe { &mut *std::ptr::addr_of_mut!(FILES) }
 }
 
-fn file(descriptor: i32) -> &'static mut Open {
+fn file(descriptor: i64) -> &'static mut Open {
     match files().get_mut((descriptor - 3) as usize) {
         Some(Some(file)) => file,
         _ => fail(&format!("file {descriptor} is not open")),
@@ -524,7 +530,7 @@ fn file(descriptor: i32) -> &'static mut Open {
 /// Read from standard input or from a file that was opened, through what
 /// keeps what was read ahead.
 fn reading<T>(
-    descriptor: i32,
+    descriptor: i64,
     read: impl FnOnce(&mut dyn std::io::BufRead) -> std::io::Result<T>,
 ) -> T {
     let result = match descriptor {
@@ -540,7 +546,7 @@ fn reading<T>(
 
 /// What kind of failure the system's is, as `Hazy.PreludeIO` numbers them.
 /// They are told apart as GHC tells them apart.
-fn failure(error: &std::io::Error) -> i32 {
+fn failure(error: &std::io::Error) -> i64 {
     use std::io::ErrorKind::*;
     match error.kind() {
         AlreadyExists => 1,
@@ -860,12 +866,12 @@ pub extern "C" fn hazy_prim_array_write(array: Value, index: Value, value: Value
 
 #[no_mangle]
 pub extern "C" fn hazy_prim_array_length(array: Value) -> Value {
-    from_int(unsafe { *(array as *const u64).add(1) } as i32)
+    from_int(unsafe { *(array as *const u64).add(1) } as i64)
 }
 
 #[no_mangle]
 pub extern "C" fn hazy_prim_arg_count() -> Value {
-    from_int(arguments().len() as i32)
+    from_int(arguments().len() as i64)
 }
 
 #[no_mangle]
@@ -977,7 +983,7 @@ pub extern "C" fn hazy_prim_executable_path() -> Value {
 pub extern "C" fn hazy_prim_exit(code: Value) -> Value {
     let _ = std::io::stdout().flush();
     let _ = std::io::stderr().flush();
-    std::process::exit(int(code))
+    std::process::exit(int(code) as i32)
 }
 
 /// A file opened to read, to write, to add to, or to read and write, as the
@@ -1324,7 +1330,7 @@ pub extern "C" fn hazy_prim_call_process(program: Value, arguments: Value) -> Va
 pub extern "C" fn hazy_prim_clock() -> Value {
     static START: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
     let start = START.get_or_init(std::time::Instant::now);
-    from_int(start.elapsed().as_millis() as i32)
+    from_int(start.elapsed().as_millis() as i64)
 }
 
 /// The system, as Haskell's `System.Info.os` names it.
@@ -1367,7 +1373,7 @@ pub extern "C" fn hazy_prim_pack_new() -> Value {
         }
     };
     building[place] = Some(String::new());
-    from_int(place as i32)
+    from_int(place as i64)
 }
 
 #[no_mangle]
@@ -1411,7 +1417,7 @@ pub extern "C" fn hazy_prim_catching() -> Value {
 pub extern "C" fn hazy_prim_uncaught(status: Value, shown: Value) -> Value {
     if int(status) >= 0 {
         let _ = std::io::stdout().flush();
-        std::process::exit(int(status))
+        std::process::exit(int(status) as i32)
     }
     fail(&format!("uncaught exception: {}", text(shown)))
 }

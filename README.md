@@ -618,25 +618,8 @@ class is required of a parameter that is the type of nothing the value
 holds, which Haskell would not require. For that, write the
 `deriving instance` out with what it requires.
 
-### Derive `Read` and `Ix` are unsupported
-
-These two type classes can't be derived yet.
-
 ## Planned Toggles
 These are devitations that will eventually toggleable with a language pragma.
-
-### Universal monomorphic restriction
-Hazy applies the monomorphism restriction to all declarations. This means that
-only type variables without constraints are generalized.
-
-Consider these two examples:
-```haskell
-f a = a      -- #1
-f' a = a + 1 -- #2
-```
-Here, `#1` is polymorphic over an unconstrainted type variable so it gets
-properly generalized to `f :: a -> a`. However, `#2` is rejected because it
-would have the type `f' :: Num a => a -> a`.
 
 ### Postfix Operators
 Left sections are treated as function application and are not eta expanded.
@@ -648,6 +631,12 @@ These are deviations that are unlikely to be fixed in the the near future.
 ### No orphan instances
 Hazy does not support orphan instances. All instance declarations must have
 either the class or the data instance in the same module.
+
+### `Int` is 63 bits
+An `Int` is kept unboxed in a machine word beside a tag bit, so it has 63
+bits where GHC's has 64. The report asks for at least 30. Only programs that
+reach past 63 bits, or print `maxBound :: Int`, see the difference. `Int64`
+has all 64.
 
 
 # Copyright

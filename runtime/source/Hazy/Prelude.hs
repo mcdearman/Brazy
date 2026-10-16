@@ -246,6 +246,7 @@ instance Functor (Either a) where
   fmap = liftM
 
 instance Applicative (Either a) where
+  pure = Right
   (<*>) = ap
 
 instance Monad (Either a) where

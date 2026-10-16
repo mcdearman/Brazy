@@ -88,6 +88,7 @@ import Sequent.Tree
     Statement (..),
     Strategy (..),
     globals,
+    int63,
     separator,
   )
 
@@ -491,8 +492,8 @@ number = \case
       argument = Core.Integer {integer}
     }
       | methodIndex == fromInteger' -> case target of
-          -- As the instance has it, an Int keeps the low 32 bits.
-          Type2.Int -> Just (Int (fromInteger integer))
+          -- As the instance has it, an Int keeps the low 63 bits.
+          Type2.Int -> Just (Int (int63 integer))
           Type2.Integer -> Just (Integer integer)
           _ -> Nothing
   _ -> Nothing

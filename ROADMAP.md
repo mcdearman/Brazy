@@ -1102,7 +1102,7 @@ The order to take it in:
   - `Viewer` is a placeholder, and `Lambline` reads lines without editing
     them
   - `toUpper` and `toLower` change the letters of Latin-1 only
-  - An `Int` is 32 bits in both runtimes, and `Int64` is no wider
+  - An `Int` is 63 bits, where GHC's is 64: see Track A
   - Whatever is read from a handle is read at once, not as it is wanted
   - Many functions of `Data.Map`, `Data.Vector` and `System.Directory`
     that the compiler does not use are placeholders yet. Of `System.IO`,
@@ -1435,6 +1435,22 @@ Missing:
     rest of what the report's `System.IO` asks, `openTempFile`, `fixIO` and
     `removeFile` work too (test `io-errors`, which agrees with GHC). The
     AxCut machine reads lines now, which it could not
+- [x] An `Int` was 32 bits, as Javascript's numbers were. A sum past two
+      thousand million came round, which programs do not expect. It is 63
+      bits now, as OCaml's is: the runtime keeps an `Int` in the word above
+      a 1, and had used 32 of the other 63. Arithmetic on the word comes
+      round at the bounds of the 63 bits, the AxCut machine brings what it
+      works out into them (`int63`, in `Sequent.Tree`, which is worked out
+      on an `Integer` so that the compiler GHC built and the one Hazy built
+      agree), and `Int64` is kept as an `Integer`, as the `Word`s are. The
+      report asks at least 30 bits; GHC has 64, so only what is past the
+      63 differs, as `maxBound` does (test `int-width`)
+- [x] Found by programs that use the report's language throughout, run by
+      GHC and by Hazy and compared (they agree otherwise): a range that
+      goes down, `[10, 8 .. 1]`, was empty for an `Int`, an `Integer` and
+      a `Char`, and one that went up to `maxBound` came round and went on;
+      and `Either`'s `Applicative` had no `pure`, so `return` in its `do`
+      was bottom
 - [x] GADTs: see M6
 - [x] Polymorphic components: see M6
 - [ ] Strict functions
@@ -1444,7 +1460,12 @@ Missing:
 
 Planned toggles and TODOs:
 
-- [ ] A pragma to turn off the universal monomorphism restriction
+- [x] A pragma to turn off the universal monomorphism restriction. None is
+      needed now: a function with no signature whose type is constrained
+      is generalised, at the top, in a `where` and in a `let`, and when it
+      calls itself through another, as the report has it (test
+      `generalisation`, which agrees with GHC). The README no longer lists
+      the restriction among the deviations
 - [ ] A pragma for postfix operators (eta-expanded left sections when off)
 - [ ] Use `UnorderedRecords` throughout the compiler (after M6)
 - [ ] Top-level documentation for every module

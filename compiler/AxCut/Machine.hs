@@ -23,7 +23,6 @@ import qualified AxCut.Tree as Kind (Kind (..))
 import Data.Bits (popCount, shift, xor, (.&.), (.|.))
 import Data.Char (chr, generalCategory, ord)
 import Data.IORef (IORef, modifyIORef, newIORef, readIORef, writeIORef)
-import Data.Int (Int32)
 import Data.List (sort)
 import Data.Map (Map)
 import Data.Vector (Vector)
@@ -38,6 +37,7 @@ import Sequent.Primitive (Primitive (..))
 import qualified Sequent.Primitive as Primitive
 import qualified Sequent.Runtime as Runtime
 import qualified Sequent.Tree as Literal (Literal (..))
+import qualified Sequent.Tree as Tree (int63, intMaxBound, intMinBound)
 import GHC.IO.Exception (IOErrorType (..), IOException (..))
 import System.Directory (createDirectoryIfMissing, doesDirectoryExist, doesFileExist, doesPathExist, listDirectory, removeFile)
 import System.Environment (getEnvironment, getExecutablePath, lookupEnv, setEnv, unsetEnv)
@@ -70,7 +70,7 @@ import System.IO.Error (alreadyExistsErrorType, ioeSetErrorString, mkIOError, tr
 import System.Info (os)
 
 data Value
-  = Int !Int32
+  = Int !Int
   | Integer !Integer
   | Text !Text
   | Data !Int [Value]
@@ -298,16 +298,16 @@ apply world primitive arguments = case (primitive, arguments) of
     pure $ Data (fromEnum $ generalCategory $ chr $ fromIntegral character) []
   (IntEqual, [Int left, Int right]) -> pure $ bool $ left == right
   (IntLessThenEqual, [Int left, Int right]) -> pure $ bool $ left <= right
-  (IntAdd, [Int left, Int right]) -> pure $ Int $ left + right
-  (IntMinus, [Int left, Int right]) -> pure $ Int $ left - right
-  (IntMultiply, [Int left, Int right]) -> pure $ Int $ left * right
-  (IntNegate, [Int value]) -> pure $ Int $ negate value
-  (IntAbs, [Int value]) -> pure $ Int $ abs value
+  (IntAdd, [Int left, Int right]) -> pure $ Int $ wrapped $ left + right
+  (IntMinus, [Int left, Int right]) -> pure $ Int $ wrapped $ left - right
+  (IntMultiply, [Int left, Int right]) -> pure $ Int $ wrapped $ left * right
+  (IntNegate, [Int value]) -> pure $ Int $ wrapped $ negate value
+  (IntAbs, [Int value]) -> pure $ Int $ wrapped $ abs value
   (IntSignum, [Int value]) -> pure $ Int $ signum value
   (IntQuot, [Int left, Int right])
     | right == 0 -> divideByZero
     -- The one quotient that does not fit wraps around.
-    | right == -1 -> pure $ Int $ negate left
+    | right == -1 -> pure $ Int $ wrapped $ negate left
     | otherwise -> pure $ Int $ left `quot` right
   (IntRem, [Int left, Int right])
     | right == 0 -> divideByZero
@@ -315,11 +315,11 @@ apply world primitive arguments = case (primitive, arguments) of
     | otherwise -> pure $ Int $ left `rem` right
   (IntToInteger, [Int value]) -> pure $ Integer $ fromIntegral value
   (IntegerCastToInt, [Integer value])
-    | value > fromIntegral (maxBound :: Int32) || value < fromIntegral (minBound :: Int32) -> do
+    | value > toInteger Tree.intMaxBound || value < toInteger Tree.intMinBound -> do
         hPutStrLn stderr "Enum Integer Overflow"
         exitFailure
     | otherwise -> pure $ Int $ fromInteger value
-  (IntegerTruncateToInt, [Integer value]) -> pure $ Int $ fromInteger value
+  (IntegerTruncateToInt, [Integer value]) -> pure $ Int $ Tree.int63 value
   (IntegerEqual, [Integer left, Integer right]) -> pure $ bool $ left == right
   (IntegerLessThenEqual, [Integer left, Integer right]) -> pure $ bool $ left <= right
   (IntegerAdd, [Integer left, Integer right]) -> pure $ Integer $ left + right
@@ -339,11 +339,13 @@ apply world primitive arguments = case (primitive, arguments) of
     divideByZero = do
       hPutStrLn stderr "divide by zero"
       exitFailure
+    -- An Int is 63 bits, as in native code, and comes round at its bounds.
+    wrapped = Tree.int63 . toInteger
 
 -- |
 -- A floating-point number of a precision: 32 for a Float, worked out as a
 -- Float, and 64 for a Double.
-precise :: Int32 -> Double -> Float -> Value
+precise :: Int -> Double -> Float -> Value
 precise precision double float
   | precision == 32 = Floating (realToFrac float)
   | otherwise = Floating double
@@ -352,7 +354,7 @@ single :: Double -> Float
 single = realToFrac
 
 -- | The functions of floating point, by number, as the runtime has them.
-function :: (Floating a) => Int32 -> a -> a
+function :: (Floating a) => Int -> a -> a
 function = \case
   3 -> exp
   4 -> log
@@ -371,7 +373,7 @@ function = \case
   17 -> atanh
   operation -> error $ "no such function of floating point: " ++ show operation
 
-operator :: (Floating a) => Int32 -> a -> a -> a
+operator :: (Floating a) => Int -> a -> a -> a
 operator = \case
   0 -> (+)
   1 -> (-)
@@ -382,7 +384,7 @@ operator = \case
 
 -- |
 -- What a place of an array holds.
-placed :: IORef (Vector Value) -> Int32 -> IO Value
+placed :: IORef (Vector Value) -> Int -> IO Value
 placed array index = do
   places <- readIORef array
   case places Vector.!? fromIntegral index of

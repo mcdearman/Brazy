@@ -451,7 +451,7 @@ render (Scope first inside)
 -- |
 -- Twelve letters and digits for a path: three numbers of twenty bits. No
 -- number on the way to them is past 31 bits, so that they are worked out
--- the same by a compiler that Hazy made, where an @Int@ is 32 bits, as by
+-- the same by a compiler that Hazy made, where an @Int@ is 63 bits, as by
 -- one that GHC made, where it is 64.
 digest :: [String] -> String
 digest inside = concatMap digits [hash 31 1048573, hash 131 1048559, hash 1009 1048549]

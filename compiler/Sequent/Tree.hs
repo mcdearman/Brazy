@@ -13,7 +13,6 @@
 -- prove are not needed.
 module Sequent.Tree where
 
-import Data.Int (Int32)
 import Data.Map (Map)
 import Data.Set (Set)
 import qualified Data.Set as Set
@@ -40,7 +39,7 @@ data Binder = Binder
 
 data Literal
   = -- | An @Int@ or a @Char@.
-    Int !Int32
+    Int !Int
   | Integer !Integer
   | Text !Text
   deriving (Eq, Show)
@@ -188,3 +187,17 @@ instance Globals Statement where
     LetRec bindings statement -> globals (map snd bindings) <> globals statement
     Abort -> Set.empty
     Halt -> Set.empty
+
+-- |
+-- A number made an Int, which is 63 bits wherever the program runs: what
+-- does not fit comes round, as arithmetic on an Int does. It is worked out
+-- on an Integer, so that the compiler gives the same number whether it was
+-- built by GHC, whose Int is wider, or by itself.
+int63 :: Integer -> Int
+int63 number = fromInteger (((number + half) `mod` (2 * half)) - half)
+  where
+    half = 2 ^ (62 :: Int)
+
+intMinBound, intMaxBound :: Int
+intMinBound = int63 (negate (2 ^ (62 :: Int)))
+intMaxBound = int63 (2 ^ (62 :: Int) - 1)
