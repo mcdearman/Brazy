@@ -1,0 +1,7 @@
+([Red,Green,Blue],1,False,3)
+([Point 0 False,Point 0 True,Point 1 False,Point 1 True],3)
+([Cell {row = 1, column = 'a', layer = Red},Cell {row = 1, column = 'a', layer = Green},Cell {row = 1, column = 'b', layer = Red},Cell {row = 1, column = 'b', layer = Green}],13)
+(False,27)
+([Wrapped 3,Wrapped 4,Wrapped 5],5,[Unit])
+('g',(Red,Blue))
+6

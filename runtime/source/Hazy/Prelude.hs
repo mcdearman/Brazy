@@ -305,6 +305,13 @@ instance Integral Word where
     (q, r) -> (Word q, Word r)
   toInteger (Word x) = x
 
+instance Ix Word where
+  range (low, high) = [low .. high]
+  index bounds@(low, high) i
+    | low <= i && i <= high = fromInteger (toInteger i - toInteger low)
+    | otherwise = errorWithoutStackTrace ("Ix{Word}.index: Index " ++ showsPrec 11 i "" ++ " out of range (" ++ showsPrec 11 bounds "" ++ ")")
+  inRange (low, high) i = low <= i && i <= high
+
 instance Bounded Word where
   minBound = Word 0
   maxBound = Word (2 ^ (64 :: Int) - 1)

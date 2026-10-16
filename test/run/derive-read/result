@@ -1,0 +1,9 @@
+(MyType 3,MyType (-1))
+[Circle 1.5,Rect {width = 2, height = -3},Dot,Dot]
+Rect {width = 4, height = 5}
+[(Rect {width = 1, height = 2}," rest")]
+(1 :+ 2,Neg (3 :+ (-4)),Neg (Neg (0 :+ 0)))
+'a' `Then` 'b'
+(Pair "x y" (Just [1,2]),Name {unName = "n"})
+([],[])
+0
