@@ -148,12 +148,13 @@ inside ::
   Strict.Vector (Unsolved.TypePattern s scope) ->
   Context s scope ->
   Context s (Scope.Local ':+ scope)
-inside constructor parameters Context {termEnvironment, localEnvironment, typeEnvironment, equalities} =
+inside constructor parameters Context {termEnvironment, localEnvironment, typeEnvironment, equalities, defaulting} =
   Context
     { termEnvironment = Term.Table.Local termEnvironment,
       localEnvironment = Local.Table.Local (fmap wobbly (Strict.Vector.toLazy parameters)) localEnvironment,
       typeEnvironment = Type.Table.Local typeEnvironment,
-      equalities = LocalBinding.Expanding (Shift0.map Shift0.Shift constructor) : (LocalBinding.shiftEquality <$> equalities)
+      equalities = LocalBinding.Expanding (Shift0.map Shift0.Shift constructor) : (LocalBinding.shiftEquality <$> equalities),
+      defaulting
     }
   where
     wobbly Unsolved.TypePattern {name, typex} =

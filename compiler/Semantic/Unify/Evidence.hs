@@ -3,6 +3,7 @@ module Semantic.Unify.Evidence where
 import Control.Monad.ST (ST)
 import Core.Tree.Evidence (EvidenceF (..))
 import Data.STRef (STRef, newSTRef, readSTRef, writeSTRef)
+import Semantic.Default (Default)
 import qualified Semantic.Index.Type2 as Type2
 import Semantic.Scope (Environment (..))
 import qualified Semantic.Shift as Shift
@@ -41,18 +42,6 @@ data Fallback s = Fallback
   }
 
 -- |
--- What a type may be taken to be, in the order the report's default
--- declaration, @default (Integer, Double)@, tries them.
-data Default
-  = Integer
-  | Double
-
-typeOf :: Default -> Type2.Index scope
-typeOf = \case
-  Integer -> Type2.Integer
-  Double -> Type2.Double
-
--- |
 -- The classes whose constraints do not stop a type from being defaulted.
 data Defaultable
   = Num
@@ -63,6 +52,7 @@ data Defaultable
   | RealFrac
   | RealFloat
   | Enum
+  | Bounded
   | Eq
   | Ord
   | Show
@@ -78,6 +68,7 @@ defaultable = \case
   Type2.RealFrac -> Just RealFrac
   Type2.RealFloat -> Just RealFloat
   Type2.Enum -> Just Enum
+  Type2.Bounded -> Just Bounded
   Type2.Eq -> Just Eq
   Type2.Ord -> Just Ord
   Type2.Show -> Just Show
@@ -119,6 +110,7 @@ classOf = \case
   RealFrac -> Type2.RealFrac
   RealFloat -> Type2.RealFloat
   Enum -> Type2.Enum
+  Bounded -> Type2.Bounded
   Eq -> Type2.Eq
   Ord -> Type2.Ord
   Show -> Type2.Show

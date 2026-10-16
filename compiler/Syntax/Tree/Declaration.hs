@@ -171,6 +171,12 @@ data Declaration position
       { startPosition :: !position
       }
   | -- |
+    -- > default (Integer, Double)
+    Default
+      { startPosition :: !position,
+        defaultTypes :: !(Strict.Vector (Marked.QualifiedConstructorIdentifier position))
+      }
+  | -- |
     -- > {-# UNORDEREDRECORDS A #-}
     Unordered
       { constructorNames :: !(Strict.Vector1 (Marked Variable.Constructor position))
@@ -345,10 +351,12 @@ parse =
       token "deriving" *> token "instance" *> parseInstance False,
       fromClass <$> ClassDeclaration.parse,
       fromImport <$> Import.parse,
+      defaultx <$> position <*> (token "default" *> betweenParens (Strict.Vector.fromList <$> sepByComma Marked.parse)),
       unordered <$> betweenUnorderedPragma (Strict.fromNonEmpty <$> sepBy1Comma Marked.parseLiteral),
       fields <$> betweenFieldPragma (Strict.fromNonEmpty <$> sepBy1Comma Marked.parseLiteral)
     ]
   where
+    defaultx startPosition defaultTypes = Default {startPosition, defaultTypes}
     unordered constructorNames =
       Unordered
         { constructorNames

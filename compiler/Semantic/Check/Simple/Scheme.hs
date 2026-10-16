@@ -50,7 +50,7 @@ augmentNamed ::
   Mask ->
   Context s scope ->
   ST s (Context s (Local ':+ scope))
-augmentNamed name _ parameters constraints mask Context {termEnvironment, localEnvironment, typeEnvironment, equalities}
+augmentNamed name _ parameters constraints mask Context {termEnvironment, localEnvironment, typeEnvironment, equalities, defaulting}
   | parameters <- Strict.Vector.toLazy parameters = do
       let entailed classx arguments evidence = do
             Class.Class {constraints} <- do
@@ -92,7 +92,8 @@ augmentNamed name _ parameters constraints mask Context {termEnvironment, localE
           { termEnvironment = Term.Local termEnvironment,
             localEnvironment = Local.Local locals localEnvironment,
             typeEnvironment = Type.Local typeEnvironment,
-            equalities = shiftEquality <$> equalities
+            equalities = shiftEquality <$> equalities,
+            defaulting
           }
 
 augment ::
