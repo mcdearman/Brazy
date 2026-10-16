@@ -100,6 +100,7 @@ instance Connect (Definition2 source mark) where
 -- the type written for it.
 data ForeignCall = ForeignCall
   { foreignPosition :: !Position,
+    target :: !Marshal.Target,
     symbol :: !Text,
     -- | What C is given and gives, once that is worked out, where the
     -- type is checked.

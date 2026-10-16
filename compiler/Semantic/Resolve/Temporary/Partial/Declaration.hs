@@ -17,6 +17,7 @@ import qualified Data.Text as Text
 import qualified Data.Text.Lazy as Lazy (toStrict)
 import Data.Text.Lazy.Builder (toLazyText)
 import Error (missingMethodEntry, unsupportedFeatureForeignExport, unsupportedForeignEntity)
+import qualified Core.Marshal as Marshal
 import qualified Syntax.StringLiteral as StringLiteral
 import qualified Syntax.Variable as Variable
 import qualified Semantic.Index.Term as Term
@@ -191,7 +192,8 @@ resolve' temporary context lookupTerm lookupType lookupShare (declaration : decl
         position :@ name <- toList termNames
         annotation <- pure $ Scheme.resolve context annotation
         pure (Named name, Annotation {position, name = Named name, annotation})
-      Syntax.ForeignImport {startPosition, foreignName = position :@ name, entity, foreignAnnotation} ->
+      Syntax.ForeignImport {startPosition, foreignName = position :@ name, entity, foreignAnnotation}
+        | (target, symbol) <- foreignSymbol startPosition name entity ->
         [ (Named name, Annotation {position, name = Named name, annotation = Scheme.resolve context foreignAnnotation}),
           ( Named name,
             Foreign
@@ -200,7 +202,8 @@ resolve' temporary context lookupTerm lookupType lookupShare (declaration : decl
                 foreignCall =
                   Real.ForeignCall
                     { foreignPosition = startPosition,
-                      symbol = foreignSymbol startPosition name entity,
+                      target,
+                      symbol,
                       marshalled = Nothing
                     }
               }
@@ -285,17 +288,26 @@ resolve' temporary context lookupTerm lookupType lookupShare (declaration : decl
 resolve' _ _ _ _ _ [] = []
 
 -- |
--- The name of the C function a foreign import calls: the last word of what
--- is written for it, past @static@ and a header, or else the name it has
--- in Haskell.
-foreignSymbol :: Position -> Variable -> Maybe StringLiteral.StringLiteral -> Text
+-- What a foreign import is of, as the report has it: past @static@ and a
+-- header, the name of a C function, or of something whose address it is
+-- if that is written after an @&@; or @dynamic@, a C function called by its
+-- address. With no name, the name is the one it has in Haskell.
+foreignSymbol :: Position -> Variable -> Maybe StringLiteral.StringLiteral -> (Marshal.Target, Text)
 foreignSymbol position name = \case
-  Nothing -> haskell
+  Nothing -> (Marshal.Static, haskell)
   Just written -> case filter wanted (Text.words (Text.pack (StringLiteral.unpack written))) of
-    [] -> haskell
-    [symbol]
-      | Text.all (\c -> c == '_' || c `elem` ['a' .. 'z'] || c `elem` ['A' .. 'Z'] || c `elem` ['0' .. '9']) symbol -> symbol
+    [] -> (Marshal.Static, haskell)
+    [word] | word == Text.pack "dynamic" -> (Marshal.Dynamic, Text.empty)
+    [word] | word == Text.pack "&" -> (Marshal.Address, haskell)
+    [ampersand, symbol] | ampersand == Text.pack "&" -> (Marshal.Address, checked symbol)
+    [word] | Just symbol <- Text.stripPrefix (Text.pack "&") word -> (Marshal.Address, checked symbol)
+    [symbol] -> (Marshal.Static, checked symbol)
     _ -> unsupportedForeignEntity position
   where
+    checked symbol
+      | not (Text.null symbol),
+        Text.all (\c -> c == '_' || c `elem` ['a' .. 'z'] || c `elem` ['A' .. 'Z'] || c `elem` ['0' .. '9']) symbol =
+          symbol
+      | otherwise = unsupportedForeignEntity position
     haskell = Lazy.toStrict (toLazyText (Variable.printLiteral' name))
     wanted word = word /= Text.pack "static" && not (Text.pack ".h" `Text.isSuffixOf` word)

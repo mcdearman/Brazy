@@ -129,10 +129,10 @@ check position Solve {solve, logical} reflection information = \case
                 -- has, which is known from its type, and from the
                 -- definitions of the newtypes in it.
                 definition <- case definition of
-                  Tree.Definition3.Label info (Definition2.Foreign call@Definition2.ForeignCall {foreignPosition, symbol}) -> do
+                  Tree.Definition3.Label info (Definition2.Foreign call@Definition2.ForeignCall {foreignPosition, target, symbol}) -> do
                     let Context {typeEnvironment} = context
                         content index = assumeData <$> TypeBinding.content (typeEnvironment Table.Type.! index)
-                    marshalled <- Foreign.callThrough (Builtin.index pure content) foreignPosition symbol (Forall.simplify scheme)
+                    marshalled <- Foreign.callThrough (Builtin.index pure content) foreignPosition target symbol (Forall.simplify scheme)
                     marshalled `seq` pure (Tree.Definition3.Label info (Definition2.Foreign call {Definition2.marshalled = Just marshalled}))
                   _ -> pure definition
                 definition <- checkAnnotation context position scheme $ \context typex -> do
