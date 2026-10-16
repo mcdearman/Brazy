@@ -4,13 +4,14 @@
 module Core.Foreign
   ( Marshal (..),
     Call (..),
+    Target (..),
     call,
     callThrough,
   )
 where
 
 import Control.Monad.ST (ST)
-import Core.Marshal (Call (..), Marshal (..))
+import Core.Marshal (Call (..), Marshal (..), Target (..))
 import Core.Substitute (substituteType)
 import qualified Core.Tree.Constraints as Constraints (ConstraintsF (..))
 import Core.Tree.Constructor (Constructor (Constructor, entries))
@@ -32,8 +33,8 @@ import Syntax.Position (Position)
 import qualified Syntax.Tree.Brand as Brand
 
 -- | A call, where the types are only the ones C is given as they are.
-call :: Position -> Text -> ForallOver TypeF Void scope -> Call
-call position symbol typex = runIdentity (callWith (const (pure Nothing)) position symbol typex)
+call :: Position -> Target -> Text -> ForallOver TypeF Void scope -> Call
+call position target symbol typex = runIdentity (callWith (const (pure Nothing)) position target symbol typex)
 
 -- |
 -- A call, where a newtype of a type C is given is given as what it holds,
@@ -42,6 +43,7 @@ call position symbol typex = runIdentity (callWith (const (pure Nothing)) positi
 callThrough ::
   (Type2.Index scope -> ST s (Data scope)) ->
   Position ->
+  Target ->
   Text ->
   ForallOver TypeF Void scope ->
   ST s Call
@@ -75,19 +77,32 @@ callWith ::
   (Monad m) =>
   (TypeF Void (Local ':+ scope) -> m (Maybe (TypeF Void (Local ':+ scope)))) ->
   Position ->
+  Target ->
   Text ->
   ForallOver TypeF Void scope ->
   m Call
-callWith unwrap position symbol ForallOver {constraints, result}
+callWith unwrap position target symbol ForallOver {constraints, result = typex}
   | Constraints.Constraints required <- constraints,
     not (null required) =
       unsupportedForeignType position
   | otherwise = do
-      (arguments, result, action) <- go result
-      if null arguments && not action
-        then unsupportedForeignType position
-        else pure Call {symbol, arguments, result, action}
+      (arguments, result, action) <- go typex
+      -- A function called by its name is given something, or is an action;
+      -- an address is an address, and nothing else; and a function called
+      -- by its address is given that first.
+      let fits = case target of
+            Static -> not (null arguments) || action
+            Address -> null arguments && not action && result == Pointer
+            Dynamic -> take 1 arguments == [Pointer] && addressOfRest
+      if fits
+        then pure Call {target, symbol, arguments, result, action}
+        else unsupportedForeignType position
   where
+    -- The address a function is called by is the address of a function of
+    -- the type of the rest, as the report has it.
+    addressOfRest = case typex of
+      Type.Function (Type.Call (Type.Constructor Type2.FunPtr) function) rest -> function == rest
+      _ -> False
     go = \case
       Type.Function parameter rest -> do
         argument <- value parameter

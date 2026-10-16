@@ -1568,9 +1568,15 @@ Missing:
       of the types; test `foreign-newtype`, which agrees with GHC). What C
       is given and gives is kept in the tree once it is worked out
       (`Core.Marshal`). That the constructor is in scope is not asked
-- [ ] What the foreign function interface does not do yet: `foreign export`,
-      an import of an address (`&`) or by a pointer to a function
-      (`dynamic`, `wrapper`), `Foreign.C.Error`, and `finalizerFree`
+- [x] An import of an address, `&`, and of a function called by its address,
+      `dynamic`, whose address is of a function of the type of the rest.
+      The address is the C name's, declared in the unit; a call by an
+      address is a call through it. The AxCut machine gives out an address
+      of its own for each name, and calls a function at one by its name
+      (test `foreign-dynamic`, which agrees with GHC, and
+      `ForeignDynamic`). `finalizerFree` is the address of `free`
+- [ ] What the foreign function interface does not do yet: `foreign export`
+      and `wrapper`, which call Haskell from C, and `Foreign.C.Error`
 - [x] `bracket`, `bracket_`, `bracketOnError`, `finally` and `onException`
       in `Control.Exception`, over the runtime's catch: what is done when
       an action throws is done, and what was thrown is thrown on as it

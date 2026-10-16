@@ -5,6 +5,7 @@
 module Core.Marshal
   ( Marshal (..),
     Call (..),
+    Target (..),
   )
 where
 
@@ -33,10 +34,20 @@ data Marshal
   | Unit
   deriving (Eq, Ord, Show)
 
+-- | What a foreign import is of: a function of C called by its name, the
+-- address of something of C by its name, or a function of C called by its
+-- address, which it is given first.
+data Target
+  = Static
+  | Address
+  | Dynamic
+  deriving (Eq, Ord, Show)
+
 -- | A call of a function of C, by its name: what it is given, what it gives,
 -- and whether it is an action, as a function whose type ends in @IO@ is.
 data Call = Call
-  { symbol :: !Text,
+  { target :: !Target,
+    symbol :: !Text,
     arguments :: ![Marshal],
     result :: !Marshal,
     action :: !Bool
