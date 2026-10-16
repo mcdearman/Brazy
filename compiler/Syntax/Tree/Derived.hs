@@ -11,8 +11,7 @@
 --
 -- What is written uses @fmap@, @foldr@, @traverse@, @pure@, @(\<*\>)@,
 -- @readsPrec@, @readParen@ and @lex@ by those names, so a module that
--- derives one of these has to have them from the Prelude; and an @Ix@ uses
--- @range@, @index@, @inRange@ and @rangeSize@, which come with the class.
+-- derives one of these has to have them from the Prelude.
 module Syntax.Tree.Derived (written) where
 
 import Data.Foldable (toList)
@@ -57,11 +56,6 @@ written ::
   Maybe (InstanceDeclarations Position)
 written position className datax = case unpack className of
   "Read" -> Just (instancex [readable constructors])
-  "Ix"
-    | not (null constructors) && all (\Made {held} -> null held) constructors ->
-        Just (instancex (enumerated constructors))
-    | [constructor] <- constructors -> Just (instancex (single constructor))
-    | otherwise -> refuse "only a type of constructors that hold nothing, or of one constructor, is"
   _ -> Nothing
   where
     refuse :: String -> a
@@ -116,63 +110,6 @@ built :: Made -> [String] -> String
 built Made {name, fields} values = case fields of
   Nothing -> unwords (name : values)
   Just names -> name ++ " {" ++ intercalate ", " (zipWith (\field value -> field ++ " = " ++ value) names values) ++ "}"
-
--- |
--- The places of a type whose constructors hold nothing are the constructors
--- in the order they are written, as the report has it. Each is numbered by
--- a match, written again where it is wanted.
-enumerated :: [Made] -> [String]
-enumerated constructors =
-  [ "range (a, b) = [x | x <- [" ++ intercalate ", " names ++ "], inRange (a, b) x]",
-    "index (a, b) x = if inRange (a, b) x then "
-      ++ number "x"
-      ++ " - "
-      ++ number "a"
-      ++ " else error \"Ix.index: index out of range\"",
-    "inRange (a, b) x = " ++ number "x" ++ " >= " ++ number "a" ++ " && " ++ number "x" ++ " <= " ++ number "b"
-  ]
-  where
-    names = [name | Made {name} <- constructors]
-    number value =
-      "(case "
-        ++ value
-        ++ " of { "
-        ++ intercalate " ; " [name ++ " -> " ++ show place | (name, place) <- zip names [0 :: Int ..]]
-        ++ " } :: Int)"
-
--- |
--- The places of a type of one constructor are those of what it holds, the
--- last changing fastest, as a tuple's are.
-single :: Made -> [String]
-single constructor@Made {held = things} =
-  [ "range (" ++ lower ++ ", " ++ upper ++ ") = " ++ ranged,
-    "index (" ++ lower ++ ", " ++ upper ++ ") " ++ at ++ " = if " ++ inside ++ " then " ++ place ++ " else error \"Ix.index: index out of range\"",
-    "inRange (" ++ lower ++ ", " ++ upper ++ ") " ++ at ++ " = " ++ inside
-  ]
-  where
-    count = length things
-    named prefix = [prefix ++ show index | index <- [1 .. count]]
-    pattern values = "(" ++ built constructor values ++ ")"
-    lower = pattern (named "l")
-    upper = pattern (named "u")
-    at = pattern (named "i")
-    bounds index = "(l" ++ show index ++ ", u" ++ show index ++ ")"
-    ranged
-      | count == 0 = "[" ++ built constructor [] ++ "]"
-      | otherwise =
-          "["
-            ++ built constructor (named "i")
-            ++ " | "
-            ++ intercalate ", " ["i" ++ show index ++ " <- range " ++ bounds index | index <- [1 .. count]]
-            ++ "]"
-    inside
-      | count == 0 = "True"
-      | otherwise = intercalate " && " ["inRange " ++ bounds index ++ " i" ++ show index | index <- [1 .. count]]
-    place =
-      foldl
-        (\before index -> "(" ++ before ++ ") * rangeSize " ++ bounds index ++ " + index " ++ bounds index ++ " i" ++ show index)
-        "0"
-        [1 .. count]
 
 -- |
 -- A value is read as it is shown: a constructor and then what it holds, in

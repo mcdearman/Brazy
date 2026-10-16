@@ -10,6 +10,7 @@ import {-# SOURCE #-} qualified Builtin.Foldable as Foldable
 import {-# SOURCE #-} qualified Builtin.Fractional as Fractional
 import {-# SOURCE #-} qualified Builtin.Functor as Functor
 import {-# SOURCE #-} qualified Builtin.Integral as Integral
+import {-# SOURCE #-} qualified Builtin.Ix as Ix
 import {-# SOURCE #-} qualified Builtin.List as List
 import {-# SOURCE #-} qualified Builtin.Monad as Monad
 import {-# SOURCE #-} qualified Builtin.MonadFail as MonadFail
@@ -68,6 +69,7 @@ kind pure typex constructor = \case
     Type2.Ord -> classKind
     Type2.Real -> classKind
     Type2.Integral -> classKind
+    Type2.Ix -> classKind
     Type2.Fractional -> classKind
     Type2.Floating -> classKind
     Type2.RealFrac -> classKind
@@ -117,6 +119,7 @@ instance Builtin Class where
     Type2.Ord -> pure Ord.definition
     Type2.Real -> pure Real.definition
     Type2.Integral -> pure Integral.definition
+    Type2.Ix -> pure Ix.definition
     Type2.Fractional -> pure Fractional.definition
     Type2.Floating -> pure Floating.definition
     Type2.RealFrac -> pure RealFrac.definition
@@ -143,6 +146,7 @@ instance Builtin ClassExtra where
     Type2.Ord -> pure Ord.extra
     Type2.Real -> pure Real.extra
     Type2.Integral -> pure Integral.extra
+    Type2.Ix -> pure Ix.extra
     Type2.Fractional -> pure Fractional.extra
     Type2.Floating -> pure Floating.extra
     Type2.RealFrac -> pure RealFrac.extra

@@ -181,6 +181,19 @@ data Traversable
 
 traverse = Index Type2.Traversable $ Prelude.fromEnum Traverse
 
+data Ix
+  = IxRange
+  | IxIndex
+  | IxInRange
+  | IxRangeSize
+  deriving (Prelude.Enum, Prelude.Bounded, Prelude.Show)
+
+ixRange = Index Type2.Ix $ Prelude.fromEnum IxRange
+
+ixIndex = Index Type2.Ix $ Prelude.fromEnum IxIndex
+
+ixInRange = Index Type2.Ix $ Prelude.fromEnum IxInRange
+
 data Applicative
   = Pure
   | Ap

@@ -74,6 +74,7 @@ executable hazy
     Builtin.Fractional
     Builtin.Functor
     Builtin.Integral
+    Builtin.Ix
     Builtin.List
     Builtin.Monad
     Builtin.MonadFail
@@ -164,6 +165,7 @@ executable hazy
     Semantic.Check.Derive.Enum
     Semantic.Check.Derive.Eq
     Semantic.Check.Derive.Functor
+    Semantic.Check.Derive.Ix
     Semantic.Check.Derive.Ord
     Semantic.Check.Derive.Show
     Semantic.Check.EntryInstance

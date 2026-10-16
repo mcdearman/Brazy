@@ -1476,8 +1476,16 @@ Missing:
       instance, which is what the instance requires. That an instance from
       a clause is of the type without its last parameter is found once the
       class is known (`DataInstance`, in the resolver), not from its name
-      (test `derive-functor`, which agrees with GHC). `Read` and `Ix` are
-      still written out: they are next
+      (test `derive-functor`, which agrees with GHC)
+- [x] `Ix` is a builtin class, and is derived in the checker
+      (`Semantic.Check.Derive.Ix`) through another type's instance: a type
+      whose constructors hold nothing through `Int`'s, of the constructors'
+      numbers, and a type of one constructor through the tuple of what it
+      holds. The instances of the builtin types are in `Hazy.Helper`, a
+      tuple's of up to five through `HelperTuple2` to `HelperTuple5`, and
+      the sized types' are where those are defined; `Data.Ix` gives out
+      the class (test `derive-ix`, which agrees with GHC). `Read` is still
+      written out: it is next
 - [x] GADTs: see M6
 - [x] Polymorphic components: see M6
 - [ ] Strict functions

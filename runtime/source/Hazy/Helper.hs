@@ -860,3 +860,146 @@ instance Foldable (HelperTuple2 a) where
 
 instance Traversable (HelperTuple2 a) where
   traverse f (Tuple2 (a, b)) = fmap (\c -> Tuple2 (a, c)) (f b)
+
+-- What GHC says of an index that is not in its range.
+indexError :: (Show a) => String -> (a, a) -> a -> b
+indexError name bounds i =
+  errorWithoutStackTrace
+    ( "Ix{"
+        ++ name
+        ++ "}.index: Index "
+        ++ showsPrec 11 i ""
+        ++ " out of range ("
+        ++ showsPrec 11 bounds ""
+        ++ ")"
+    )
+
+-- What is numbered by something that counts, with that number.
+countedIndex :: (Ord a, Show a) => String -> (a -> Int) -> (a, a) -> a -> Int
+countedIndex name number bounds@(low, high) i
+  | low <= i && i <= high = number i - number low
+  | otherwise = indexError name bounds i
+
+instance Ix HelperChar where
+  range (Char low, Char high) = map Char [low .. high]
+  index (Char low, Char high) (Char i) = countedIndex "Char" fromEnum (low, high) i
+  inRange (Char low, Char high) (Char i) = low <= i && i <= high
+
+instance Ix HelperInt where
+  range (Int low, Int high) = map Int [low .. high]
+  index (Int low, Int high) (Int i) = countedIndex "Int" id (low, high) i
+  inRange (Int low, Int high) (Int i) = low <= i && i <= high
+
+instance Ix HelperInteger where
+  range (Integer low, Integer high) = map Integer [low .. high]
+  index (Integer low, Integer high) (Integer i) = countedIndex "Integer" fromInteger (low, high) i
+  inRange (Integer low, Integer high) (Integer i) = low <= i && i <= high
+
+instance Ix HelperBool where
+  range (Bool low, Bool high) = map Bool [low .. high]
+  index (Bool low, Bool high) (Bool i) = countedIndex "Bool" fromEnum (low, high) i
+  inRange (Bool low, Bool high) (Bool i) = low <= i && i <= high
+
+instance Ix HelperOrdering where
+  range (Ordering low, Ordering high) = map Ordering [low .. high]
+  index (Ordering low, Ordering high) (Ordering i) = countedIndex "Ordering" fromEnum (low, high) i
+  inRange (Ordering low, Ordering high) (Ordering i) = low <= i && i <= high
+
+instance Eq HelperUnit where
+  _ == _ = True
+
+instance Ord HelperUnit where
+  compare _ _ = EQ
+
+instance Ix HelperUnit where
+  range _ = [Unit ()]
+  index _ _ = 0
+  inRange _ _ = True
+
+-- Tuples are numbered with the last part changing fastest.
+instance (Eq a, Eq b) => Eq (HelperTuple2 a b) where
+  Tuple2 x == Tuple2 y = x == y
+
+instance (Ord a, Ord b) => Ord (HelperTuple2 a b) where
+  compare (Tuple2 x) (Tuple2 y) = compare x y
+
+instance (Ix a, Ix b) => Ix (HelperTuple2 a b) where
+  range (Tuple2 (l1, l2), Tuple2 (u1, u2)) = [Tuple2 (i1, i2) | i1 <- range (l1, u1), i2 <- range (l2, u2)]
+  index (Tuple2 (l1, l2), Tuple2 (u1, u2)) (Tuple2 (i1, i2))
+    | inRange (l1, u1) i1 && inRange (l2, u2) i2 =
+        index (l1, u1) i1 * rangeSize (l2, u2) + index (l2, u2) i2
+    | otherwise = errorWithoutStackTrace "Error in array index"
+  inRange (Tuple2 (l1, l2), Tuple2 (u1, u2)) (Tuple2 (i1, i2)) = inRange (l1, u1) i1 && inRange (l2, u2) i2
+
+newtype HelperTuple3 a b c = Tuple3 (a, b, c)
+
+instance (Eq a, Eq b, Eq c) => Eq (HelperTuple3 a b c) where
+  Tuple3 x == Tuple3 y = x == y
+
+instance (Ord a, Ord b, Ord c) => Ord (HelperTuple3 a b c) where
+  compare (Tuple3 x) (Tuple3 y) = compare x y
+
+instance (Ix a, Ix b, Ix c) => Ix (HelperTuple3 a b c) where
+  range (Tuple3 (l1, l2, l3), Tuple3 (u1, u2, u3)) =
+    [Tuple3 (i1, i2, i3) | i1 <- range (l1, u1), i2 <- range (l2, u2), i3 <- range (l3, u3)]
+  index (Tuple3 (l1, l2, l3), Tuple3 (u1, u2, u3)) (Tuple3 (i1, i2, i3))
+    | inRange (l1, u1) i1 && inRange (l2, u2) i2 && inRange (l3, u3) i3 =
+        (index (l1, u1) i1 * rangeSize (l2, u2) + index (l2, u2) i2) * rangeSize (l3, u3) + index (l3, u3) i3
+    | otherwise = errorWithoutStackTrace "Error in array index"
+  inRange (Tuple3 (l1, l2, l3), Tuple3 (u1, u2, u3)) (Tuple3 (i1, i2, i3)) =
+    inRange (l1, u1) i1 && inRange (l2, u2) i2 && inRange (l3, u3) i3
+
+newtype HelperTuple4 a b c d = Tuple4 (a, b, c, d)
+
+instance (Eq a, Eq b, Eq c, Eq d) => Eq (HelperTuple4 a b c d) where
+  Tuple4 x == Tuple4 y = x == y
+
+instance (Ord a, Ord b, Ord c, Ord d) => Ord (HelperTuple4 a b c d) where
+  compare (Tuple4 x) (Tuple4 y) = compare x y
+
+instance (Ix a, Ix b, Ix c, Ix d) => Ix (HelperTuple4 a b c d) where
+  range (Tuple4 (l1, l2, l3, l4), Tuple4 (u1, u2, u3, u4)) =
+    [ Tuple4 (i1, i2, i3, i4)
+    | i1 <- range (l1, u1),
+      i2 <- range (l2, u2),
+      i3 <- range (l3, u3),
+      i4 <- range (l4, u4)
+    ]
+  index (Tuple4 (l1, l2, l3, l4), Tuple4 (u1, u2, u3, u4)) (Tuple4 (i1, i2, i3, i4))
+    | inRange (l1, u1) i1 && inRange (l2, u2) i2 && inRange (l3, u3) i3 && inRange (l4, u4) i4 =
+        ((index (l1, u1) i1 * rangeSize (l2, u2) + index (l2, u2) i2) * rangeSize (l3, u3) + index (l3, u3) i3)
+          * rangeSize (l4, u4)
+          + index (l4, u4) i4
+    | otherwise = errorWithoutStackTrace "Error in array index"
+  inRange (Tuple4 (l1, l2, l3, l4), Tuple4 (u1, u2, u3, u4)) (Tuple4 (i1, i2, i3, i4)) =
+    inRange (l1, u1) i1 && inRange (l2, u2) i2 && inRange (l3, u3) i3 && inRange (l4, u4) i4
+
+newtype HelperTuple5 a b c d e = Tuple5 (a, b, c, d, e)
+
+instance (Eq a, Eq b, Eq c, Eq d, Eq e) => Eq (HelperTuple5 a b c d e) where
+  Tuple5 x == Tuple5 y = x == y
+
+instance (Ord a, Ord b, Ord c, Ord d, Ord e) => Ord (HelperTuple5 a b c d e) where
+  compare (Tuple5 x) (Tuple5 y) = compare x y
+
+instance (Ix a, Ix b, Ix c, Ix d, Ix e) => Ix (HelperTuple5 a b c d e) where
+  range (Tuple5 (l1, l2, l3, l4, l5), Tuple5 (u1, u2, u3, u4, u5)) =
+    [ Tuple5 (i1, i2, i3, i4, i5)
+    | i1 <- range (l1, u1),
+      i2 <- range (l2, u2),
+      i3 <- range (l3, u3),
+      i4 <- range (l4, u4),
+      i5 <- range (l5, u5)
+    ]
+  index (Tuple5 (l1, l2, l3, l4, l5), Tuple5 (u1, u2, u3, u4, u5)) (Tuple5 (i1, i2, i3, i4, i5))
+    | inRange (l1, u1) i1 && inRange (l2, u2) i2 && inRange (l3, u3) i3 && inRange (l4, u4) i4 && inRange (l5, u5) i5 =
+        ( ((index (l1, u1) i1 * rangeSize (l2, u2) + index (l2, u2) i2) * rangeSize (l3, u3) + index (l3, u3) i3)
+            * rangeSize (l4, u4)
+            + index (l4, u4) i4
+        )
+          * rangeSize (l5, u5)
+          + index (l5, u5) i5
+    | otherwise = errorWithoutStackTrace "Error in array index"
+  inRange (Tuple5 (l1, l2, l3, l4, l5), Tuple5 (u1, u2, u3, u4, u5)) (Tuple5 (i1, i2, i3, i4, i5)) =
+    inRange (l1, u1) i1 && inRange (l2, u2) i2 && inRange (l3, u3) i3 && inRange (l4, u4) i4 && inRange (l5, u5) i5
+
