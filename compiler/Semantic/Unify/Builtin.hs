@@ -86,6 +86,13 @@ constrain fallthough constrain classx head = table classx head
       integer <- constrain Type2.Integral integer
       call [integer]
     table Type2.Functor Type2.List [] = single
+    table Type2.Foldable Type2.List [] = single
+    table Type2.Functor (Type2.Tuple 2) [_] = single
+    table Type2.Foldable (Type2.Tuple 2) [_] = single
+    table Type2.Traversable (Type2.Tuple 2) [_] = single
+    table Type2.Foldable Type2.NonEmpty [] = single
+    table Type2.Traversable Type2.List [] = single
+    table Type2.Traversable Type2.NonEmpty [] = single
     table Type2.Functor Type2.NonEmpty [] = single
     table Type2.Applicative Type2.List [] = single
     table Type2.Applicative Type2.NonEmpty [] = single

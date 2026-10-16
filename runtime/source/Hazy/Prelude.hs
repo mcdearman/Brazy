@@ -87,29 +87,6 @@ fromIntegral = fromInteger . toInteger
 realToFrac :: (Real a, Fractional b) => a -> b
 realToFrac = fromRational . toRational
 
-class (Functor t, Foldable t) => Traversable t where
-  traverse :: (Applicative f) => (a -> f b) -> t a -> f (t b)
-  traverse f = sequenceA . fmap f
-  sequenceA :: (Applicative f) => t (f a) -> f (t a)
-  sequenceA = traverse id
-  mapM :: (Monad m) => (a -> m b) -> t a -> m (t b)
-  mapM = traverse
-  sequence :: (Monad m) => t (m a) -> m (t a)
-  sequence = sequenceA
-
-instance Traversable [] where
-  traverse f = \case
-    [] -> pure []
-    (x : xs) -> (:) <$> f x <*> traverse f xs
-
-  mapM f as = sequence (map f as)
-  sequence = foldr mcons (return [])
-    where
-      mcons p q = p >>= \x -> q >>= \y -> return (x : y)
-
-instance Traversable NonEmpty where
-  traverse f (x :| xs) = (:|) <$> f x <*> traverse f xs
-
 sequence_ :: (Foldable t, Monad m) => t (m a) -> m ()
 sequence_ = foldr (>>) (return ())
 

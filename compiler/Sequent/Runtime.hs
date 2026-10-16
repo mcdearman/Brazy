@@ -93,7 +93,9 @@ builtin classx typex =
       Type2.Index {} -> error "bad evidence"
       Type2.Lifted {} -> error "bad evidence"
       Type2.Tuple 0 -> pack "Unit"
-      Type2.Tuple _ -> error "bad evidence"
+      -- The instances that are not written out here for every size, as
+      -- 'tuple' has them, are of a newtype of the tuple of that size.
+      Type2.Tuple size -> pack ("Tuple" ++ show size)
       _ -> pack (show typex)
 
 -- |
