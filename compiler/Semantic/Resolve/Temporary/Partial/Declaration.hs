@@ -200,7 +200,8 @@ resolve' temporary context lookupTerm lookupType lookupShare (declaration : decl
                 foreignCall =
                   Real.ForeignCall
                     { foreignPosition = startPosition,
-                      symbol = foreignSymbol startPosition name entity
+                      symbol = foreignSymbol startPosition name entity,
+                      marshalled = Nothing
                     }
               }
           )

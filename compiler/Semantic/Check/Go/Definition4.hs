@@ -17,7 +17,11 @@ import qualified Data.Vector.Strict as Strict.Vector
 import Data.Void (Void)
 import Error (cyclicalTypeChecking)
 import qualified Graph.Topological as Topological
-import Semantic.Check.Context (Context, groupTermBindings, postponed)
+import qualified Core.Builtin as Builtin
+import Core.Tree.TypeDeclaration (assumeData)
+import Semantic.Check.Context (Context (..), groupTermBindings, postponed)
+import qualified Semantic.Check.TypeBinding as TypeBinding
+import qualified Semantic.Index.Table.Type as Table.Type
 import qualified Semantic.Check.Go.Scheme as Solved.Scheme
 import qualified Semantic.Check.Mask as Mask
 import qualified Semantic.Check.Temporary.Definition3 as Definition3
@@ -122,11 +126,15 @@ check position Solve {solve, logical} reflection information = \case
               Annotated annotation ::: _ -> do
                 scheme <- annotation
                 -- What a function of C is given and gives has to be what C
-                -- has, which is known from its type alone.
-                case definition of
-                  Tree.Definition3.Label _ (Definition2.Foreign Definition2.ForeignCall {foreignPosition, symbol}) ->
-                    Foreign.call foreignPosition symbol (Forall.simplify scheme) `seq` pure ()
-                  _ -> pure ()
+                -- has, which is known from its type, and from the
+                -- definitions of the newtypes in it.
+                definition <- case definition of
+                  Tree.Definition3.Label info (Definition2.Foreign call@Definition2.ForeignCall {foreignPosition, symbol}) -> do
+                    let Context {typeEnvironment} = context
+                        content index = assumeData <$> TypeBinding.content (typeEnvironment Table.Type.! index)
+                    marshalled <- Foreign.callThrough (Builtin.index pure content) foreignPosition symbol (Forall.simplify scheme)
+                    marshalled `seq` pure (Tree.Definition3.Label info (Definition2.Foreign call {Definition2.marshalled = Just marshalled}))
+                  _ -> pure definition
                 definition <- checkAnnotation context position scheme $ \context typex -> do
                   definition <- Definition3.checkManual context typex definition
                   definition <- pure $ Definition3.solve position definition
