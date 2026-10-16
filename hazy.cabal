@@ -83,6 +83,7 @@ executable hazy
     Builtin.Num
     Builtin.Ord
     Builtin.Ordering
+    Builtin.IO
     Builtin.Ratio
     Builtin.Read
     Builtin.Real
@@ -95,6 +96,7 @@ executable hazy
     Core.Arity
     Core.Builtin
     Core.Eta
+    Core.Foreign
     Core.Index.Table.Term
     Core.Substitute
     Core.Temporary.Definition

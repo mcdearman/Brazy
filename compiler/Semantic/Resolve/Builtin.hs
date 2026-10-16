@@ -19,6 +19,7 @@ import {-# SOURCE #-} qualified Builtin.NonEmpty as NonEmpty
 import {-# SOURCE #-} qualified Builtin.Num as Num
 import {-# SOURCE #-} qualified Builtin.Ord as Ord
 import {-# SOURCE #-} qualified Builtin.Ordering as Ordering
+import {-# SOURCE #-} qualified Builtin.IO as IO
 import {-# SOURCE #-} qualified Builtin.Ratio as Ratio
 import {-# SOURCE #-} qualified Builtin.Real as Real
 import {-# SOURCE #-} qualified Builtin.RealFloat as RealFloat
@@ -86,6 +87,7 @@ builtin =
       Fractional.bindings,
       Functor.bindings,
       Integral.bindings,
+      IO.bindings,
       Ix.bindings,
       List.bindings,
       Monad.bindings,
@@ -132,6 +134,7 @@ builtin =
                 builtinType "Large" Type3.Large,
                 builtinType "Universe" Type3.Universe,
                 builtinType "ST" $ Type3.Index Type2.ST,
+                builtinType "RealWorld" $ Type3.Index Type2.RealWorld,
                 builtinType "Integer" $ Type3.Index Type2.Integer,
                 builtinType "Int" $ Type3.Index Type2.Int,
                 builtinType "Float" $ Type3.Index Type2.Float,

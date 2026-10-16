@@ -11,6 +11,8 @@ data Index scope
   | Bool
   | Char
   | ST
+  | IO
+  | RealWorld
   | Arrow
   | List
   | NonEmpty
@@ -60,6 +62,8 @@ split = \case
   Bool -> Builtin Bool
   Char -> Builtin Char
   ST -> Builtin ST
+  IO -> Builtin IO
+  RealWorld -> Builtin RealWorld
   Arrow -> Builtin Arrow
   List -> Builtin List
   NonEmpty -> Builtin NonEmpty

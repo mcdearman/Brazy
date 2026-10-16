@@ -5,7 +5,7 @@ import qualified Semantic.Index.Type2 as Type2
 import Semantic.Scope (Environment (..), Local)
 import qualified Semantic.Shift as Shift
 import qualified Semantic.Shift0 as Shift0
-import Prelude hiding (Bool (..), Ordering (..), map, traverse)
+import Prelude hiding (Bool (..), IO, Ordering (..), map, traverse)
 
 data Index scope = Index
   { typeIndex :: !(Type2.Index scope),
@@ -91,17 +91,27 @@ makeRatio =
       constructorIndex = fromEnum MakeRatio
     }
 
+data IO = MakeIO
+  deriving (Enum, Bounded)
+
+makeIO =
+  Index
+    { typeIndex = Type2.IO,
+      constructorIndex = fromEnum MakeIO
+    }
+
 data All a = All
   { bool :: Bool -> a,
     list :: List -> a,
     nonEmpty :: NonEmpty -> a,
     tuplex :: Int -> Tuple -> a,
     ordering :: Ordering -> a,
-    ratio :: Ratio -> a
+    ratio :: Ratio -> a,
+    io :: IO -> a
   }
 
 run :: (Type.Index scope -> Int -> a) -> All a -> Index scope -> a
-run normal All {bool, list, nonEmpty, tuplex, ordering, ratio} Index {typeIndex, constructorIndex} =
+run normal All {bool, list, nonEmpty, tuplex, ordering, ratio, io} Index {typeIndex, constructorIndex} =
   case typeIndex of
     Type2.Index typeIndex -> normal typeIndex constructorIndex
     Type2.Bool -> bool (toEnum constructorIndex)
@@ -110,6 +120,7 @@ run normal All {bool, list, nonEmpty, tuplex, ordering, ratio} Index {typeIndex,
     Type2.Tuple n -> tuplex n (toEnum constructorIndex)
     Type2.Ordering -> ordering (toEnum constructorIndex)
     Type2.Ratio -> ratio (toEnum constructorIndex)
+    Type2.IO -> io (toEnum constructorIndex)
     _ -> error "bad run constructor"
 
 instance Shift0.Functor Index where

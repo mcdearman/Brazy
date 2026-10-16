@@ -14,6 +14,7 @@ module Sequent.Runtime
     generated,
     member,
     helperGlobal,
+    foreignCall,
     showGlobal,
   )
 where
@@ -31,6 +32,7 @@ import Generate.Global (Global)
 import qualified Generate.Global as Global (Global (..))
 import qualified Semantic.Index.Type2 as Type2
 import Sequent.Primitive (Primitive (..))
+import qualified Core.Foreign as Foreign
 import qualified Sequent.Primitive as Primitive
 import qualified Sequent.Printer as Printer
 import Sequent.Tree
@@ -358,9 +360,20 @@ outside name = case lookup name Primitive.outside of
 --
 -- > effect f = \x y -> \() -> f (force x) (force y)
 effect :: String -> Producer
-effect name = go 0
+effect = effectOf . outside
+
+-- |
+-- A function of C, as a function that evaluates what it is given and calls
+-- it; or, if it is an action, as a function of what it is given that is the
+-- action of calling it.
+foreignCall :: Foreign.Call -> Producer
+foreignCall call@Foreign.Call {action}
+  | action = effectOf (Primitive.Call call)
+  | otherwise = wrap (Primitive.Call call)
+
+effectOf :: Primitive -> Producer
+effectOf primitive = go 0
   where
-    primitive = outside name
     count = Primitive.arity primitive
     argument, value, result :: Int -> String
     argument index = "x" ++ show index

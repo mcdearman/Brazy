@@ -611,6 +611,24 @@ fn floating(value: Value) -> f64 {
     f64::from_bits(unsafe { *(value as *const u64).add(1) })
 }
 
+/// A `Double` or a `Float` as a function of C is given it.
+#[no_mangle]
+pub extern "C" fn hazy_ffi_double(value: Value) -> f64 {
+    floating(value)
+}
+
+/// What a function of C gives as a `Double` or a `Float`, as a value.
+#[no_mangle]
+pub extern "C" fn hazy_ffi_from_double(number: f64) -> Value {
+    from_floating(number)
+}
+
+/// What a function of C that gives nothing gives, as a value.
+#[no_mangle]
+pub extern "C" fn hazy_ffi_unit() -> Value {
+    unit()
+}
+
 fn from_floating(number: f64) -> Value {
     let block = hazy_alloc(2, header(FLOAT, 0, 0));
     unsafe { *block.add(1) = number.to_bits() };

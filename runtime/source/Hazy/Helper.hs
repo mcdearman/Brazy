@@ -580,6 +580,27 @@ instance Monad HelperNonEmpty where
 instance Semigroup (HelperNonEmpty a) where
   NonEmpty (x :| xs) <> NonEmpty (y :| ys) = NonEmpty (x :| xs ++ y : ys)
 
+newtype HelperIO a = IOx {io :: IO a}
+
+instance Functor HelperIO where
+  fmap = liftM
+
+instance Applicative HelperIO where
+  pure x = IOx (IO (pure x))
+  (<*>) = ap
+
+instance Monad HelperIO where
+  IOx (IO m) >>= f = IOx (IO (m >>= (runIO . io . f)))
+
+instance MonadFail HelperIO where
+  fail s = IOx (ioError (userError s))
+
+instance (Semigroup a) => Semigroup (HelperIO a) where
+  IOx (IO a) <> IOx (IO b) = IOx (IO (a <> b))
+
+instance (Monoid a) => Monoid (HelperIO a) where
+  mempty = IOx (IO mempty)
+
 newtype HelperST s a = STx {st :: ST s a}
 
 instance Functor (HelperST s) where

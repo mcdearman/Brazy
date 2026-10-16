@@ -1517,6 +1517,27 @@ Missing:
       an empty one and a track as a space, so that what is said of the
       program is where it is in the file (`Syntax.Literate`; test
       `literate`, which agrees with GHC)
+- [x] The foreign function interface, as the report's chapter 8 has it, for
+      the functions of C that are given and give the basic types the
+      compiler knows: `foreign import ccall` (or `capi`, `safe` or `unsafe`)
+      of a C name, with `static` and a header ignored, of a type of `Int`,
+      `Double`, `Float` and `Char`, ending in one of them or `()`, in `IO` or
+      not. For that `IO` and `RealWorld` are builtin types now, as what the
+      compiler knows is. The definition is a call of C in Core
+      (`Core.Foreign`, worked out from the type), a primitive in the
+      sequent calculus that carries what C has, and in LLVM a declaration
+      of the C function and a call with what is given untagged or unboxed
+      and what is given back made a value again (`hazy_ffi_*` in the
+      runtime). The AxCut machine cannot call C: it knows the functions of
+      numbers and characters of C's library, and stops with a word for any
+      other (tests `foreign-import`, which agrees with GHC, `ForeignInteger`
+      and `ForeignExport`)
+- [ ] What the foreign function interface does not do yet: `foreign export`,
+      an import of an address (`&`) or by a pointer to a function
+      (`dynamic`, `wrapper`), and the other types C is given: `Bool`, the
+      numbers of a fixed width, `Ptr` and `FunPtr`, which are to become
+      builtins too, and with them `Foreign.Storable`, `Foreign.Marshal`
+      and `Foreign.C`
 - [x] GADTs: see M6
 - [x] Polymorphic components: see M6
 - [ ] Strict functions

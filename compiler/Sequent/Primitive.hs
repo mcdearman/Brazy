@@ -5,6 +5,7 @@
 -- in "Sequent.Runtime".
 module Sequent.Primitive where
 
+import qualified Core.Foreign as Foreign
 import Data.Text (Text, pack)
 
 data Primitive
@@ -52,6 +53,8 @@ data Primitive
     -- values: the world outside a program, and what changes. Nothing is
     -- known of one of these but that it is done where it is written.
     Foreign !Text !Int
+  | -- | A function of C, called as its type says.
+    Call !Foreign.Call
   deriving (Eq, Show)
 
 -- |
@@ -177,3 +180,4 @@ arity = \case
   IntegerQuot -> 2
   IntegerRem -> 2
   Foreign _ count -> count
+  Call Foreign.Call {arguments} -> length arguments
