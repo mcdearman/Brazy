@@ -59,13 +59,14 @@ solve context Scheme {startPosition, implicit, parameters = wobbly, constraints,
   pure $ Solved.Scheme {startPosition, implicit, parameters, constraints, result}
 
 augment :: Strict.Vector (TypePattern s scope) -> Context s scope -> Context s (Local ':+ scope)
-augment scheme Context {termEnvironment, localEnvironment, typeEnvironment, equalities}
+augment scheme Context {termEnvironment, localEnvironment, typeEnvironment, equalities, defaulting}
   | scheme <- Strict.Vector.toLazy scheme =
       Context
         { termEnvironment = Term.Local termEnvironment,
           localEnvironment = Local.Local (fmap wobbly scheme) localEnvironment,
           typeEnvironment = Type.Local typeEnvironment,
-          equalities = shiftEquality <$> equalities
+          equalities = shiftEquality <$> equalities,
+          defaulting
         }
   where
     wobbly
@@ -80,13 +81,14 @@ augmentSolve ::
   Strict.Vector (Solved.TypePattern Position Check scope) ->
   Context s scope ->
   Context s (Local ':+ scope)
-augmentSolve scheme Context {termEnvironment, localEnvironment, typeEnvironment, equalities}
+augmentSolve scheme Context {termEnvironment, localEnvironment, typeEnvironment, equalities, defaulting}
   | scheme <- Strict.Vector.toLazy scheme =
       Context
         { termEnvironment = Term.Local termEnvironment,
           localEnvironment = Local.Local (fmap wobbly scheme) localEnvironment,
           typeEnvironment = Type.Local typeEnvironment,
-          equalities = shiftEquality <$> equalities
+          equalities = shiftEquality <$> equalities,
+          defaulting
         }
   where
     wobbly :: Solved.TypePattern position Check scope -> LocalBinding s (scope' ':+ scope)

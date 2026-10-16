@@ -7,6 +7,7 @@ import qualified Data.Vector as Vector
 import Data.Void (Void)
 import Graph.StronglyConnected (Index (..), tarjan)
 import Semantic.Functor2 (Traversable2 (..))
+import qualified Semantic.Index.Type2 as Type2
 import qualified Semantic.Group.Functor.Term.Declarations as Functor.Term (indexes)
 import qualified Semantic.Group.Functor.Term.ModuleSet as Functor.Term (ModuleSet (..), (!))
 import qualified Semantic.Group.Functor.Type.Declarations as Functor.Type (indexes)
@@ -23,6 +24,7 @@ import qualified Semantic.Locality as Locality
 import Semantic.Scope (Global)
 import qualified Semantic.Scope as Scope
 import Semantic.Stage (Check, Resolve)
+import Syntax.Position (Position)
 import Semantic.Tree.Combinators.Implicit (Implicit)
 import Semantic.Tree.Declaration (Declaration (Declaration))
 import qualified Semantic.Tree.Declaration as Declaration
@@ -38,15 +40,17 @@ import Syntax.Variable (FullQualifiers, toQualifiers)
 
 data Module loeb layout stage scope = Module
   { name :: !FullQualifiers,
-    declarations :: Declarations Identity Void Locality.Global loeb layout stage scope
+    declarations :: Declarations Identity Void Locality.Global loeb layout stage scope,
+    -- | What the module's default declaration lists, with where it is.
+    defaultDeclaration :: Maybe (Position, [Type2.Index scope])
   }
   deriving (Show)
 
 instance Traversable2 Module where
-  traverse2 f Module {name, declarations} =
+  traverse2 f Module {name, declarations, defaultDeclaration} =
     modulex <$> traverse2 f declarations
     where
-      modulex declarations = Module {name, declarations}
+      modulex declarations = Module {name, declarations, defaultDeclaration}
 
 labelContext :: Vector (Module Identity Normal Resolve Global) -> Label.Context Global
 labelContext modules =
@@ -64,9 +68,10 @@ labelContext modules =
 connect :: Vector (Module Identity Normal Resolve Global) -> Vector (Module Identity Group Resolve Global)
 connect modules = Vector.imap go modules
   where
-    go index Module {name, declarations} =
+    go index Module {name, declarations, defaultDeclaration} =
       Module
         { name,
+          defaultDeclaration,
           declarations =
             Declarations.group
               (toQualifiers name)
@@ -133,9 +138,10 @@ connect modules = Vector.imap go modules
 seperate :: Vector (Module Identity Group Check Global) -> Vector (Module Identity Normal Check Global)
 seperate modules = go <$> modules
   where
-    go Module {name, declarations} =
+    go Module {name, declarations, defaultDeclaration} =
       Module
         { name,
+          defaultDeclaration,
           declarations =
             Declarations.ungroup
               Term.unglobal

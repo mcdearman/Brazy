@@ -129,12 +129,13 @@ generalizeBody ::
   ST s (Body (ForallOver typex) (Simple.TypeLambdaOver term) s scope)
 generalizeBody position context requiring varying (Generalize run) = do
   typex ::: term <- run $ case context of
-    Context {termEnvironment, localEnvironment, typeEnvironment, equalities} ->
+    Context {termEnvironment, localEnvironment, typeEnvironment, equalities, defaulting} ->
       Context
         { termEnvironment = Table.Term.Local termEnvironment,
           localEnvironment = Table.Local.Local Vector.empty localEnvironment,
           typeEnvironment = Table.Type.Local typeEnvironment,
-          equalities = shiftEquality <$> equalities
+          equalities = shiftEquality <$> equalities,
+          defaulting
         }
   allowed <- requiring
   direct <- collect (Collector Mask.Runtime) typex
