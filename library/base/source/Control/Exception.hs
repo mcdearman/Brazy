@@ -65,6 +65,46 @@ handle handler action = catch action handler
 try :: (Exception e) => IO a -> IO (Either e a)
 try action = catch (fmap Right action) (\exception -> pure (Left exception))
 
+-- |
+-- The first, and the second as well if the first throws, which is thrown
+-- on as it was.
+onException :: IO a -> IO b -> IO a
+onException (IO action) (IO cleanup) = IO (primCatch action (\thrown -> cleanup >> primThrow (thrown :: Thrown)))
+
+-- | The first, and then the second, whether the first gives or throws.
+finally :: IO a -> IO b -> IO a
+finally action cleanup = do
+  result <- action `onException` cleanup
+  _ <- cleanup
+  pure result
+
+-- |
+-- What is had for a while: it is had, used, and given back, whether its
+-- use gives or throws.
+bracket :: IO a -> (a -> IO b) -> (a -> IO c) -> IO c
+bracket acquire release use = do
+  resource <- acquire
+  result <- use resource `onException` release resource
+  _ <- release resource
+  pure result
+
+bracket_ :: IO a -> IO b -> IO c -> IO c
+bracket_ before after thing = bracket before (const after) (const thing)
+
+-- | What is had, given back only if its use throws.
+bracketOnError :: IO a -> (a -> IO b) -> (a -> IO c) -> IO c
+bracketOnError acquire release use = do
+  resource <- acquire
+  use resource `onException` release resource
+
+-- | Nothing is thrown at a program from outside, so there is nothing to
+-- hold off.
+mask_ :: IO a -> IO a
+mask_ action = action
+
+uninterruptibleMask_ :: IO a -> IO a
+uninterruptibleMask_ action = action
+
 evaluate :: a -> IO a
 evaluate value = pure () >>= \() -> value `seq` pure value
 

@@ -1,0 +1,3 @@
+10
+"Boom \"boom\""
+["acquire","use","release","acquire","release","finally","caught Boom \"inner\"","after","error release","fine","before","thing","after2"]
