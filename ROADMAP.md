@@ -1567,8 +1567,13 @@ Missing:
       an import of an address (`&`) or by a pointer to a function
       (`dynamic`, `wrapper`), a newtype of a type C is given (and then
       `Foreign.C.Types` as GHC's newtypes), `Foreign.C.Error`, and
-      `finalizerFree`. What is had for a while by `alloca` and its kin is
-      not given back if the action throws, as there is no `bracket` yet
+      `finalizerFree`
+- [x] `bracket`, `bracket_`, `bracketOnError`, `finally` and `onException`
+      in `Control.Exception`, over the runtime's catch: what is done when
+      an action throws is done, and what was thrown is thrown on as it
+      was. `alloca` and its kin give back their memory with `bracket`
+      (test `bracket`, which agrees with GHC). `mask_` does nothing, as
+      nothing is thrown at a program from outside
 - [x] GADTs: see M6
 - [x] Polymorphic components: see M6
 - [ ] Strict functions

@@ -2,7 +2,7 @@
 -- Memory, as C's library gives it out and takes it back.
 --
 -- What is had for a while, by 'alloca' and its kin, is given back when the
--- action is done, but not if it throws.
+-- action is done, whether it gives or throws.
 module Foreign.Marshal.Alloc
   ( alloca,
     allocaBytes,
@@ -17,6 +17,7 @@ module Foreign.Marshal.Alloc
   )
 where
 
+import Control.Exception (bracket)
 import Foreign.Ptr (Ptr, castPtr, nullPtr)
 import Foreign.Storable (Storable (..))
 
@@ -42,11 +43,7 @@ alloca action = result
     parameter _ _ = undefined
 
 allocaBytes :: Int -> (Ptr a -> IO b) -> IO b
-allocaBytes size action = do
-  address <- mallocBytes size
-  result <- action address
-  free address
-  pure result
+allocaBytes size = bracket (mallocBytes size) free
 
 -- | malloc gives out memory aligned for any value, which is all an
 -- alignment can ask.
