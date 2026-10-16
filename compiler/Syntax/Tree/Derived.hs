@@ -20,10 +20,8 @@ import Data.List (intercalate)
 import Data.Text (Text, pack, unpack)
 import qualified Data.Text.Lazy as Lazy (unpack)
 import Data.Text.Lazy.Builder (fromString, toLazyText)
-import qualified Data.Vector.Strict as Strict (Vector)
 import Error (cannotDerive)
 import Syntax.Extensions (hazy)
-import Syntax.FreeVariables (freeTypeVariables)
 import qualified Syntax.Parser as Parser (betweenBraces, parse)
 import Syntax.Position (Position)
 import Syntax.Tree.Constructor (Constructor)
@@ -37,10 +35,7 @@ import qualified Syntax.Tree.InstanceDeclarations as InstanceDeclarations (parse
 import Syntax.Tree.Marked (Marked ((:@)))
 import qualified Syntax.Tree.Scheme as Scheme (Scheme (..))
 import Syntax.Tree.Type (Type)
-import qualified Syntax.Tree.Type as Type (Type (..))
-import Syntax.Tree.TypePattern (TypePattern)
-import qualified Syntax.Tree.TypePattern as TypePattern (TypePattern (..))
-import Syntax.Variable (VariableIdentifier, printLiteral')
+import Syntax.Variable (printLiteral')
 
 -- |
 -- A constructor as the instances see it: how it is written before what it
@@ -53,36 +48,19 @@ data Made = Made
   }
 
 -- |
--- How the last parameter of a type is found in the type of something a
--- constructor holds.
-data Found
-  = -- | It is not there.
-    Fixed
-  | -- | It is the whole type.
-    Whole
-  | -- | It is found in the last argument of a type that does not mention it
-    -- otherwise: a list of it, say.
-    Inside Found
-
--- |
 -- The instance of a class for a type, written out, if the class is one of
--- those that are derived that way. With it is whether the instance is of
--- the type without its last parameter, as an instance of @Functor@ is.
+-- those that are derived that way.
 written ::
   Position ->
   Text ->
-  Strict.Vector (TypePattern Position) ->
   Data Position ->
-  Maybe (Bool, InstanceDeclarations Position)
-written position className parameters datax = case unpack className of
-  "Functor" -> Just (True, instancex (map functor (shaped constructors)))
-  "Foldable" -> Just (True, instancex (map foldable (shaped constructors) ++ [nothing]))
-  "Traversable" -> Just (True, instancex (map traversable (shaped constructors)))
-  "Read" -> Just (False, instancex [readable constructors])
+  Maybe (InstanceDeclarations Position)
+written position className datax = case unpack className of
+  "Read" -> Just (instancex [readable constructors])
   "Ix"
     | not (null constructors) && all (\Made {held} -> null held) constructors ->
-        Just (False, instancex (enumerated constructors))
-    | [constructor] <- constructors -> Just (False, instancex (single constructor))
+        Just (instancex (enumerated constructors))
+    | [constructor] <- constructors -> Just (instancex (single constructor))
     | otherwise -> refuse "only a type of constructors that hold nothing, or of one constructor, is"
   _ -> Nothing
   where
@@ -97,23 +75,6 @@ written position className parameters datax = case unpack className of
         (const <$> Parser.betweenBraces InstanceDeclarations.parse)
         (pack "an instance that was derived")
         (pack ("where { " ++ intercalate " ; " clauses ++ " }"))
-    -- A fold of a type with no constructors, so that the instance has the
-    -- method whatever the type.
-    nothing = "foldr _ z _ = z"
-    parameter = case reverse (toList parameters) of
-      TypePattern.TypePattern {name} : _ -> name
-      [] -> refuse "the type has no parameter"
-    shaped = map (\constructor@Made {held} -> (constructor, map (found parameter) held))
-    found :: VariableIdentifier -> Type Position -> Found
-    found variable typex
-      | not (mentions variable typex) = Fixed
-      | otherwise = case typex of
-          Type.Variable {} -> Whole
-          Type.List {element} -> Inside (found variable element)
-          Type.Call {function, argument}
-            | not (mentions variable function) -> Inside (found variable argument)
-          _ -> refuse "the last parameter is in a type it cannot be reached in"
-    mentions variable typex = variable `elem` [mentioned | _ :@ mentioned <- freeTypeVariables typex]
 
 -- |
 -- What the instances need of a constructor.
@@ -155,55 +116,6 @@ built :: Made -> [String] -> String
 built Made {name, fields} values = case fields of
   Nothing -> unwords (name : values)
   Just names -> name ++ " {" ++ intercalate ", " (zipWith (\field value -> field ++ " = " ++ value) names values) ++ "}"
-
--- | A constructor as a function of what it holds.
-building :: Made -> String
-building constructor@Made {name, fields} = case fields of
-  Nothing -> name
-  Just _
-    | null (variables constructor) -> built constructor []
-    | otherwise -> "(\\" ++ unwords (variables constructor) ++ " -> " ++ built constructor (variables constructor) ++ ")"
-
-functor :: (Made, [Found]) -> String
-functor (constructor, shapes) =
-  "fmap f " ++ matched constructor ++ " = " ++ built constructor (zipWith (go (1 :: Int)) shapes (variables constructor))
-  where
-    go depth shape variable = case shape of
-      Fixed -> variable
-      Whole -> "(f " ++ variable ++ ")"
-      Inside inner ->
-        let each = "y" ++ show depth
-         in "(fmap (\\" ++ each ++ " -> " ++ go (depth + 1) inner each ++ ") " ++ variable ++ ")"
-
--- A fold is written as its steps in a list, each a function of what the
--- rest folds to, and not as one step inside another: what is written is no
--- deeper for a constructor that holds a great many things.
-foldable :: (Made, [Found]) -> String
-foldable (constructor, shapes) =
-  "foldr f z " ++ matched constructor ++ " = foldr (\\step rest -> step rest) z [" ++ intercalate ", " steps ++ "]"
-  where
-    steps = [step (1 :: Int) shape variable | (shape, variable) <- zip shapes (variables constructor), found shape]
-    found = \case
-      Fixed -> False
-      _ -> True
-    step depth shape variable = case shape of
-      Fixed -> "id"
-      Whole -> "f " ++ variable
-      Inside inner ->
-        let each = "y" ++ show depth
-            after = "r" ++ show depth
-         in "\\" ++ after ++ " -> foldr (\\" ++ each ++ " -> " ++ step (depth + 1) inner each ++ ") " ++ after ++ " " ++ variable
-
-traversable :: (Made, [Found]) -> String
-traversable (constructor, shapes) =
-  "traverse f " ++ matched constructor ++ " = " ++ concat (("pure " ++ building constructor) : map (" <*> " ++) (zipWith (go (1 :: Int)) shapes (variables constructor)))
-  where
-    go depth shape variable = case shape of
-      Fixed -> "pure " ++ variable
-      Whole -> "f " ++ variable
-      Inside inner ->
-        let each = "y" ++ show depth
-         in "traverse (\\" ++ each ++ " -> " ++ go (depth + 1) inner each ++ ") " ++ variable
 
 -- |
 -- The places of a type whose constructors hold nothing are the constructors

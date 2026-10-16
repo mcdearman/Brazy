@@ -1464,6 +1464,20 @@ Missing:
       tuple's instance that `Sequent.Runtime` does not write out for every
       size is now looked for as a newtype of the tuple of that size (test
       `builtin-foldable`)
+- [x] `Functor`, `Foldable` and `Traversable` are derived in the checker
+      (`Semantic.Check.Derive.Functor`), from the class, as `Eq` and `Show`
+      are. They were written out as text that named `fmap`, `foldr`,
+      `traverse`, `pure` and `<*>` and was read in the module that derived
+      them, so a module with the Prelude only qualified, or with names of
+      its own, could not derive them; and which was written out was chosen
+      by the class's name as it was written. Each constructor is gone
+      through for where the type's last parameter is in what it holds, and
+      a type it is the last argument of is gone through by that type's own
+      instance, which is what the instance requires. That an instance from
+      a clause is of the type without its last parameter is found once the
+      class is known (`DataInstance`, in the resolver), not from its name
+      (test `derive-functor`, which agrees with GHC). `Read` and `Ix` are
+      still written out: they are next
 - [x] GADTs: see M6
 - [x] Polymorphic components: see M6
 - [ ] Strict functions

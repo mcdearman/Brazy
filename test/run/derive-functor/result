@@ -1,0 +1,8 @@
+(MyType 2,5)
+(Node (Node Leaf 10 Leaf) 20 (Node Leaf 30 Leaf),[1,2,3],3,3)
+Just (Node (Node Leaf 1 Leaf) 2 (Node Leaf 3 Leaf))
+Mixed 7 "1" ["2","3"] (Just "4") ('k',"5") (Node (Node Leaf "1" Leaf) "2" (Node Leaf "3" Leaf)) [Just "6",Nothing] 'z'
+([1,2,3,4,5,1,2,3,6],27,True)
+([Box {unbox = 1},Box {unbox = 101}],[MyType 1,MyType 2])
+([False],3)
+0

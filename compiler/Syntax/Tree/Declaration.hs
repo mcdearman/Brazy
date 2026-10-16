@@ -280,22 +280,20 @@ derived = \case
                   typeVariable = startPosition :@ TypePattern.name pattern,
                   arguments = Strict.Vector.empty
                 }
-            -- A class that is derived by writing its instance out. One of
-            -- these that is of a type without its last parameter requires
-            -- nothing of the others.
+            -- A class that is derived by writing its instance out. A class
+            -- of types that take an argument has its instance of the type
+            -- without its last parameter: that is done once the class is
+            -- known (see 'Semantic.Resolve.Temporary.Complete.DataInstance').
             _ Variable.:=. called = className
-            (shortened, instanceDefinition) =
-              case Derived.written startPosition (Lexer.runConstructorIdentifier called) parameters dataDefinition of
+            instanceDefinition =
+              case Derived.written startPosition (Lexer.runConstructorIdentifier called) dataDefinition of
                 Just found -> found
-                Nothing -> (False, InstanceDeclarations._derivingClause)
-            taken
-              | shortened = Strict.Vector.init parameters
-              | otherwise = parameters
+                Nothing -> InstanceDeclarations._derivingClause
         pure
           Instance
             { startPosition,
               prerequisites =
-                if null parameters || shortened
+                if null parameters
                   then Constraints.None
                   else Constraints.Constraints (fmap requires parameters),
               classPosition = startPosition,
@@ -304,7 +302,7 @@ derived = \case
                 InstanceHead.Head
                   { startPosition,
                     typeName = Variable.Local Variable.:=. typeName,
-                    parameters = taken
+                    parameters
                   },
               instanceDefinition
             }
