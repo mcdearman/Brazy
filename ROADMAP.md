@@ -1556,18 +1556,27 @@ Missing:
       the runtime has for each width. The AxCut machine keeps memory of its
       own for them, a byte at each address (test `foreign-memory`, which
       agrees with GHC)
-- [x] `Foreign.C`: `Foreign.C.Types`, each the type of a fixed width it is on
-      a 64-bit system other than Windows, and `Foreign.C.String`, which
-      writes and reads UTF-8 (test `foreign-c`, which agrees with GHC).
-      Each of C's types is a name for that type, where GHC has a newtype
-      of it, because the compiler does not see through a newtype a foreign
-      function is given. So there are no constructors to match, and `long`
-      is 64 bits on Windows as well, where C has 32
-- [ ] What the foreign function interface does not do yet: `foreign export`,
-      an import of an address (`&`) or by a pointer to a function
-      (`dynamic`, `wrapper`), a newtype of a type C is given (and then
-      `Foreign.C.Types` as GHC's newtypes), `Foreign.C.Error`, and
-      `finalizerFree`
+- [x] `Foreign.C`: `Foreign.C.Types`, each a newtype of the type of a fixed
+      width it is on a 64-bit system other than Windows, as GHC has them,
+      shown, read and counted as what it holds; and `Foreign.C.String`,
+      which writes and reads UTF-8 (tests `foreign-c` and `foreign-ctypes`,
+      which agree with GHC). `long` is taken to be 64 bits, as it is
+      everywhere but on Windows
+- [x] A newtype of a type C is given, given as what it holds, as the report
+      has it, through any number of newtypes and whatever they are given
+      (`Core.Foreign.callThrough`, which the checker gives the definitions
+      of the types; test `foreign-newtype`, which agrees with GHC). What C
+      is given and gives is kept in the tree once it is worked out
+      (`Core.Marshal`). That the constructor is in scope is not asked
+- [x] An import of an address, `&`, and of a function called by its address,
+      `dynamic`, whose address is of a function of the type of the rest.
+      The address is the C name's, declared in the unit; a call by an
+      address is a call through it. The AxCut machine gives out an address
+      of its own for each name, and calls a function at one by its name
+      (test `foreign-dynamic`, which agrees with GHC, and
+      `ForeignDynamic`). `finalizerFree` is the address of `free`
+- [ ] What the foreign function interface does not do yet: `foreign export`
+      and `wrapper`, which call Haskell from C, and `Foreign.C.Error`
 - [x] `bracket`, `bracket_`, `bracketOnError`, `finally` and `onException`
       in `Control.Exception`, over the runtime's catch: what is done when
       an action throws is done, and what was thrown is thrown on as it

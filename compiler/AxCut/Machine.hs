@@ -106,7 +106,11 @@ data World = World
     -- written, each at its address, and the blocks given out, each at its
     -- address with its size. A byte that was never written is 0.
     memory :: !(IORef (Map Int Word8)),
-    blocks :: !(IORef (Map Int Int))
+    blocks :: !(IORef (Map Int Int)),
+    -- | The addresses that the things of C whose addresses were asked for
+    -- were given, each by its name. A function of C called by its address
+    -- is called by that name.
+    symbols :: !(IORef (Map Text Int))
   }
 
 -- |
@@ -143,7 +147,8 @@ run Program {definitions, entry} = do
   building <- newIORef Map.empty
   memory <- newIORef Map.empty
   blocks <- newIORef Map.empty
-  execute World {catching, files, failure, arguments, programName, building, memory, blocks} globals entry []
+  symbols <- newIORef Map.empty
+  execute World {catching, files, failure, arguments, programName, building, memory, blocks, symbols} globals entry []
 
 allocate :: Object -> Environment -> IO (IORef Cell)
 allocate Object {kind, method, parameters, body} environment = newIORef $ case kind of
@@ -410,6 +415,21 @@ placed array index = do
 -- knows only some of the functions of its library: those of numbers and of
 -- characters, which give the same in either.
 callC :: World -> Foreign.Call -> [Value] -> IO Value
+callC World {symbols} Foreign.Call {target = Foreign.Address, symbol} _ = do
+  known <- readIORef symbols
+  case Map.lookup symbol known of
+    Just address -> pure (Int (fromIntegral address))
+    Nothing -> do
+      let address = 0x100000 + 16 * Map.size known
+      modifyIORef symbols (Map.insert symbol address)
+      pure (Int (fromIntegral address))
+callC world@World {symbols} call@Foreign.Call {target = Foreign.Dynamic} (Int address : given) = do
+  known <- readIORef symbols
+  case [name | (name, at) <- Map.toList known, at == fromIntegral address] of
+    name : _ -> callC world call {Foreign.target = Foreign.Static, Foreign.symbol = name, Foreign.arguments = drop 1 (Foreign.arguments call)} given
+    [] -> do
+      hPutStrLn stderr "the machine cannot call a function of C at an address it did not give out"
+      exitFailure
 callC World {memory, blocks} Foreign.Call {symbol, result} given = case (unpack symbol, given) of
   -- Memory, as C's library gives it out. A block is put after the last,
   -- on a boundary of 16 bytes, and none is used again.
