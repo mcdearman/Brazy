@@ -100,6 +100,8 @@ mangleInstance run brand name target = Text.Lazy.toStrict $ Builder.toLazyText b
       Type2.RealFrac -> fromString "Hazy.RealFrac"
       Type2.RealFloat -> fromString "Hazy.RealFloat"
       Type2.Functor -> fromString "Hazy.Functor"
+      Type2.Foldable -> fromString "Hazy.Foldable"
+      Type2.Traversable -> fromString "Hazy.Traversable"
       Type2.Applicative -> fromString "Hazy.Applicative"
       Type2.Monad -> fromString "Hazy.Monad"
       Type2.MonadFail -> fromString "Hazy.MonadFail"

@@ -498,6 +498,33 @@ instance Semigroup (HelperList a) where
 instance Monoid (HelperList a) where
   mempty = List []
 
+-- What a list holds is gone through as it is, without the class's way
+-- round through a list.
+instance Foldable HelperList where
+  foldr f z (List xs) = go xs
+    where
+      go [] = z
+      go (y : ys) = f y (go ys)
+  toList (List xs) = xs
+  null (List []) = True
+  null (List _) = False
+
+-- A list made by an action is a HelperList as it is, so it is not gone
+-- through again to be made one.
+instance Traversable HelperList where
+  traverse f (List xs) = primUnsafeCoerce (go xs)
+    where
+      go [] = pure []
+      go (y : ys) = (:) <$> f y <*> go ys
+  mapM f (List xs) = primUnsafeCoerce (go xs)
+    where
+      go [] = return []
+      go (y : ys) = f y >>= \z -> go ys >>= \zs -> return (z : zs)
+  sequence (List xs) = primUnsafeCoerce (go xs)
+    where
+      go [] = return []
+      go (y : ys) = y >>= \z -> go ys >>= \zs -> return (z : zs)
+
 newtype HelperNonEmpty a = NonEmpty {nonEmpty :: NonEmpty a}
 
 instance (Eq a) => Eq (HelperNonEmpty a) where
@@ -517,6 +544,14 @@ instance (Read a) => Read (HelperNonEmpty a) where
     (":|", u) <- lex t
     (xs, v) <- readsPrec 6 u
     [(NonEmpty (x :| xs), v)]
+
+instance Foldable HelperNonEmpty where
+  foldr f z (NonEmpty (x :| xs)) = f x (foldr f z xs)
+  toList (NonEmpty (x :| xs)) = x : xs
+  null _ = False
+
+instance Traversable HelperNonEmpty where
+  traverse f (NonEmpty (x :| xs)) = primUnsafeCoerce ((:|) <$> f x <*> traverse f xs)
 
 instance Functor HelperNonEmpty where
   fmap f (NonEmpty (x :| xs)) = NonEmpty (f x :| fmap f xs)
@@ -809,3 +844,19 @@ instance Show HelperDouble where
 
 instance Read HelperDouble where
   readsPrec p = readSigned readFloat
+
+-- A pair, as what it holds second: the instances of the builtin classes
+-- for a pair that are not written out for every size of tuple.
+newtype HelperTuple2 a b = Tuple2 (a, b)
+
+instance Functor (HelperTuple2 a) where
+  fmap f (Tuple2 (a, b)) = Tuple2 (a, f b)
+
+instance Foldable (HelperTuple2 a) where
+  foldr f z (Tuple2 (_, b)) = f b z
+  toList (Tuple2 (_, b)) = [b]
+  null _ = False
+  length _ = 1
+
+instance Traversable (HelperTuple2 a) where
+  traverse f (Tuple2 (a, b)) = fmap (\c -> Tuple2 (a, c)) (f b)

@@ -110,6 +110,8 @@ label context = \case
     Type2.RealFrac -> builtin "RealFrac"
     Type2.RealFloat -> builtin "RealFloat"
     Type2.Functor -> builtin "Functor"
+    Type2.Foldable -> builtin "Foldable"
+    Type2.Traversable -> builtin "Traversable"
     Type2.Applicative -> builtin "Applicative"
     Type2.Monad -> builtin "Monad"
     Type2.MonadFail -> builtin "MonadFail"

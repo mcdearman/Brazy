@@ -6,6 +6,7 @@ import {-# SOURCE #-} qualified Builtin.Bounded as Bounded
 import {-# SOURCE #-} qualified Builtin.Enum as Enum
 import {-# SOURCE #-} qualified Builtin.Eq as Eq
 import {-# SOURCE #-} qualified Builtin.Floating as Floating
+import {-# SOURCE #-} qualified Builtin.Foldable as Foldable
 import {-# SOURCE #-} qualified Builtin.Fractional as Fractional
 import {-# SOURCE #-} qualified Builtin.Functor as Functor
 import {-# SOURCE #-} qualified Builtin.Integral as Integral
@@ -23,6 +24,7 @@ import {-# SOURCE #-} qualified Builtin.RealFloat as RealFloat
 import {-# SOURCE #-} qualified Builtin.RealFrac as RealFrac
 import {-# SOURCE #-} qualified Builtin.Semigroup as Semigroup
 import {-# SOURCE #-} qualified Builtin.Show as Show
+import {-# SOURCE #-} qualified Builtin.Traversable as Traversable
 import qualified Builtin.Tuple as Tuple
 import Core.Tree.Class (Class)
 import qualified Core.Tree.Class as Class
@@ -71,6 +73,8 @@ kind pure typex constructor = \case
     Type2.RealFrac -> classKind
     Type2.RealFloat -> classKind
     Type2.Functor -> classKind
+    Type2.Foldable -> classKind
+    Type2.Traversable -> classKind
     Type2.Applicative -> classKind
     Type2.Monad -> classKind
     Type2.MonadFail -> classKind
@@ -118,6 +122,8 @@ instance Builtin Class where
     Type2.RealFrac -> pure RealFrac.definition
     Type2.RealFloat -> pure RealFloat.definition
     Type2.Functor -> pure Functor.definition
+    Type2.Foldable -> pure Foldable.definition
+    Type2.Traversable -> pure Traversable.definition
     Type2.Applicative -> pure Applicative.definition
     Type2.Monad -> pure Monad.definition
     Type2.MonadFail -> pure MonadFail.definition
@@ -142,6 +148,8 @@ instance Builtin ClassExtra where
     Type2.RealFrac -> pure RealFrac.extra
     Type2.RealFloat -> pure RealFloat.extra
     Type2.Functor -> pure Functor.extra
+    Type2.Foldable -> pure Foldable.extra
+    Type2.Traversable -> pure Traversable.extra
     Type2.Applicative -> pure Applicative.extra
     Type2.Monad -> pure Monad.extra
     Type2.MonadFail -> pure MonadFail.extra

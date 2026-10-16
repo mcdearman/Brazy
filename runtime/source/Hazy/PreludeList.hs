@@ -6,7 +6,7 @@ infixl 9 !!
 
 infixr 5 ++
 
-infix 4 `elem`, `notElem`
+infix 4 `notElem`
 
 map :: (a -> b) -> [a] -> [b]
 map f [] = []
@@ -63,105 +63,6 @@ scanl f q xs =
 scanl1 :: (a -> a -> a) -> [a] -> [a]
 scanl1 f (x : xs) = scanl f x xs
 scanl1 _ [] = []
-
-class Foldable t where
-  fold :: (Monoid m) => t m -> m
-  fold = foldMap id
-
-  foldMap :: (Monoid m) => (a -> m) -> t a -> m
-  foldMap f = foldr (\a rest -> f a <> rest) mempty
-
-  foldMap' :: (Monoid m) => (a -> m) -> t a -> m
-  foldMap' = foldMap
-
-  foldr :: (a -> b -> b) -> b -> t a -> b
-  foldr = placeholder
-
-  foldl :: (b -> a -> b) -> b -> t a -> b
-  foldl f z = foldl f z . toList
-    where
-      foldl :: (a -> b -> a) -> a -> [b] -> a
-      foldl f z [] = z
-      foldl f z (x : xs) = foldl f (f z x) xs
-  foldl' :: (b -> a -> b) -> b -> t a -> b
-  foldl' f z = strictly z . toList
-    where
-      strictly z [] = z
-      strictly z (x : xs) = let next = f z x in next `seq` strictly next xs
-
-  foldr1 :: (a -> a -> a) -> t a -> a
-  foldr1 f = foldr1 f . toList
-    where
-      foldr1 :: (a -> a -> a) -> [a] -> a
-      foldr1 f [x] = x
-      foldr1 f (x : xs) = f x (foldr1 f xs)
-      foldr1 _ [] = error "Prelude.foldr1: empty list"
-
-  foldl1 :: (a -> a -> a) -> t a -> a
-  foldl1 f = foldl1 f . toList
-    where
-      foldl1 :: (a -> a -> a) -> [a] -> a
-      foldl1 f (x : xs) = foldl f x xs
-      foldl1 _ [] = error "Prelude.foldl1: empty list"
-
-  toList :: t a -> [a]
-  toList = foldr (:) []
-
-  null :: t a -> Bool
-  null = null . toList
-    where
-      null :: [a] -> Bool
-      null [] = True
-      null (_ : _) = False
-
-  length :: t a -> Int
-  length = length . toList
-    where
-      length :: [a] -> Int
-      length [] = 0
-      length (_ : l) = 1 + length l
-
-  elem :: (Eq a) => a -> t a -> Bool
-  elem x = elem x . toList
-    where
-      elem :: (Eq a) => a -> [a] -> Bool
-      elem x = any (== x)
-
-  maximum :: (Ord a) => t a -> a
-  maximum = maximum . toList
-    where
-      maximum :: (Ord a) => [a] -> a
-      maximum [] = error "Prelude.maximum: empty list"
-      maximum xs = foldl1 max xs
-
-  minimum :: (Ord a) => t a -> a
-  minimum = minimum . toList
-    where
-      minimum :: (Ord a) => [a] -> a
-      minimum [] = error "Prelude.minimum: empty list"
-      minimum xs = foldl1 min xs
-
-  sum :: (Num a) => t a -> a
-  sum = sum . toList
-    where
-      sum :: (Num a) => [a] -> a
-      sum = foldl (+) 0
-
-  product :: (Num a) => t a -> a
-  product = product . toList
-    where
-      product :: (Num a) => [a] -> a
-      product = foldl (*) 1
-
-instance Foldable [] where
-  foldr f z [] = z
-  foldr f z (x : xs) = f x (foldr f z xs)
-
-  toList = id
-
-instance Foldable NonEmpty where
-  foldr f z (x :| xs) = f x (foldr f z xs)
-  toList (x :| xs) = x : xs
 
 scanr :: (a -> b -> b) -> b -> [a] -> [b]
 scanr f q0 [] = [q0]

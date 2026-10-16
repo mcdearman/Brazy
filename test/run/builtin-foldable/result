@@ -1,0 +1,8 @@
+(('a',2),[True],5,1)
+(Just ("label",42),[('k',1),('k',2)])
+("z",False,True,'m')
+(55,120,'o',1)
+(94,9,5,True,4)
+(Right [1,2,3],Just "ab")
+'m'
+([2,3,4],"12",False,False,True)

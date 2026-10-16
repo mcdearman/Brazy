@@ -6,6 +6,7 @@ import {-# SOURCE #-} qualified Builtin.Bounded as Bounded
 import {-# SOURCE #-} qualified Builtin.Enum as Enum
 import {-# SOURCE #-} qualified Builtin.Eq as Eq
 import {-# SOURCE #-} qualified Builtin.Floating as Floating
+import {-# SOURCE #-} qualified Builtin.Foldable as Foldable
 import {-# SOURCE #-} qualified Builtin.Fractional as Fractional
 import {-# SOURCE #-} qualified Builtin.Functor as Functor
 import {-# SOURCE #-} qualified Builtin.Integral as Integral
@@ -23,6 +24,7 @@ import {-# SOURCE #-} qualified Builtin.RealFloat as RealFloat
 import {-# SOURCE #-} qualified Builtin.RealFrac as RealFrac
 import {-# SOURCE #-} qualified Builtin.Semigroup as Semigroup
 import {-# SOURCE #-} qualified Builtin.Show as Show
+import {-# SOURCE #-} qualified Builtin.Traversable as Traversable
 import Data.Functor.Identity (Identity (..))
 import qualified Data.Map as Map
 import qualified Data.Set as Set
@@ -79,6 +81,7 @@ builtin =
       Enum.bindings,
       Eq.bindings,
       Floating.bindings,
+      Foldable.bindings,
       Fractional.bindings,
       Functor.bindings,
       Integral.bindings,
@@ -96,7 +99,8 @@ builtin =
       RealFloat.bindings,
       RealFrac.bindings,
       Semigroup.bindings,
-      Show.bindings
+      Show.bindings,
+      Traversable.bindings
     ]
   where
     baseline =

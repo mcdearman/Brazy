@@ -70,6 +70,7 @@ executable hazy
     Builtin.Enum
     Builtin.Eq
     Builtin.Floating
+    Builtin.Foldable
     Builtin.Fractional
     Builtin.Functor
     Builtin.Integral
@@ -88,6 +89,7 @@ executable hazy
     Builtin.RealFrac
     Builtin.Semigroup
     Builtin.Show
+    Builtin.Traversable
     Builtin.Tuple
     Core.Arity
     Core.Builtin

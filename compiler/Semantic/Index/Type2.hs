@@ -33,6 +33,8 @@ data Index scope
   | RealFrac
   | RealFloat
   | Functor
+  | Foldable
+  | Traversable
   | Applicative
   | Monad
   | MonadFail
@@ -79,6 +81,8 @@ split = \case
   RealFrac -> Builtin RealFrac
   RealFloat -> Builtin RealFloat
   Functor -> Builtin Functor
+  Foldable -> Builtin Foldable
+  Traversable -> Builtin Traversable
   Applicative -> Builtin Applicative
   Monad -> Builtin Monad
   MonadFail -> Builtin MonadFail

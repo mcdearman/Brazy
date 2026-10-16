@@ -1128,8 +1128,9 @@ The order to take it in:
 - [ ] What the compiler's own source was changed to get past, and Hazy
       still cannot do:
   - `Functor`, `Foldable` and `Traversable` for a pair, which the library
-    cannot give because both the classes and the type are built in. Two
-    uses were written another way
+    could not give because both the class and the type were built in. It
+    gives them now (see Track A), and the two uses that were written
+    another way could have them back
   - Arithmetic of floating point. `Status` kept the time in a `Double` and
     now keeps it in a `Word64`
 - [x] Run the check again after each of these and count what stops it next.
@@ -1451,6 +1452,18 @@ Missing:
       a `Char`, and one that went up to `maxBound` came round and went on;
       and `Either`'s `Applicative` had no `pure`, so `return` in its `do`
       was bottom
+- [x] `Foldable` and `Traversable` are builtin classes, as `Functor` is,
+      by Freddy's rule that what the compiler needs to know of is built in,
+      with all it needs: deriving them is to be done in the checker, from
+      the class and not from what its name is in a module. Their defaults
+      have only what is built in, and those that must make a value as they
+      go (`foldl'`, `length`) make it by building a constructor whose
+      fields are strict, as the Prelude's `seq` does. The instances of
+      lists and `NonEmpty` are in `Hazy.Helper`, and a pair has its
+      `Functor`, `Foldable` and `Traversable`, through `HelperTuple2`: a
+      tuple's instance that `Sequent.Runtime` does not write out for every
+      size is now looked for as a newtype of the tuple of that size (test
+      `builtin-foldable`)
 - [x] GADTs: see M6
 - [x] Polymorphic components: see M6
 - [ ] Strict functions
