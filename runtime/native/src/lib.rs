@@ -684,6 +684,28 @@ memory!(hazy_peek_f32, hazy_poke_f32, f32);
 memory!(hazy_peek_f64, hazy_poke_f64, f64);
 memory!(hazy_peek_ptr, hazy_poke_ptr, *mut u8);
 
+/// The bits of a floating-point number, and the number of some bits, which
+/// the library's GHC.Float has as functions of C.
+#[no_mangle]
+pub extern "C" fn hazy_cast_u32_f32(bits: u32) -> f32 {
+    f32::from_bits(bits)
+}
+
+#[no_mangle]
+pub extern "C" fn hazy_cast_f32_u32(number: f32) -> u32 {
+    number.to_bits()
+}
+
+#[no_mangle]
+pub extern "C" fn hazy_cast_u64_f64(bits: u64) -> f64 {
+    f64::from_bits(bits)
+}
+
+#[no_mangle]
+pub extern "C" fn hazy_cast_f64_u64(number: f64) -> u64 {
+    number.to_bits()
+}
+
 /// What a function of C that gives nothing gives, as a value.
 #[no_mangle]
 pub extern "C" fn hazy_ffi_unit() -> Value {

@@ -423,6 +423,10 @@ callC World {memory, blocks} Foreign.Call {symbol, result} given = case (unpack 
   ("free", [Int address]) -> unit <$ modifyIORef blocks (Map.delete (fromIntegral address))
   ("memcpy", [Int target, Int source, Int count]) -> unit <$ copy target source count
   ("memmove", [Int target, Int source, Int count]) -> unit <$ copy target source count
+  ("hazy_cast_u32_f32", [Integer bits]) -> pure $ Floating $ realToFrac $ castWord32ToFloat (fromInteger bits)
+  ("hazy_cast_f32_u32", [Floating x]) -> pure $ Integer $ toInteger $ castFloatToWord32 (realToFrac x)
+  ("hazy_cast_u64_f64", [Integer bits]) -> pure $ Floating $ castWord64ToDouble (fromInteger bits)
+  ("hazy_cast_f64_u64", [Floating x]) -> pure $ Integer $ toInteger $ castDoubleToWord64 x
   ("memchr", [Int address, Int byte, Int count]) -> do
     bytes <- for [0 .. count - 1] (\offset -> readBytes (address + offset) 1)
     pure $ Int $ case lookup (toInteger byte `mod` 256) (zip bytes [0 ..]) of
