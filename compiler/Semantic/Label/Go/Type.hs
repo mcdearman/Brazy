@@ -65,7 +65,7 @@ label context = \case
         tuplex count _ =
           Syntax.Tupling
             { startPosition = (),
-              count
+              count = count - 1
             }
         ordering Constructor.LT = builtin "LT"
         ordering Constructor.EQ = builtin "EQ"
@@ -87,7 +87,7 @@ label context = \case
     Type2.Tuple count ->
       Syntax.Tupling
         { startPosition = (),
-          count
+          count = count - 1
         }
     Type2.NonEmpty -> builtin "NonEmpty"
     Type2.Bool -> builtin "Bool"

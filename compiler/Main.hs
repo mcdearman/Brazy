@@ -48,6 +48,7 @@ import qualified Semantic.Scope as Scope
 import qualified Semantic.Stage as Stage
 import qualified Semantic.Tree.Module as Module (connect, seperate)
 import qualified Semantic.Tree.Module as Semantic (Module, name)
+import Syntax.Literate (unlit)
 import qualified Sequent.FromCore as Sequent (Unit (..), Unshared (..), complete, reached, start, unit)
 import qualified Sequent.Printer as Sequent (print)
 import qualified Sequent.Tree as Sequent (Program (..))
@@ -135,20 +136,24 @@ loadModules extensions = loadModules []
             recurse name = loadModules (normalize name : modulePath) (file </> name)
         inner <- traverse recurse children
         pure (concat inner)
-      ".hs" ->
-        let qualifiers = foldl (:.) Local (constructorIdentifier . pack <$> reverse modulePath)
-         in case qualifiers of
-              (modulePath :. moduleName)
-                | path <- modulePath :.. moduleName -> do
-                    contents <- loadModule file
-                    pure [Inner {extensions, path, name = pack file, contents}]
-              _ -> do
-                contents <- loadModule file
-                pure [Root {extensions, name = pack file, contents}]
+      ".hs" -> source id modulePath file
+      -- Literate source, of which only the program is read.
+      ".lhs" -> source unlit modulePath file
       ".hs-boot" -> pure []
       extension -> do
         putStrLn $ "Unknown file extension (" ++ extension ++ "): " ++ file
         exitFailure
+    source :: (Text -> Text) -> [FilePath] -> FilePath -> IO [Loaded]
+    source program modulePath file =
+      let qualifiers = foldl (:.) Local (constructorIdentifier . pack <$> reverse modulePath)
+       in case qualifiers of
+            (modulePath :. moduleName)
+              | path <- modulePath :.. moduleName -> do
+                  contents <- program <$> loadModule file
+                  pure [Inner {extensions, path, name = pack file, contents}]
+            _ -> do
+              contents <- program <$> loadModule file
+              pure [Root {extensions, name = pack file, contents}]
 
 loadPackage :: Package -> [Loaded]
 loadPackage Package {extensions, modules} = map loadModule modules

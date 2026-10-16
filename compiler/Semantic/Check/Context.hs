@@ -1,6 +1,8 @@
 module Semantic.Check.Context where
 
 import Control.Monad.ST (ST)
+import Semantic.Default (Default)
+import qualified Semantic.Default as Default
 import qualified Core.Builtin as Builtin
 import Core.Substitute (logicalType)
 import qualified Core.Tree.Type as Core
@@ -51,7 +53,10 @@ data Context s scope = Context
     typeEnvironment :: !(Type.Table (TypeBinding s) scope),
     -- | What type variables are known to be here, from the matches on
     -- constructors that this is inside.
-    equalities :: ![Equality s scope]
+    equalities :: ![Equality s scope],
+    -- | What a type that is never worked out may be taken to be, in order:
+    -- see "Semantic.Default".
+    defaulting :: ![Default]
   }
 
 typeEnvironment_ = typeEnvironment
@@ -72,7 +77,7 @@ postponed Context {equalities} = case [waiting | Late waiting <- equalities] of
 -- |
 -- Check something that definitions inside it may be put off to the end of.
 postponing :: Context s scope -> (Context s scope -> ST s a) -> ST s a
-postponing Context {termEnvironment, localEnvironment, typeEnvironment, equalities} check = do
+postponing Context {termEnvironment, localEnvironment, typeEnvironment, equalities, defaulting} check = do
   waiting <- newSTRef []
   result <-
     check
@@ -80,7 +85,8 @@ postponing Context {termEnvironment, localEnvironment, typeEnvironment, equaliti
         { termEnvironment,
           localEnvironment,
           typeEnvironment,
-          equalities = Late waiting : equalities
+          equalities = Late waiting : equalities,
+          defaulting
         }
   let finish =
         readSTRef waiting >>= \case
@@ -93,14 +99,15 @@ postponing Context {termEnvironment, localEnvironment, typeEnvironment, equaliti
   pure result
 
 instance Shift.Unshift (Context s) where
-  unshift Context {termEnvironment, localEnvironment, typeEnvironment, equalities} =
+  unshift Context {termEnvironment, localEnvironment, typeEnvironment, equalities, defaulting} =
     Context
       { termEnvironment = Shift.unshift termEnvironment,
         localEnvironment = Shift.unshift localEnvironment,
         typeEnvironment = Shift.unshift typeEnvironment,
         -- What is known here is known further out as far as it can be
         -- said there.
-        equalities = mapMaybe Unify.lowerEquality equalities
+        equalities = mapMaybe Unify.lowerEquality equalities,
+        defaulting
       }
 
 globalBindings ::
@@ -114,7 +121,8 @@ globalBindings sources modules =
     { termEnvironment = Term.Global $ termBindings <$> modules,
       localEnvironment = Local.Global,
       typeEnvironment = Type.Global $ Vector.zipWith typeBindings sources modules,
-      equalities = []
+      equalities = [],
+      defaulting = Default.standard
     }
   where
     termBindings Module {declarations = Declarations {terms}} =
@@ -150,13 +158,14 @@ localBindings ::
   Context s (Scope.Declaration ':+ scope)
 localBindings
   sources
-  Context {termEnvironment, localEnvironment, typeEnvironment, equalities}
+  Context {termEnvironment, localEnvironment, typeEnvironment, equalities, defaulting}
   Declarations {terms, types, typeExtras, dataInstances, classInstances} =
     Context
       { termEnvironment = Term.Declaration termBindings termEnvironment,
         localEnvironment = Local.Declaration localEnvironment,
         typeEnvironment = Type.Declaration typeBindings typeEnvironment,
-        equalities = shiftEquality <$> equalities
+        equalities = shiftEquality <$> equalities,
+        defaulting
       }
     where
       termBindings = TermBinding.local <$> terms
@@ -175,12 +184,13 @@ groupTermBindings ::
   Vector (Unify.Type s scope) ->
   Context s scope ->
   Context s (Scope.GroupTerm ':+ scope)
-groupTermBindings used declarations Context {termEnvironment, localEnvironment, typeEnvironment, equalities} =
+groupTermBindings used declarations Context {termEnvironment, localEnvironment, typeEnvironment, equalities, defaulting} =
   Context
     { termEnvironment = Term.GroupTerm termBindings termEnvironment,
       localEnvironment = Local.GroupTerm localEnvironment,
       typeEnvironment = Type.GroupTerm typeEnvironment,
-      equalities = shiftEquality <$> equalities
+      equalities = shiftEquality <$> equalities,
+      defaulting
     }
   where
     termBindings = TermBinding.group used <$> declarations
@@ -198,12 +208,13 @@ groupTypeBindings
   positions
   labels
   declarations
-  Context {termEnvironment, localEnvironment, typeEnvironment, equalities} =
+  Context {termEnvironment, localEnvironment, typeEnvironment, equalities, defaulting} =
     Context
       { termEnvironment = Term.GroupType termEnvironment,
         localEnvironment = Local.GroupType localEnvironment,
         typeEnvironment = Type.GroupType typeBindings typeEnvironment,
-        equalities = shiftEquality <$> (Grouping (zip (Vector.toList outside) (Vector.toList declarations)) : equalities)
+        equalities = shiftEquality <$> (Grouping (zip (Vector.toList outside) (Vector.toList declarations)) : equalities),
+        defaulting
       }
   where
     typeBindings = Vector.zipWith3 TypeBinding.group positions labels declarations

@@ -169,6 +169,7 @@ executable hazy
     Semantic.Check.Derive.Ord
     Semantic.Check.Derive.Read
     Semantic.Check.Derive.Show
+    Semantic.Default
     Semantic.Check.EntryInstance
     Semantic.Check.Go.Declaration
     Semantic.Check.Go.Declarations
@@ -399,6 +400,7 @@ executable hazy
     Syntax.Extensions
     Syntax.FreeVariables
     Syntax.Lexer
+    Syntax.Literate
     Syntax.Parser
     Syntax.ParserCombinator
     Syntax.Position

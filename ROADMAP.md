@@ -1369,10 +1369,13 @@ Found while comparing the two backends:
     what each reads in the order of how much it read (test `readp`, which
     agrees with GHC). `%` had no fixity, so `2 ^ 3 % 5` was `2 ^ (3 % 5)`;
     it is `infixl 7`, as the report has it
-  - Left: `Data.Map` and `Data.Set`, `Data.List.NonEmpty`, `Data.Vector`,
-    `System.FilePath`, `System.Directory`, `Data.Bifoldable`,
-    `Data.Bitraversable`, `Data.Text`, and what reads and writes through
-    a `Ptr`
+  - `Data.List.NonEmpty` has none left, and `Data.Bifunctor`,
+    `Data.Bifoldable` and `Data.Bitraversable` have their defaults and
+    GHC's instances, for pairs, the tuples to five, `Either` and `Const`
+    (test `bifunctors`, which agrees with GHC)
+  - Left: `Data.Map` and `Data.Set`, `Data.Vector`, `System.FilePath`,
+    `System.Directory`, `Data.Text`, and what reads and writes through a
+    `Ptr`
   - The report's modules that were not there at all are: `Data.Ix`, with
     instances for the numbers, characters, `Bool`, `Ordering`, `()` and
     tuples to five; `Data.Array`, kept as one of the runtime's arrays;
@@ -1383,6 +1386,11 @@ Found while comparing the two backends:
     Prelude's `Word` and `Data.Word`'s were two types, and are one; so are
     `Control.Applicative`'s `Const` and `Data.Functor.Const`'s, and
     `ZipList` and `WrappedMonad` have their instances
+- [x] A tuple's constructor written with only its commas, `(,)` or
+      `(,,)`, in a type or an instance's head. It was taken to hold as many
+      as it has commas, one too few, so `(,) Int Bool` was not a type and
+      `instance Bifunctor (,)` was of something no pair is (test
+      `tuple-constructor`, which agrees with GHC)
 
 Missing:
 
@@ -1395,7 +1403,15 @@ Missing:
       a class of fractions, `Double` if one is and `Integral` is not, and
       neither if both are (tests `defaulting-double` and
       `IntegralFraction`).
-      There is no `default` declaration. For this `Float` and `Double` are
+      A module's `default` declaration lists the types in its place, in its
+      order, of `Integer`, `Int`, `Double` and `Float`, and each is taken
+      only for the classes it is an instance of; `Bounded` takes part too,
+      which `Int` is an instance of (test `default-declaration`, whose
+      modules have each their own; `default ()` and a list of another type
+      are refused, tests `DefaultNone` and `DefaultBool`). The declaration
+      is resolved with the module, and the checker gives each module's
+      definitions the list it has (`defaulting`, in the context). For this
+      `Float` and `Double` are
       builtin types, and `Floating`, `RealFrac` and `RealFloat` builtin
       classes, as `Int` and `Fractional` are: their instances are newtypes
       in `Hazy.Helper`, as the other builtin types' are
@@ -1500,6 +1516,12 @@ Missing:
       in backquotes, and a field that is an operator, are read too, which
       the written-out instance refused (tests `derive-read`, which agrees
       with GHC, and `test/good/Derive.hs`, Freddy's example)
+- [x] Literate source, as the report's chapter 10 has it: a module in a
+      `.lhs` file is read for its program, the lines after a bird track or
+      between `\begin{code}` and `\end{code}`. Every other line is read as
+      an empty one and a track as a space, so that what is said of the
+      program is where it is in the file (`Syntax.Literate`; test
+      `literate`, which agrees with GHC)
 - [x] GADTs: see M6
 - [x] Polymorphic components: see M6
 - [ ] Strict functions

@@ -39,17 +39,18 @@ import {-# SOURCE #-} Semantic.Unify.Error (Error (..), abort)
 import Semantic.Unify.Evidence (Evidence)
 import qualified Semantic.Unify.Evidence as Evidence
   ( Box (..),
-    Default (..),
     Defaultable (..),
     Fallback (..),
     Logical (..),
     defaultable,
     fractional,
     numeric,
-    typeOf,
     unify,
     unshift,
   )
+import qualified Semantic.Default as Default
+import Semantic.Default (Default)
+import Data.List (find)
 import Syntax.Position (Position)
 import Prelude hiding (Functor, head, map)
 
@@ -710,7 +711,7 @@ constrainWith context_ position classx_ term_ arguments_ = constrainWith context
               typeCheck context position target (foldl (#) term arguments)
               let fallback = do
                     classx <- Evidence.defaultable classx
-                    pure Evidence.Fallback {classx, permitted = defaults reference}
+                    pure Evidence.Fallback {classx, permitted = defaults (defaulting context) reference}
               logical <- newSTRef Evidence.Unsolved {fallback}
               let delay = Delay {arguments, evidence = Evidence.Logical (Evidence.Box logical)}
               writeSTRef reference $! Unsolved {kind, constraints = Map.insert classx [delay] constraints, erasure}
@@ -1020,34 +1021,65 @@ unshift context position typex = unshift typex
 -- by must be one that does not stop it, at least one must be a class of
 -- numbers, and the type is the first of the two that is an instance of
 -- every one.
-defaults :: STRef s (Box s scope) -> ST s (Maybe Evidence.Default)
-defaults reference =
+defaults :: [Default] -> STRef s (Box s scope) -> ST s (Maybe Default)
+defaults listed reference =
   readSTRef reference >>= \case
     Solved typex -> follow typex
-    Unsolved {constraints} -> pure (defaulting constraints)
+    Unsolved {constraints} -> pure (firstFitting listed constraints)
     Skolem {} -> pure Nothing
   where
     -- The variable may have been made the same as another since.
-    follow :: Type s scope -> ST s (Maybe Evidence.Default)
+    follow :: Type s scope -> ST s (Maybe Default)
     follow = \case
-      Logical (Box reference) -> defaults reference
+      Logical (Box reference) -> defaults listed reference
       Logical (Shift logical) -> follow (Logical logical)
       _ -> pure Nothing
 
-defaulting :: Map (Type2.Index scope) [Delay s scope] -> Maybe Evidence.Default
-defaulting constraints = do
+-- |
+-- The first of the types listed that is an instance of every class asked:
+-- one that is not a fraction, where none of the classes is of fractions,
+-- and one that is, where none is @Integral@.
+firstFitting :: [Default] -> Map (Type2.Index scope) [Delay s scope] -> Maybe Default
+firstFitting listed constraints = do
   classes <- traverse Evidence.defaultable (Map.keys constraints)
   if all plain (concat (Map.elems constraints)) && any Evidence.numeric classes
-    then case (any Evidence.fractional classes, any integral classes) of
-      (False, _) -> Just Evidence.Integer
-      (True, False) -> Just Evidence.Double
-      (True, True) -> Nothing
+    then find (fits classes) listed
     else Nothing
   where
     plain Delay {arguments} = null arguments
-    integral = \case
-      Evidence.Integral -> True
-      _ -> False
+    fits classes candidate = all (instanceOf candidate) classes
+    -- Which of the classes that do not stop defaulting each type is an
+    -- instance of.
+    instanceOf candidate = \case
+      Evidence.Integral -> not (Default.fractional candidate)
+      Evidence.Bounded -> candidate == Default.Int
+      classx
+        | Evidence.fractional classx -> Default.fractional candidate
+        | otherwise -> True
+
+-- |
+-- What a variable's evidence was taken to be, if it was: the type it is
+-- taken to be is the same, as the module it was asked in has it.
+chosen :: Map (Type2.Index scope) [Delay s scope] -> ST s (Maybe Default)
+chosen constraints = go (concat (Map.elems constraints))
+  where
+    go = \case
+      [] -> pure Nothing
+      Delay {evidence} : rest ->
+        fallbackOf evidence >>= \case
+          Just found -> pure (Just found)
+          Nothing -> go rest
+    fallbackOf :: Evidence s scope' -> ST s (Maybe Default)
+    fallbackOf = \case
+      Evidence.Logical logical -> logicalOf logical
+      _ -> pure Nothing
+    logicalOf :: Evidence.Logical s scope' -> ST s (Maybe Default)
+    logicalOf = \case
+      Evidence.Box reference ->
+        readSTRef reference >>= \case
+          Evidence.Unsolved {fallback = Just Evidence.Fallback {permitted}} -> permitted
+          _ -> pure Nothing
+      Evidence.Shift logical -> logicalOf logical
 
 defaultFrom,
   defaultUniverse ::
@@ -1072,14 +1104,17 @@ defaultUniverse position constraints universe = case universe of
       Solved kind -> defaultUniverse position constraints kind
       Unsolved {}
         | null constraints -> pure $ Type Small
-        | Just typex <- defaulting constraints -> pure $ Constructor (Evidence.typeOf typex)
-        | otherwise -> unsupportedFeatureConstraintedTypeDefaulting position
+        | otherwise -> fromChosen
       Skolem {} -> unsupportedFeatureConstraintedTypeDefaulting position
   Small
     | null constraints -> pure $ Constructor (Type2.Tuple 0)
-    | Just typex <- defaulting constraints -> pure $ Constructor (Evidence.typeOf typex)
-    | otherwise -> unsupportedFeatureConstraintedTypeDefaulting position
+    | otherwise -> fromChosen
   Large
     | null constraints -> pure $ Type Small
     | otherwise -> error "unexpected kind constraints"
   _ -> error "unexpected universe kind"
+  where
+    fromChosen =
+      chosen constraints >>= \case
+        Just typex -> pure $ Constructor (Default.typeOf typex)
+        Nothing -> unsupportedFeatureConstraintedTypeDefaulting position
