@@ -1537,10 +1537,17 @@ Missing:
       numbers and characters of C's library, and stops with a word for any
       other (tests `foreign-import`, which agrees with GHC, `ForeignInteger`
       and `ForeignExport`)
+- [x] The numbers of a fixed width and `Bool`, given to C and given back.
+      `Int8` to `Int64`, `Word` and `Word8` to `Word64` are builtin types
+      now, newtypes of an `Int` or an `Integer` as they were in the
+      library, with their instances in `Hazy.Helper`; C is given each as a
+      number of its width, a small one extended with or without its sign as
+      C extends it, and a `Bool` as an `int` (`hazy_ffi_bool`,
+      `hazy_ffi_integer`, and back; test `foreign-sized`, which agrees
+      with GHC)
 - [ ] What the foreign function interface does not do yet: `foreign export`,
       an import of an address (`&`) or by a pointer to a function
-      (`dynamic`, `wrapper`), and the other types C is given: `Bool`, the
-      numbers of a fixed width, `Ptr` and `FunPtr`, which are to become
+      (`dynamic`, `wrapper`), and `Ptr` and `FunPtr`, which are to become
       builtins too, and with them `Foreign.Storable`, `Foreign.Marshal`
       and `Foreign.C`
 - [x] GADTs: see M6

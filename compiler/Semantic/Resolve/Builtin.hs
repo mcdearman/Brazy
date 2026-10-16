@@ -20,6 +20,15 @@ import {-# SOURCE #-} qualified Builtin.Num as Num
 import {-# SOURCE #-} qualified Builtin.Ord as Ord
 import {-# SOURCE #-} qualified Builtin.Ordering as Ordering
 import {-# SOURCE #-} qualified Builtin.IO as IO
+import {-# SOURCE #-} qualified Builtin.Int8 as Int8
+import {-# SOURCE #-} qualified Builtin.Int16 as Int16
+import {-# SOURCE #-} qualified Builtin.Int32 as Int32
+import {-# SOURCE #-} qualified Builtin.Int64 as Int64
+import {-# SOURCE #-} qualified Builtin.Word as Word
+import {-# SOURCE #-} qualified Builtin.Word8 as Word8
+import {-# SOURCE #-} qualified Builtin.Word16 as Word16
+import {-# SOURCE #-} qualified Builtin.Word32 as Word32
+import {-# SOURCE #-} qualified Builtin.Word64 as Word64
 import {-# SOURCE #-} qualified Builtin.Ratio as Ratio
 import {-# SOURCE #-} qualified Builtin.Real as Real
 import {-# SOURCE #-} qualified Builtin.RealFloat as RealFloat
@@ -88,6 +97,15 @@ builtin =
       Functor.bindings,
       Integral.bindings,
       IO.bindings,
+      Int8.bindings,
+      Int16.bindings,
+      Int32.bindings,
+      Int64.bindings,
+      Word.bindings,
+      Word8.bindings,
+      Word16.bindings,
+      Word32.bindings,
+      Word64.bindings,
       Ix.bindings,
       List.bindings,
       Monad.bindings,

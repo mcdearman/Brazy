@@ -107,11 +107,12 @@ data All a = All
     tuplex :: Int -> Tuple -> a,
     ordering :: Ordering -> a,
     ratio :: Ratio -> a,
-    io :: IO -> a
+    io :: IO -> a,
+    sized :: String -> a
   }
 
 run :: (Type.Index scope -> Int -> a) -> All a -> Index scope -> a
-run normal All {bool, list, nonEmpty, tuplex, ordering, ratio, io} Index {typeIndex, constructorIndex} =
+run normal All {bool, list, nonEmpty, tuplex, ordering, ratio, io, sized} Index {typeIndex, constructorIndex} =
   case typeIndex of
     Type2.Index typeIndex -> normal typeIndex constructorIndex
     Type2.Bool -> bool (toEnum constructorIndex)
@@ -121,6 +122,15 @@ run normal All {bool, list, nonEmpty, tuplex, ordering, ratio, io} Index {typeIn
     Type2.Ordering -> ordering (toEnum constructorIndex)
     Type2.Ratio -> ratio (toEnum constructorIndex)
     Type2.IO -> io (toEnum constructorIndex)
+    Type2.Int8 -> sized "Int8"
+    Type2.Int16 -> sized "Int16"
+    Type2.Int32 -> sized "Int32"
+    Type2.Int64 -> sized "Int64"
+    Type2.Word -> sized "Word"
+    Type2.Word8 -> sized "Word8"
+    Type2.Word16 -> sized "Word16"
+    Type2.Word32 -> sized "Word32"
+    Type2.Word64 -> sized "Word64"
     _ -> error "bad run constructor"
 
 instance Shift0.Functor Index where

@@ -22,7 +22,7 @@ import AxCut.Tree
 import qualified AxCut.Tree as Kind (Kind (..))
 import Data.Bits (popCount, shift, xor, (.&.), (.|.))
 import qualified Core.Foreign as Foreign
-import Data.Char (chr, generalCategory, ord, toLower, toUpper)
+import Data.Char (chr, generalCategory, isAlpha, isDigit, isSpace, ord, toLower, toUpper)
 import Data.IORef (IORef, modifyIORef, newIORef, readIORef, writeIORef)
 import Data.List (sort)
 import Data.Map (Map)
@@ -409,6 +409,12 @@ callC Foreign.Call {symbol, result} given = case (unpack symbol, given) of
     | Just f <- lookup name singles2 -> pure $ floating (f x y)
   ("labs", [Int n]) -> pure $ Int (abs n)
   ("llabs", [Int n]) -> pure $ Int (abs n)
+  ("abs", [Int n]) -> pure $ Int (abs n)
+  ("llabs", [Integer n]) -> pure $ Integer (abs n)
+  ("toupper", [Integer c]) -> pure $ Integer (fromIntegral (ord (toUpper (chr (fromIntegral c)))))
+  ("isdigit", [Int c]) -> pure $ bool (isDigit (chr (fromIntegral c)))
+  ("isalpha", [Int c]) -> pure $ bool (isAlpha (chr (fromIntegral c)))
+  ("isspace", [Int c]) -> pure $ bool (isSpace (chr (fromIntegral c)))
   ("toupper", [Int c]) -> pure $ Int (fromIntegral (ord (toUpper (chr (fromIntegral c)))))
   ("tolower", [Int c]) -> pure $ Int (fromIntegral (ord (toLower (chr (fromIntegral c)))))
   ("srand", [_]) -> pure unit

@@ -580,6 +580,504 @@ instance Monad HelperNonEmpty where
 instance Semigroup (HelperNonEmpty a) where
   NonEmpty (x :| xs) <> NonEmpty (y :| ys) = NonEmpty (x :| xs ++ y : ys)
 
+-- A number brought into the range of so many bits, as one that overflowed
+-- would be: with a sign, of an Int or an Integer, or with none.
+wrapSignedInt :: Int -> Int -> Int
+wrapSignedInt bits x
+  | reduced >= half = reduced - 2 * half
+  | otherwise = reduced
+  where
+    half = 2 ^ (bits - 1)
+    reduced = x `mod` (2 * half)
+
+wrapSignedInteger :: Int -> Integer -> Integer
+wrapSignedInteger bits x
+  | reduced >= half = reduced - 2 * half
+  | otherwise = reduced
+  where
+    half = 2 ^ (bits - 1)
+    reduced = x `mod` (2 * half)
+
+wrapUnsignedInteger :: Int -> Integer -> Integer
+wrapUnsignedInteger bits x = x `mod` 2 ^ bits
+
+newtype HelperInt8 = Int8x Int8
+
+instance Eq HelperInt8 where
+  Int8x (Int8 a) == Int8x (Int8 b) = a == b
+
+instance Ord HelperInt8 where
+  compare (Int8x (Int8 a)) (Int8x (Int8 b)) = compare a b
+  Int8x (Int8 a) <= Int8x (Int8 b) = a <= b
+
+instance Show HelperInt8 where
+  showsPrec d (Int8x (Int8 x)) = showsPrec d x
+
+instance Read HelperInt8 where
+  readsPrec d text = [(fromInteger x, rest) | (x, rest) <- readsPrec d text]
+
+instance Num HelperInt8 where
+  Int8x (Int8 a) + Int8x (Int8 b) = Int8x (Int8 (wrapSignedInt 8 (a + b)))
+  Int8x (Int8 a) - Int8x (Int8 b) = Int8x (Int8 (wrapSignedInt 8 (a - b)))
+  Int8x (Int8 a) * Int8x (Int8 b) = Int8x (Int8 (wrapSignedInt 8 (a * b)))
+  negate (Int8x (Int8 a)) = Int8x (Int8 (wrapSignedInt 8 (negate a)))
+  abs (Int8x (Int8 a)) = Int8x (Int8 (wrapSignedInt 8 (abs a)))
+  signum (Int8x (Int8 a)) = Int8x (Int8 (signum a))
+  fromInteger x = Int8x (Int8 (wrapSignedInt 8 (fromInteger x)))
+
+instance Enum HelperInt8 where
+  toEnum x = Int8x (Int8 (wrapSignedInt 8 (x)))
+  fromEnum (Int8x (Int8 x)) = x
+  enumFrom x = enumFromTo x maxBound
+  enumFromThen x y = enumFromThenTo x y (if y >= x then maxBound else minBound)
+  enumFromTo (Int8x (Int8 a)) (Int8x (Int8 b)) = map (Int8x . Int8) (enumFromTo a b)
+  enumFromThenTo (Int8x (Int8 a)) (Int8x (Int8 b)) (Int8x (Int8 c)) = map (Int8x . Int8) (enumFromThenTo a b c)
+
+instance Real HelperInt8 where
+  toRational (Int8x (Int8 x)) = toRational x
+
+instance Integral HelperInt8 where
+  quotRem (Int8x (Int8 a)) (Int8x (Int8 b)) = case quotRem a b of
+    (q, r) -> (Int8x (Int8 (wrapSignedInt 8 (q))), Int8x (Int8 r))
+  divMod (Int8x (Int8 a)) (Int8x (Int8 b)) = case divMod a b of
+    (q, r) -> (Int8x (Int8 (wrapSignedInt 8 (q))), Int8x (Int8 r))
+  toInteger (Int8x (Int8 x)) = toInteger x
+
+instance Bounded HelperInt8 where
+  minBound = Int8x (Int8 (negate (2 ^ (8 - 1 :: Int))))
+  maxBound = Int8x (Int8 (2 ^ (8 - 1 :: Int) - 1))
+
+instance Ix HelperInt8 where
+  range (low, high) = [low .. high]
+  index bounds@(low, high) i
+    | low <= i && i <= high = fromInteger (toInteger i - toInteger low)
+    | otherwise = errorWithoutStackTrace ("Ix{Int8}.index: Index " ++ showsPrec 11 i "" ++ " out of range (" ++ showsPrec 11 bounds "" ++ ")")
+  inRange (low, high) i = low <= i && i <= high
+
+newtype HelperInt16 = Int16x Int16
+
+instance Eq HelperInt16 where
+  Int16x (Int16 a) == Int16x (Int16 b) = a == b
+
+instance Ord HelperInt16 where
+  compare (Int16x (Int16 a)) (Int16x (Int16 b)) = compare a b
+  Int16x (Int16 a) <= Int16x (Int16 b) = a <= b
+
+instance Show HelperInt16 where
+  showsPrec d (Int16x (Int16 x)) = showsPrec d x
+
+instance Read HelperInt16 where
+  readsPrec d text = [(fromInteger x, rest) | (x, rest) <- readsPrec d text]
+
+instance Num HelperInt16 where
+  Int16x (Int16 a) + Int16x (Int16 b) = Int16x (Int16 (wrapSignedInt 16 (a + b)))
+  Int16x (Int16 a) - Int16x (Int16 b) = Int16x (Int16 (wrapSignedInt 16 (a - b)))
+  Int16x (Int16 a) * Int16x (Int16 b) = Int16x (Int16 (wrapSignedInt 16 (a * b)))
+  negate (Int16x (Int16 a)) = Int16x (Int16 (wrapSignedInt 16 (negate a)))
+  abs (Int16x (Int16 a)) = Int16x (Int16 (wrapSignedInt 16 (abs a)))
+  signum (Int16x (Int16 a)) = Int16x (Int16 (signum a))
+  fromInteger x = Int16x (Int16 (wrapSignedInt 16 (fromInteger x)))
+
+instance Enum HelperInt16 where
+  toEnum x = Int16x (Int16 (wrapSignedInt 16 (x)))
+  fromEnum (Int16x (Int16 x)) = x
+  enumFrom x = enumFromTo x maxBound
+  enumFromThen x y = enumFromThenTo x y (if y >= x then maxBound else minBound)
+  enumFromTo (Int16x (Int16 a)) (Int16x (Int16 b)) = map (Int16x . Int16) (enumFromTo a b)
+  enumFromThenTo (Int16x (Int16 a)) (Int16x (Int16 b)) (Int16x (Int16 c)) = map (Int16x . Int16) (enumFromThenTo a b c)
+
+instance Real HelperInt16 where
+  toRational (Int16x (Int16 x)) = toRational x
+
+instance Integral HelperInt16 where
+  quotRem (Int16x (Int16 a)) (Int16x (Int16 b)) = case quotRem a b of
+    (q, r) -> (Int16x (Int16 (wrapSignedInt 16 (q))), Int16x (Int16 r))
+  divMod (Int16x (Int16 a)) (Int16x (Int16 b)) = case divMod a b of
+    (q, r) -> (Int16x (Int16 (wrapSignedInt 16 (q))), Int16x (Int16 r))
+  toInteger (Int16x (Int16 x)) = toInteger x
+
+instance Bounded HelperInt16 where
+  minBound = Int16x (Int16 (negate (2 ^ (16 - 1 :: Int))))
+  maxBound = Int16x (Int16 (2 ^ (16 - 1 :: Int) - 1))
+
+instance Ix HelperInt16 where
+  range (low, high) = [low .. high]
+  index bounds@(low, high) i
+    | low <= i && i <= high = fromInteger (toInteger i - toInteger low)
+    | otherwise = errorWithoutStackTrace ("Ix{Int16}.index: Index " ++ showsPrec 11 i "" ++ " out of range (" ++ showsPrec 11 bounds "" ++ ")")
+  inRange (low, high) i = low <= i && i <= high
+
+newtype HelperInt32 = Int32x Int32
+
+instance Eq HelperInt32 where
+  Int32x (Int32 a) == Int32x (Int32 b) = a == b
+
+instance Ord HelperInt32 where
+  compare (Int32x (Int32 a)) (Int32x (Int32 b)) = compare a b
+  Int32x (Int32 a) <= Int32x (Int32 b) = a <= b
+
+instance Show HelperInt32 where
+  showsPrec d (Int32x (Int32 x)) = showsPrec d x
+
+instance Read HelperInt32 where
+  readsPrec d text = [(fromInteger x, rest) | (x, rest) <- readsPrec d text]
+
+instance Num HelperInt32 where
+  Int32x (Int32 a) + Int32x (Int32 b) = Int32x (Int32 (wrapSignedInt 32 (a + b)))
+  Int32x (Int32 a) - Int32x (Int32 b) = Int32x (Int32 (wrapSignedInt 32 (a - b)))
+  Int32x (Int32 a) * Int32x (Int32 b) = Int32x (Int32 (wrapSignedInt 32 (a * b)))
+  negate (Int32x (Int32 a)) = Int32x (Int32 (wrapSignedInt 32 (negate a)))
+  abs (Int32x (Int32 a)) = Int32x (Int32 (wrapSignedInt 32 (abs a)))
+  signum (Int32x (Int32 a)) = Int32x (Int32 (signum a))
+  fromInteger x = Int32x (Int32 (wrapSignedInt 32 (fromInteger x)))
+
+instance Enum HelperInt32 where
+  toEnum x = Int32x (Int32 (wrapSignedInt 32 (x)))
+  fromEnum (Int32x (Int32 x)) = x
+  enumFrom x = enumFromTo x maxBound
+  enumFromThen x y = enumFromThenTo x y (if y >= x then maxBound else minBound)
+  enumFromTo (Int32x (Int32 a)) (Int32x (Int32 b)) = map (Int32x . Int32) (enumFromTo a b)
+  enumFromThenTo (Int32x (Int32 a)) (Int32x (Int32 b)) (Int32x (Int32 c)) = map (Int32x . Int32) (enumFromThenTo a b c)
+
+instance Real HelperInt32 where
+  toRational (Int32x (Int32 x)) = toRational x
+
+instance Integral HelperInt32 where
+  quotRem (Int32x (Int32 a)) (Int32x (Int32 b)) = case quotRem a b of
+    (q, r) -> (Int32x (Int32 (wrapSignedInt 32 (q))), Int32x (Int32 r))
+  divMod (Int32x (Int32 a)) (Int32x (Int32 b)) = case divMod a b of
+    (q, r) -> (Int32x (Int32 (wrapSignedInt 32 (q))), Int32x (Int32 r))
+  toInteger (Int32x (Int32 x)) = toInteger x
+
+instance Bounded HelperInt32 where
+  minBound = Int32x (Int32 (negate (2 ^ (32 - 1 :: Int))))
+  maxBound = Int32x (Int32 (2 ^ (32 - 1 :: Int) - 1))
+
+instance Ix HelperInt32 where
+  range (low, high) = [low .. high]
+  index bounds@(low, high) i
+    | low <= i && i <= high = fromInteger (toInteger i - toInteger low)
+    | otherwise = errorWithoutStackTrace ("Ix{Int32}.index: Index " ++ showsPrec 11 i "" ++ " out of range (" ++ showsPrec 11 bounds "" ++ ")")
+  inRange (low, high) i = low <= i && i <= high
+
+newtype HelperInt64 = Int64x Int64
+
+instance Eq HelperInt64 where
+  Int64x (Int64 a) == Int64x (Int64 b) = a == b
+
+instance Ord HelperInt64 where
+  compare (Int64x (Int64 a)) (Int64x (Int64 b)) = compare a b
+  Int64x (Int64 a) <= Int64x (Int64 b) = a <= b
+
+instance Show HelperInt64 where
+  showsPrec d (Int64x (Int64 x)) = showsPrec d x
+
+instance Read HelperInt64 where
+  readsPrec d text = [(fromInteger x, rest) | (x, rest) <- readsPrec d text]
+
+instance Num HelperInt64 where
+  Int64x (Int64 a) + Int64x (Int64 b) = Int64x (Int64 (wrapSignedInteger 64 (a + b)))
+  Int64x (Int64 a) - Int64x (Int64 b) = Int64x (Int64 (wrapSignedInteger 64 (a - b)))
+  Int64x (Int64 a) * Int64x (Int64 b) = Int64x (Int64 (wrapSignedInteger 64 (a * b)))
+  negate (Int64x (Int64 a)) = Int64x (Int64 (wrapSignedInteger 64 (negate a)))
+  abs (Int64x (Int64 a)) = Int64x (Int64 (wrapSignedInteger 64 (abs a)))
+  signum (Int64x (Int64 a)) = Int64x (Int64 (signum a))
+  fromInteger x = Int64x (Int64 (wrapSignedInteger 64 (x)))
+
+instance Enum HelperInt64 where
+  toEnum x = Int64x (Int64 (wrapSignedInteger 64 (toInteger x)))
+  fromEnum (Int64x (Int64 x)) = fromInteger x
+  enumFrom x = enumFromTo x maxBound
+  enumFromThen x y = enumFromThenTo x y (if y >= x then maxBound else minBound)
+  enumFromTo (Int64x (Int64 a)) (Int64x (Int64 b)) = map (Int64x . Int64) (enumFromTo a b)
+  enumFromThenTo (Int64x (Int64 a)) (Int64x (Int64 b)) (Int64x (Int64 c)) = map (Int64x . Int64) (enumFromThenTo a b c)
+
+instance Real HelperInt64 where
+  toRational (Int64x (Int64 x)) = toRational x
+
+instance Integral HelperInt64 where
+  quotRem (Int64x (Int64 a)) (Int64x (Int64 b)) = case quotRem a b of
+    (q, r) -> (Int64x (Int64 (wrapSignedInteger 64 (q))), Int64x (Int64 r))
+  divMod (Int64x (Int64 a)) (Int64x (Int64 b)) = case divMod a b of
+    (q, r) -> (Int64x (Int64 (wrapSignedInteger 64 (q))), Int64x (Int64 r))
+  toInteger (Int64x (Int64 x)) = x
+
+instance Bounded HelperInt64 where
+  minBound = Int64x (Int64 (negate (2 ^ (64 - 1 :: Int))))
+  maxBound = Int64x (Int64 (2 ^ (64 - 1 :: Int) - 1))
+
+instance Ix HelperInt64 where
+  range (low, high) = [low .. high]
+  index bounds@(low, high) i
+    | low <= i && i <= high = fromInteger (toInteger i - toInteger low)
+    | otherwise = errorWithoutStackTrace ("Ix{Int64}.index: Index " ++ showsPrec 11 i "" ++ " out of range (" ++ showsPrec 11 bounds "" ++ ")")
+  inRange (low, high) i = low <= i && i <= high
+
+newtype HelperWord = Wordx Word
+
+instance Eq HelperWord where
+  Wordx (Word a) == Wordx (Word b) = a == b
+
+instance Ord HelperWord where
+  compare (Wordx (Word a)) (Wordx (Word b)) = compare a b
+  Wordx (Word a) <= Wordx (Word b) = a <= b
+
+instance Show HelperWord where
+  showsPrec d (Wordx (Word x)) = showsPrec d x
+
+instance Read HelperWord where
+  readsPrec d text = [(fromInteger x, rest) | (x, rest) <- readsPrec d text]
+
+instance Num HelperWord where
+  Wordx (Word a) + Wordx (Word b) = Wordx (Word (wrapUnsignedInteger 64 (a + b)))
+  Wordx (Word a) - Wordx (Word b) = Wordx (Word (wrapUnsignedInteger 64 (a - b)))
+  Wordx (Word a) * Wordx (Word b) = Wordx (Word (wrapUnsignedInteger 64 (a * b)))
+  negate (Wordx (Word a)) = Wordx (Word (wrapUnsignedInteger 64 (negate a)))
+  abs (Wordx (Word a)) = Wordx (Word (wrapUnsignedInteger 64 (abs a)))
+  signum (Wordx (Word a)) = Wordx (Word (signum a))
+  fromInteger x = Wordx (Word (wrapUnsignedInteger 64 (x)))
+
+instance Enum HelperWord where
+  toEnum x = Wordx (Word (wrapUnsignedInteger 64 (toInteger x)))
+  fromEnum (Wordx (Word x)) = fromInteger x
+  enumFrom x = enumFromTo x maxBound
+  enumFromThen x y = enumFromThenTo x y (if y >= x then maxBound else minBound)
+  enumFromTo (Wordx (Word a)) (Wordx (Word b)) = map (Wordx . Word) (enumFromTo a b)
+  enumFromThenTo (Wordx (Word a)) (Wordx (Word b)) (Wordx (Word c)) = map (Wordx . Word) (enumFromThenTo a b c)
+
+instance Real HelperWord where
+  toRational (Wordx (Word x)) = toRational x
+
+instance Integral HelperWord where
+  quotRem (Wordx (Word a)) (Wordx (Word b)) = case quotRem a b of
+    (q, r) -> (Wordx (Word (wrapUnsignedInteger 64 (q))), Wordx (Word r))
+  divMod (Wordx (Word a)) (Wordx (Word b)) = case divMod a b of
+    (q, r) -> (Wordx (Word (wrapUnsignedInteger 64 (q))), Wordx (Word r))
+  toInteger (Wordx (Word x)) = x
+
+instance Bounded HelperWord where
+  minBound = Wordx (Word (0))
+  maxBound = Wordx (Word (2 ^ (64 :: Int) - 1))
+
+instance Ix HelperWord where
+  range (low, high) = [low .. high]
+  index bounds@(low, high) i
+    | low <= i && i <= high = fromInteger (toInteger i - toInteger low)
+    | otherwise = errorWithoutStackTrace ("Ix{Word}.index: Index " ++ showsPrec 11 i "" ++ " out of range (" ++ showsPrec 11 bounds "" ++ ")")
+  inRange (low, high) i = low <= i && i <= high
+
+newtype HelperWord8 = Word8x Word8
+
+instance Eq HelperWord8 where
+  Word8x (Word8 a) == Word8x (Word8 b) = a == b
+
+instance Ord HelperWord8 where
+  compare (Word8x (Word8 a)) (Word8x (Word8 b)) = compare a b
+  Word8x (Word8 a) <= Word8x (Word8 b) = a <= b
+
+instance Show HelperWord8 where
+  showsPrec d (Word8x (Word8 x)) = showsPrec d x
+
+instance Read HelperWord8 where
+  readsPrec d text = [(fromInteger x, rest) | (x, rest) <- readsPrec d text]
+
+instance Num HelperWord8 where
+  Word8x (Word8 a) + Word8x (Word8 b) = Word8x (Word8 (wrapUnsignedInteger 8 (a + b)))
+  Word8x (Word8 a) - Word8x (Word8 b) = Word8x (Word8 (wrapUnsignedInteger 8 (a - b)))
+  Word8x (Word8 a) * Word8x (Word8 b) = Word8x (Word8 (wrapUnsignedInteger 8 (a * b)))
+  negate (Word8x (Word8 a)) = Word8x (Word8 (wrapUnsignedInteger 8 (negate a)))
+  abs (Word8x (Word8 a)) = Word8x (Word8 (wrapUnsignedInteger 8 (abs a)))
+  signum (Word8x (Word8 a)) = Word8x (Word8 (signum a))
+  fromInteger x = Word8x (Word8 (wrapUnsignedInteger 8 (x)))
+
+instance Enum HelperWord8 where
+  toEnum x = Word8x (Word8 (wrapUnsignedInteger 8 (toInteger x)))
+  fromEnum (Word8x (Word8 x)) = fromInteger x
+  enumFrom x = enumFromTo x maxBound
+  enumFromThen x y = enumFromThenTo x y (if y >= x then maxBound else minBound)
+  enumFromTo (Word8x (Word8 a)) (Word8x (Word8 b)) = map (Word8x . Word8) (enumFromTo a b)
+  enumFromThenTo (Word8x (Word8 a)) (Word8x (Word8 b)) (Word8x (Word8 c)) = map (Word8x . Word8) (enumFromThenTo a b c)
+
+instance Real HelperWord8 where
+  toRational (Word8x (Word8 x)) = toRational x
+
+instance Integral HelperWord8 where
+  quotRem (Word8x (Word8 a)) (Word8x (Word8 b)) = case quotRem a b of
+    (q, r) -> (Word8x (Word8 (wrapUnsignedInteger 8 (q))), Word8x (Word8 r))
+  divMod (Word8x (Word8 a)) (Word8x (Word8 b)) = case divMod a b of
+    (q, r) -> (Word8x (Word8 (wrapUnsignedInteger 8 (q))), Word8x (Word8 r))
+  toInteger (Word8x (Word8 x)) = x
+
+instance Bounded HelperWord8 where
+  minBound = Word8x (Word8 (0))
+  maxBound = Word8x (Word8 (2 ^ (8 :: Int) - 1))
+
+instance Ix HelperWord8 where
+  range (low, high) = [low .. high]
+  index bounds@(low, high) i
+    | low <= i && i <= high = fromInteger (toInteger i - toInteger low)
+    | otherwise = errorWithoutStackTrace ("Ix{Word8}.index: Index " ++ showsPrec 11 i "" ++ " out of range (" ++ showsPrec 11 bounds "" ++ ")")
+  inRange (low, high) i = low <= i && i <= high
+
+newtype HelperWord16 = Word16x Word16
+
+instance Eq HelperWord16 where
+  Word16x (Word16 a) == Word16x (Word16 b) = a == b
+
+instance Ord HelperWord16 where
+  compare (Word16x (Word16 a)) (Word16x (Word16 b)) = compare a b
+  Word16x (Word16 a) <= Word16x (Word16 b) = a <= b
+
+instance Show HelperWord16 where
+  showsPrec d (Word16x (Word16 x)) = showsPrec d x
+
+instance Read HelperWord16 where
+  readsPrec d text = [(fromInteger x, rest) | (x, rest) <- readsPrec d text]
+
+instance Num HelperWord16 where
+  Word16x (Word16 a) + Word16x (Word16 b) = Word16x (Word16 (wrapUnsignedInteger 16 (a + b)))
+  Word16x (Word16 a) - Word16x (Word16 b) = Word16x (Word16 (wrapUnsignedInteger 16 (a - b)))
+  Word16x (Word16 a) * Word16x (Word16 b) = Word16x (Word16 (wrapUnsignedInteger 16 (a * b)))
+  negate (Word16x (Word16 a)) = Word16x (Word16 (wrapUnsignedInteger 16 (negate a)))
+  abs (Word16x (Word16 a)) = Word16x (Word16 (wrapUnsignedInteger 16 (abs a)))
+  signum (Word16x (Word16 a)) = Word16x (Word16 (signum a))
+  fromInteger x = Word16x (Word16 (wrapUnsignedInteger 16 (x)))
+
+instance Enum HelperWord16 where
+  toEnum x = Word16x (Word16 (wrapUnsignedInteger 16 (toInteger x)))
+  fromEnum (Word16x (Word16 x)) = fromInteger x
+  enumFrom x = enumFromTo x maxBound
+  enumFromThen x y = enumFromThenTo x y (if y >= x then maxBound else minBound)
+  enumFromTo (Word16x (Word16 a)) (Word16x (Word16 b)) = map (Word16x . Word16) (enumFromTo a b)
+  enumFromThenTo (Word16x (Word16 a)) (Word16x (Word16 b)) (Word16x (Word16 c)) = map (Word16x . Word16) (enumFromThenTo a b c)
+
+instance Real HelperWord16 where
+  toRational (Word16x (Word16 x)) = toRational x
+
+instance Integral HelperWord16 where
+  quotRem (Word16x (Word16 a)) (Word16x (Word16 b)) = case quotRem a b of
+    (q, r) -> (Word16x (Word16 (wrapUnsignedInteger 16 (q))), Word16x (Word16 r))
+  divMod (Word16x (Word16 a)) (Word16x (Word16 b)) = case divMod a b of
+    (q, r) -> (Word16x (Word16 (wrapUnsignedInteger 16 (q))), Word16x (Word16 r))
+  toInteger (Word16x (Word16 x)) = x
+
+instance Bounded HelperWord16 where
+  minBound = Word16x (Word16 (0))
+  maxBound = Word16x (Word16 (2 ^ (16 :: Int) - 1))
+
+instance Ix HelperWord16 where
+  range (low, high) = [low .. high]
+  index bounds@(low, high) i
+    | low <= i && i <= high = fromInteger (toInteger i - toInteger low)
+    | otherwise = errorWithoutStackTrace ("Ix{Word16}.index: Index " ++ showsPrec 11 i "" ++ " out of range (" ++ showsPrec 11 bounds "" ++ ")")
+  inRange (low, high) i = low <= i && i <= high
+
+newtype HelperWord32 = Word32x Word32
+
+instance Eq HelperWord32 where
+  Word32x (Word32 a) == Word32x (Word32 b) = a == b
+
+instance Ord HelperWord32 where
+  compare (Word32x (Word32 a)) (Word32x (Word32 b)) = compare a b
+  Word32x (Word32 a) <= Word32x (Word32 b) = a <= b
+
+instance Show HelperWord32 where
+  showsPrec d (Word32x (Word32 x)) = showsPrec d x
+
+instance Read HelperWord32 where
+  readsPrec d text = [(fromInteger x, rest) | (x, rest) <- readsPrec d text]
+
+instance Num HelperWord32 where
+  Word32x (Word32 a) + Word32x (Word32 b) = Word32x (Word32 (wrapUnsignedInteger 32 (a + b)))
+  Word32x (Word32 a) - Word32x (Word32 b) = Word32x (Word32 (wrapUnsignedInteger 32 (a - b)))
+  Word32x (Word32 a) * Word32x (Word32 b) = Word32x (Word32 (wrapUnsignedInteger 32 (a * b)))
+  negate (Word32x (Word32 a)) = Word32x (Word32 (wrapUnsignedInteger 32 (negate a)))
+  abs (Word32x (Word32 a)) = Word32x (Word32 (wrapUnsignedInteger 32 (abs a)))
+  signum (Word32x (Word32 a)) = Word32x (Word32 (signum a))
+  fromInteger x = Word32x (Word32 (wrapUnsignedInteger 32 (x)))
+
+instance Enum HelperWord32 where
+  toEnum x = Word32x (Word32 (wrapUnsignedInteger 32 (toInteger x)))
+  fromEnum (Word32x (Word32 x)) = fromInteger x
+  enumFrom x = enumFromTo x maxBound
+  enumFromThen x y = enumFromThenTo x y (if y >= x then maxBound else minBound)
+  enumFromTo (Word32x (Word32 a)) (Word32x (Word32 b)) = map (Word32x . Word32) (enumFromTo a b)
+  enumFromThenTo (Word32x (Word32 a)) (Word32x (Word32 b)) (Word32x (Word32 c)) = map (Word32x . Word32) (enumFromThenTo a b c)
+
+instance Real HelperWord32 where
+  toRational (Word32x (Word32 x)) = toRational x
+
+instance Integral HelperWord32 where
+  quotRem (Word32x (Word32 a)) (Word32x (Word32 b)) = case quotRem a b of
+    (q, r) -> (Word32x (Word32 (wrapUnsignedInteger 32 (q))), Word32x (Word32 r))
+  divMod (Word32x (Word32 a)) (Word32x (Word32 b)) = case divMod a b of
+    (q, r) -> (Word32x (Word32 (wrapUnsignedInteger 32 (q))), Word32x (Word32 r))
+  toInteger (Word32x (Word32 x)) = x
+
+instance Bounded HelperWord32 where
+  minBound = Word32x (Word32 (0))
+  maxBound = Word32x (Word32 (2 ^ (32 :: Int) - 1))
+
+instance Ix HelperWord32 where
+  range (low, high) = [low .. high]
+  index bounds@(low, high) i
+    | low <= i && i <= high = fromInteger (toInteger i - toInteger low)
+    | otherwise = errorWithoutStackTrace ("Ix{Word32}.index: Index " ++ showsPrec 11 i "" ++ " out of range (" ++ showsPrec 11 bounds "" ++ ")")
+  inRange (low, high) i = low <= i && i <= high
+
+newtype HelperWord64 = Word64x Word64
+
+instance Eq HelperWord64 where
+  Word64x (Word64 a) == Word64x (Word64 b) = a == b
+
+instance Ord HelperWord64 where
+  compare (Word64x (Word64 a)) (Word64x (Word64 b)) = compare a b
+  Word64x (Word64 a) <= Word64x (Word64 b) = a <= b
+
+instance Show HelperWord64 where
+  showsPrec d (Word64x (Word64 x)) = showsPrec d x
+
+instance Read HelperWord64 where
+  readsPrec d text = [(fromInteger x, rest) | (x, rest) <- readsPrec d text]
+
+instance Num HelperWord64 where
+  Word64x (Word64 a) + Word64x (Word64 b) = Word64x (Word64 (wrapUnsignedInteger 64 (a + b)))
+  Word64x (Word64 a) - Word64x (Word64 b) = Word64x (Word64 (wrapUnsignedInteger 64 (a - b)))
+  Word64x (Word64 a) * Word64x (Word64 b) = Word64x (Word64 (wrapUnsignedInteger 64 (a * b)))
+  negate (Word64x (Word64 a)) = Word64x (Word64 (wrapUnsignedInteger 64 (negate a)))
+  abs (Word64x (Word64 a)) = Word64x (Word64 (wrapUnsignedInteger 64 (abs a)))
+  signum (Word64x (Word64 a)) = Word64x (Word64 (signum a))
+  fromInteger x = Word64x (Word64 (wrapUnsignedInteger 64 (x)))
+
+instance Enum HelperWord64 where
+  toEnum x = Word64x (Word64 (wrapUnsignedInteger 64 (toInteger x)))
+  fromEnum (Word64x (Word64 x)) = fromInteger x
+  enumFrom x = enumFromTo x maxBound
+  enumFromThen x y = enumFromThenTo x y (if y >= x then maxBound else minBound)
+  enumFromTo (Word64x (Word64 a)) (Word64x (Word64 b)) = map (Word64x . Word64) (enumFromTo a b)
+  enumFromThenTo (Word64x (Word64 a)) (Word64x (Word64 b)) (Word64x (Word64 c)) = map (Word64x . Word64) (enumFromThenTo a b c)
+
+instance Real HelperWord64 where
+  toRational (Word64x (Word64 x)) = toRational x
+
+instance Integral HelperWord64 where
+  quotRem (Word64x (Word64 a)) (Word64x (Word64 b)) = case quotRem a b of
+    (q, r) -> (Word64x (Word64 (wrapUnsignedInteger 64 (q))), Word64x (Word64 r))
+  divMod (Word64x (Word64 a)) (Word64x (Word64 b)) = case divMod a b of
+    (q, r) -> (Word64x (Word64 (wrapUnsignedInteger 64 (q))), Word64x (Word64 r))
+  toInteger (Word64x (Word64 x)) = x
+
+instance Bounded HelperWord64 where
+  minBound = Word64x (Word64 (0))
+  maxBound = Word64x (Word64 (2 ^ (64 :: Int) - 1))
+
+instance Ix HelperWord64 where
+  range (low, high) = [low .. high]
+  index bounds@(low, high) i
+    | low <= i && i <= high = fromInteger (toInteger i - toInteger low)
+    | otherwise = errorWithoutStackTrace ("Ix{Word64}.index: Index " ++ showsPrec 11 i "" ++ " out of range (" ++ showsPrec 11 bounds "" ++ ")")
+  inRange (low, high) i = low <= i && i <= high
+
 newtype HelperIO a = IOx {io :: IO a}
 
 instance Functor HelperIO where

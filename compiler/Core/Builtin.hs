@@ -20,6 +20,15 @@ import {-# SOURCE #-} qualified Builtin.Num as Num
 import {-# SOURCE #-} qualified Builtin.Ord as Ord
 import {-# SOURCE #-} qualified Builtin.Ordering as Ordering
 import {-# SOURCE #-} qualified Builtin.IO as IO
+import {-# SOURCE #-} qualified Builtin.Int8 as Int8
+import {-# SOURCE #-} qualified Builtin.Int16 as Int16
+import {-# SOURCE #-} qualified Builtin.Int32 as Int32
+import {-# SOURCE #-} qualified Builtin.Int64 as Int64
+import {-# SOURCE #-} qualified Builtin.Word as Word
+import {-# SOURCE #-} qualified Builtin.Word8 as Word8
+import {-# SOURCE #-} qualified Builtin.Word16 as Word16
+import {-# SOURCE #-} qualified Builtin.Word32 as Word32
+import {-# SOURCE #-} qualified Builtin.Word64 as Word64
 import {-# SOURCE #-} qualified Builtin.Ratio as Ratio
 import {-# SOURCE #-} qualified Builtin.Real as Real
 import {-# SOURCE #-} qualified Builtin.RealFloat as RealFloat
@@ -57,6 +66,15 @@ kind pure typex constructor = \case
     Type2.Ordering -> dataKind
     Type2.Ratio -> dataKind
     Type2.IO -> dataKind
+    Type2.Int8 -> dataKind
+    Type2.Int16 -> dataKind
+    Type2.Int32 -> dataKind
+    Type2.Int64 -> dataKind
+    Type2.Word -> dataKind
+    Type2.Word8 -> dataKind
+    Type2.Word16 -> dataKind
+    Type2.Word32 -> dataKind
+    Type2.Word64 -> dataKind
     Type2.RealWorld -> Type.typex
     Type2.Char -> Type.typex
     Type2.ST -> Type.typex -#> Type.typex -#> Type.typex
@@ -111,6 +129,15 @@ instance Builtin Data where
     Type2.Ordering -> pure Ordering.definition
     Type2.Ratio -> pure Ratio.definition
     Type2.IO -> pure IO.definition
+    Type2.Int8 -> pure Int8.definition
+    Type2.Int16 -> pure Int16.definition
+    Type2.Int32 -> pure Int32.definition
+    Type2.Int64 -> pure Int64.definition
+    Type2.Word -> pure Word.definition
+    Type2.Word8 -> pure Word8.definition
+    Type2.Word16 -> pure Word16.definition
+    Type2.Word32 -> pure Word32.definition
+    Type2.Word64 -> pure Word64.definition
     _ -> error "bad data index"
 
 instance Builtin Class where

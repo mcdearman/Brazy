@@ -19,7 +19,7 @@
 mod heap;
 
 use heap::{hazy_alloc, header, nullary, Value, ARRAY, DATA, FLOAT, INTEGER, SLICE, TEXT};
-use num_bigint::BigInt;
+use num_bigint::{BigInt, Sign};
 use num_traits::{FromPrimitive, One, Signed, ToPrimitive, Zero};
 use std::io::Write;
 use unicode_properties::{GeneralCategory, UnicodeGeneralCategory};
@@ -621,6 +621,39 @@ pub extern "C" fn hazy_ffi_double(value: Value) -> f64 {
 #[no_mangle]
 pub extern "C" fn hazy_ffi_from_double(number: f64) -> Value {
     from_floating(number)
+}
+
+/// A `Bool` as a function of C is given it: an `int` that is 1 for `True`.
+#[no_mangle]
+pub extern "C" fn hazy_ffi_bool(value: Value) -> i32 {
+    (value == nullary(1)) as i32
+}
+
+/// What a function of C gives as a `Bool`, as a value: anything but 0 is
+/// `True`.
+#[no_mangle]
+pub extern "C" fn hazy_ffi_from_bool(truth: i32) -> Value {
+    boolean(truth != 0)
+}
+
+/// An `Integer` as a function of C is given it, as a number of a fixed
+/// width: what it is modulo 2^64.
+#[no_mangle]
+pub extern "C" fn hazy_ffi_integer(value: Value) -> i64 {
+    let number = integer(value);
+    let low = number.iter_u64_digits().next().unwrap_or(0) as i64;
+    if number.sign() == Sign::Minus {
+        low.wrapping_neg()
+    } else {
+        low
+    }
+}
+
+/// What a function of C gives as a number of 64 bits with no sign, as an
+/// `Integer`.
+#[no_mangle]
+pub extern "C" fn hazy_ffi_from_unsigned(number: u64) -> Value {
+    from_integer(BigInt::from(number))
 }
 
 /// What a function of C that gives nothing gives, as a value.

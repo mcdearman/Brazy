@@ -1765,18 +1765,18 @@ foreignCall state Foreign.Call {symbol, arguments, result} values = do
     Map.insertWith (\_ old -> old) symbol $
       mconcat
         [ fromString "declare ",
-          cType result,
+          cResult result,
           fromString " @",
           fromString (unpack symbol),
           fromString "(",
-          commas (map cType arguments),
+          commas (map cParameter arguments),
           fromString ")\n"
         ]
   given <- sequence (zipWith (marshalIn state) arguments values)
   let invocation =
         mconcat
           [ fromString "call ",
-            cType result,
+            cResult result,
             fromString " @",
             fromString (unpack symbol),
             fromString "(",
@@ -1791,10 +1791,39 @@ foreignCall state Foreign.Call {symbol, arguments, result} values = do
 cType :: Foreign.Marshal -> Builder
 cType = fromString . \case
   Foreign.Int -> "i64"
+  Foreign.Int8 -> "i8"
+  Foreign.Int16 -> "i16"
+  Foreign.Int32 -> "i32"
+  Foreign.Int64 -> "i64"
+  Foreign.Word -> "i64"
+  Foreign.Word8 -> "i8"
+  Foreign.Word16 -> "i16"
+  Foreign.Word32 -> "i32"
+  Foreign.Word64 -> "i64"
   Foreign.Char -> "i32"
+  Foreign.Bool -> "i32"
   Foreign.Double -> "double"
   Foreign.Float -> "float"
   Foreign.Unit -> "void"
+
+-- |
+-- The type C has for a value, with what C does to make a small number a
+-- whole register, which it is passed and given back in.
+cParameter :: Foreign.Marshal -> Builder
+cParameter marshal = cType marshal <> foldMap (fromString . (' ' :)) (extension marshal)
+
+-- |
+-- The type C gives back, with the same, which is written before it.
+cResult :: Foreign.Marshal -> Builder
+cResult marshal = foldMap (fromString . (++ " ")) (extension marshal) <> cType marshal
+
+extension :: Foreign.Marshal -> Maybe String
+extension = \case
+  Foreign.Int8 -> Just "signext"
+  Foreign.Int16 -> Just "signext"
+  Foreign.Word8 -> Just "zeroext"
+  Foreign.Word16 -> Just "zeroext"
+  _ -> Nothing
 
 -- |
 -- A name for a step of passing a value to C or back, which is never
@@ -1830,7 +1859,41 @@ marshalIn state marshal value = case marshal of
           <> line [single, fromString " = fptrunc double ", double, fromString " to float"],
         fromString "float " <> single
       )
+  Foreign.Bool -> do
+    truth <- temporary state
+    pure (line [truth, fromString " = call i32 @hazy_ffi_bool(i64 ", value, fromString ")"], fromString "i32 " <> truth)
+  -- Kept as an Int.
+  Foreign.Int8 -> untagged
+  Foreign.Int16 -> untagged
+  Foreign.Int32 -> untagged
+  -- Kept as an Integer.
+  Foreign.Int64 -> whole
+  Foreign.Word -> whole
+  Foreign.Word64 -> whole
+  Foreign.Word8 -> integral
+  Foreign.Word16 -> integral
+  Foreign.Word32 -> integral
   Foreign.Unit -> error "a function of C is not given ()"
+  where
+    untagged = do
+      number <- temporary state
+      narrow <- temporary state
+      pure
+        ( line [number, fromString " = ashr i64 ", value, fromString ", 1"]
+            <> line [narrow, fromString " = trunc i64 ", number, fromString " to ", cType marshal],
+          cParameter marshal <> fromString " " <> narrow
+        )
+    whole = do
+      number <- temporary state
+      pure (line [number, fromString " = call i64 @hazy_ffi_integer(i64 ", value, fromString ")"], fromString "i64 " <> number)
+    integral = do
+      number <- temporary state
+      narrow <- temporary state
+      pure
+        ( line [number, fromString " = call i64 @hazy_ffi_integer(i64 ", value, fromString ")"]
+            <> line [narrow, fromString " = trunc i64 ", number, fromString " to ", cType marshal],
+          cParameter marshal <> fromString " " <> narrow
+        )
 
 -- |
 -- What C gives back, as a value: the code of the call and after, and the
@@ -1867,7 +1930,44 @@ marshalOut state marshal invocation = case marshal of
           <> line [value, fromString " = call i64 @hazy_ffi_from_double(double ", double, fromString ")"],
         value
       )
+  Foreign.Bool -> do
+    truth <- temporary state
+    value <- local state
+    pure
+      ( line [truth, fromString " = ", invocation]
+          <> line [value, fromString " = call i64 @hazy_ffi_from_bool(i32 ", truth, fromString ")"],
+        value
+      )
+  -- Kept as an Int: widened with its sign.
+  Foreign.Int8 -> widened "sext"
+  Foreign.Int16 -> widened "sext"
+  Foreign.Int32 -> widened "sext"
+  -- Kept as an Integer.
+  Foreign.Int64 -> boxed "hazy_integer" Nothing
+  Foreign.Word8 -> boxed "hazy_integer" (Just "zext")
+  Foreign.Word16 -> boxed "hazy_integer" (Just "zext")
+  Foreign.Word32 -> boxed "hazy_integer" (Just "zext")
+  Foreign.Word -> boxed "hazy_ffi_from_unsigned" Nothing
+  Foreign.Word64 -> boxed "hazy_ffi_from_unsigned" Nothing
   where
+    widened extend = do
+      narrow <- temporary state
+      number <- temporary state
+      tagged number $
+        line [narrow, fromString " = ", invocation]
+          <> line [number, fromString " = ", fromString extend, fromString " ", cType marshal, fromString " ", narrow, fromString " to i64"]
+    boxed make extend = do
+      given <- temporary state
+      number <- case extend of
+        Nothing -> pure given
+        Just _ -> temporary state
+      value <- local state
+      pure
+        ( line [given, fromString " = ", invocation]
+            <> foldMap (\extend -> line [number, fromString " = ", fromString extend, fromString " ", cType marshal, fromString " ", given, fromString " to i64"]) extend
+            <> line [value, fromString " = call i64 @", fromString make, fromString "(i64 ", number, fromString ")"],
+          value
+        )
     -- A number as a value: shifted left by one, and odd.
     tagged number code = do
       shifted <- temporary state
@@ -1925,6 +2025,10 @@ runtime =
   declare double @hazy_ffi_double(i64)
   declare i64 @hazy_ffi_from_double(double)
   declare i64 @hazy_ffi_unit()
+  declare i32 @hazy_ffi_bool(i64)
+  declare i64 @hazy_ffi_from_bool(i32)
+  declare i64 @hazy_ffi_integer(i64)
+  declare i64 @hazy_ffi_from_unsigned(i64)
   declare i64 @hazy_prim_error(i64)
   declare i64 @hazy_prim_put_str_ln(i64)
   declare i64 @hazy_prim_text_snoc(i64, i64)
