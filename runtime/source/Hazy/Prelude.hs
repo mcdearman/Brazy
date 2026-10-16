@@ -245,28 +245,9 @@ either :: (a -> c) -> (b -> c) -> Either a b -> c
 either f g (Left x) = f x
 either f g (Right y) = g y
 
-data RealWorld
-
-newtype IO a = IO {runIO :: ST RealWorld a}
-
-instance Functor IO where
-  fmap = liftM
-
-instance Applicative IO where
-  pure x = IO (pure x)
-  (<*>) = ap
-
-instance Monad IO where
-  IO m >>= f = IO (m >>= (runIO . f))
-
-instance MonadFail IO where
-  fail s = ioError (userError s)
-
-instance (Semigroup a) => Semigroup (IO a) where
-  IO a <> IO b = IO (a <> b)
-
-instance (Monoid a) => Monoid (IO a) where
-  mempty = IO mempty
+-- What an action does, as an action of the state of the world.
+runIO :: IO a -> ST RealWorld a
+runIO (IO action) = action
 
 -- A number of 64 bits with no sign, which Data.Word gives out as well.
 newtype Word = Word Integer

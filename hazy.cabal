@@ -83,6 +83,7 @@ executable hazy
     Builtin.Num
     Builtin.Ord
     Builtin.Ordering
+    Builtin.IO
     Builtin.Ratio
     Builtin.Read
     Builtin.Real

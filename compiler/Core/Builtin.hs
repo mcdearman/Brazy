@@ -19,6 +19,7 @@ import {-# SOURCE #-} qualified Builtin.NonEmpty as NonEmpty
 import {-# SOURCE #-} qualified Builtin.Num as Num
 import {-# SOURCE #-} qualified Builtin.Ord as Ord
 import {-# SOURCE #-} qualified Builtin.Ordering as Ordering
+import {-# SOURCE #-} qualified Builtin.IO as IO
 import {-# SOURCE #-} qualified Builtin.Ratio as Ratio
 import {-# SOURCE #-} qualified Builtin.Real as Real
 import {-# SOURCE #-} qualified Builtin.RealFloat as RealFloat
@@ -55,6 +56,8 @@ kind pure typex constructor = \case
     Type2.Tuple {} -> dataKind
     Type2.Ordering -> dataKind
     Type2.Ratio -> dataKind
+    Type2.IO -> dataKind
+    Type2.RealWorld -> Type.typex
     Type2.Char -> Type.typex
     Type2.ST -> Type.typex -#> Type.typex -#> Type.typex
     Type2.Arrow -> Type.typex -#> Type.typex -#> Type.typex
@@ -107,6 +110,7 @@ instance Builtin Data where
     Type2.Tuple n -> pure (Tuple.definition n)
     Type2.Ordering -> pure Ordering.definition
     Type2.Ratio -> pure Ratio.definition
+    Type2.IO -> pure IO.definition
     _ -> error "bad data index"
 
 instance Builtin Class where
