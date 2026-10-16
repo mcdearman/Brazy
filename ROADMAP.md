@@ -1556,12 +1556,19 @@ Missing:
       the runtime has for each width. The AxCut machine keeps memory of its
       own for them, a byte at each address (test `foreign-memory`, which
       agrees with GHC)
+- [x] `Foreign.C`: `Foreign.C.Types`, each the type of a fixed width it is on
+      a 64-bit system other than Windows, and `Foreign.C.String`, which
+      writes and reads UTF-8 (test `foreign-c`, which agrees with GHC).
+      Each of C's types is a name for that type, where GHC has a newtype
+      of it, because the compiler does not see through a newtype a foreign
+      function is given. So there are no constructors to match, and `long`
+      is 64 bits on Windows as well, where C has 32
 - [ ] What the foreign function interface does not do yet: `foreign export`,
       an import of an address (`&`) or by a pointer to a function
-      (`dynamic`, `wrapper`), a newtype of a type C is given, and so
-      `Foreign.C`'s types, and `finalizerFree`. What is had for a while by
-      `alloca` and its kin is not given back if the action throws, as
-      there is no `bracket` yet
+      (`dynamic`, `wrapper`), a newtype of a type C is given (and then
+      `Foreign.C.Types` as GHC's newtypes), `Foreign.C.Error`, and
+      `finalizerFree`. What is had for a while by `alloca` and its kin is
+      not given back if the action throws, as there is no `bracket` yet
 - [x] GADTs: see M6
 - [x] Polymorphic components: see M6
 - [ ] Strict functions
