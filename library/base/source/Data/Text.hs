@@ -34,6 +34,7 @@ module Data.Text
     foldl1,
     foldl1,
     foldr,
+    foldr',
     foldr,
     foldr1,
     concat,
@@ -106,14 +107,14 @@ where
 import qualified Data.Char as Char (isAlpha, isAscii, isSpace, toLower, toUpper)
 import qualified Data.List as List
   ( dropWhileEnd, groupBy, inits, intercalate, intersperse, isInfixOf, isPrefixOf, isSuffixOf,
-    stripPrefix, tails, transpose )
+    findIndex, stripPrefix, tails, transpose )
 import Hazy
   ( primTextAppend, primTextConcat, primTextDrop, primTextHead, primTextIsPrefixOf, primTextLength, primTextNull,
     primTextSnoc, primTextTail, primTextTake )
 import qualified Hazy.Prelude as Hazy (unpack)
 import Prelude hiding (all, any, break, concat, concatMap, drop, dropWhile, elem, filter, foldl, foldl1, foldr, foldr1, head, init, last, length, lines, map, maximum, minimum, null, replicate, reverse, scanl, scanl1, scanr, scanr1, span, splitAt, tail, take, takeWhile, unlines, unwords, words, zip, zipWith)
 import qualified Prelude
-import Hazy.Prelude (Text, pack, placeholder)
+import Hazy.Prelude (Text, pack)
 
 unpack :: Text -> String
 unpack = Hazy.unpack
@@ -242,7 +243,10 @@ foldr :: (Char -> a -> a) -> a -> Text -> a
 foldr f z text = Prelude.foldr f z (unpack text)
 
 foldr' :: (Char -> a -> a) -> a -> Text -> a
-foldr' = placeholder
+foldr' f z = go z . Prelude.reverse . unpack
+  where
+    go so [] = so
+    go so (c : rest) = let so' = f c so in so' `seq` go so' rest
 
 foldr1 :: (Char -> Char -> Char) -> Text -> Char
 foldr1 f text = Prelude.foldr1 f (unpack text)
@@ -361,7 +365,10 @@ breakOn needle text = case found (unpack needle) (unpack text) of
   (before, after) -> (pack before, pack after)
 
 breakOnEnd :: Text -> Text -> (Text, Text)
-breakOnEnd = placeholder
+-- | Before and after the last time the first is found: what is before ends
+-- with it.
+breakOnEnd needle haystack = case breakOn (reverse needle) (reverse haystack) of
+  (after, before) -> (reverse before, reverse after)
 
 break :: (Char -> Bool) -> Text -> (Text, Text)
 break p = span (not . p)
@@ -372,10 +379,20 @@ span p text = (primTextTake count text, primTextDrop count text)
     count = run p text
 
 spanM :: (Monad m) => (Char -> m Bool) -> Text -> m (Text, Text)
-spanM = placeholder
+spanM p text = go [] (unpack text)
+  where
+    go taken [] = pure (pack (Prelude.reverse taken), empty)
+    go taken rest@(c : more) = do
+      keep <- p c
+      if keep then go (c : taken) more else pure (pack (Prelude.reverse taken), pack rest)
 
 spanEndM :: (Monad m) => (Char -> m Bool) -> Text -> m (Text, Text)
-spanEndM = placeholder
+spanEndM p text = go [] (Prelude.reverse (unpack text))
+  where
+    go taken [] = pure (empty, pack taken)
+    go taken rest@(c : more) = do
+      keep <- p c
+      if keep then go (c : taken) more else pure (pack (Prelude.reverse rest), pack taken)
 
 group :: Text -> [Text]
 group = groupBy (==)
@@ -448,13 +465,31 @@ stripSuffix suffix text = case List.stripPrefix (Prelude.reverse (unpack suffix)
   Nothing -> Nothing
 
 commonPrefixes :: Text -> Text -> Maybe (Text, Text, Text)
-commonPrefixes = placeholder
+commonPrefixes a b = case go (unpack a) (unpack b) of
+  ([], _, _) -> Nothing
+  (common, a', b') -> Just (pack common, pack a', pack b')
+  where
+    go (x : xs) (y : ys) | x == y = case go xs ys of
+      (common, xs', ys') -> (x : common, xs', ys')
+    go xs ys = ([], xs, ys)
 
 filter :: (Char -> Bool) -> Text -> Text
 filter p = lift (Prelude.filter p)
 
 breakOnAll :: Text -> Text -> [(Text, Text)]
-breakOnAll = placeholder
+-- | Each time the first is found, without overlap: what is before it, and
+-- it with what is after.
+breakOnAll needle haystack
+  | null needle = errorWithoutStackTrace "Data.Text.breakOnAll: empty input"
+  | otherwise = go [] (unpack haystack)
+  where
+    wanted = unpack needle
+    go _ [] = []
+    go before rest@(c : more)
+      | List.isPrefixOf wanted rest =
+          (pack (Prelude.reverse before), pack rest)
+            : go (Prelude.reverse wanted ++ before) (Prelude.drop (Prelude.length wanted) rest)
+      | otherwise = go (c : before) more
 
 find :: (Char -> Bool) -> Text -> Maybe Char
 find p text = case Prelude.filter p (unpack text) of
@@ -471,7 +506,7 @@ index :: Text -> Int -> Char
 index text position = unpack text !! measure position
 
 findIndex :: (Char -> Bool) -> Text -> Maybe Int
-findIndex = placeholder
+findIndex p = List.findIndex p . unpack
 
 count :: Text -> Text -> Int
 count needle text = tally (Prelude.length (splitOn needle text) - 1)
@@ -486,7 +521,18 @@ copy :: Text -> Text
 copy text = text
 
 measureOff :: Int -> Text -> Int
-measureOff = placeholder
+-- | How many bytes of UTF-8 the first so many characters take, if there are
+-- so many; and if not, how many characters there are, negated.
+measureOff n text
+  | Prelude.length characters < n = negate (Prelude.length characters)
+  | otherwise = Prelude.sum (Prelude.map bytes (Prelude.take n characters))
+  where
+    characters = unpack text
+    bytes c
+      | fromEnum c < 0x80 = 1
+      | fromEnum c < 0x800 = 2
+      | fromEnum c < 0x10000 = 3
+      | otherwise = 4
 
 -- How many characters at the start of a text are as asked. No more of the
 -- text is looked at than those and one more.
