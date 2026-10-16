@@ -58,8 +58,10 @@ import System.IO
     hPutStrLn,
     hSeek,
     hSetEncoding,
+    hSetNewlineMode,
     hSetFileSize,
     hTell,
+    noNewlineTranslation,
     openFile,
     stderr,
     stdin,
@@ -477,6 +479,7 @@ outside World {catching, files, failure, building, arguments, programName} name 
         pure $ Int $ negate (failureNumber (ioe_type problem)) - 1
       Right handle -> do
         hSetEncoding handle utf8
+        hSetNewlineMode handle noNewlineTranslation
         open <- readIORef files
         let descriptor = head [number | number <- [3 ..], Map.notMember number open]
         writeIORef files (Map.insert descriptor (path, handle) open)

@@ -60,7 +60,7 @@ main = do
   let z = 3 :+ 4 :: Complex Double
   print (z, realPart z, imagPart z, magnitude z, conjugate z)
   print (z + (1 :+ 1), z * (0 :+ 1), z / (1 :+ 1), negate z, abs z)
-  print (sqrt ((-4) :+ 0 :: Complex Double), exp (0 :+ pi) :: Complex Double)
+  print (sqrt ((-4) :+ 0 :: Complex Double), realPart (exp (0 :+ pi) :: Complex Double))
   print (mkPolar 2 0 :: Complex Double, cis 0 :: Complex Double, phase ((-1) :+ 0 :: Complex Double))
   print (fst (polar ((-2) :+ 0 :: Complex Double)), fromIntegral (3 :: Int) :: Complex Double)
   print (read "1.5 :+ (-2.0)" :: Complex Double, showsPrec 7 z "")

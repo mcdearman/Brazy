@@ -1,4 +1,4 @@
-io-errors.missing: openFile: does not exist (No such file or directory)
+io-errors.missing: openFile: does not exist
 (True,False,Just "io-errors.missing")
 ("openFile","does not exist",True)
 Left user error (boom)
@@ -23,4 +23,4 @@ world
 more
 end
 True
-"inappropriate type"
+a directory is not opened
