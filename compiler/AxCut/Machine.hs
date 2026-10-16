@@ -24,6 +24,9 @@ import Data.Bits (popCount, shift, xor, (.&.), (.|.))
 import qualified Core.Foreign as Foreign
 import Data.Char (chr, generalCategory, isAlpha, isDigit, isSpace, ord, toLower, toUpper)
 import Data.IORef (IORef, modifyIORef, newIORef, readIORef, writeIORef)
+import Data.Foldable (for_)
+import Data.Word (Word8)
+import GHC.Float (castDoubleToWord64, castFloatToWord32, castWord32ToFloat, castWord64ToDouble)
 import Data.List (sort)
 import Data.Map (Map)
 import Data.Vector (Vector)
@@ -98,7 +101,12 @@ data World = World
     arguments :: !(IORef [Text]),
     programName :: !(IORef Text),
     -- | The texts that are being built, each as its pieces, the last first.
-    building :: !(IORef (Map Int [Text]))
+    building :: !(IORef (Map Int [Text])),
+    -- | The memory that C's library gives out: the bytes that have been
+    -- written, each at its address, and the blocks given out, each at its
+    -- address with its size. A byte that was never written is 0.
+    memory :: !(IORef (Map Int Word8)),
+    blocks :: !(IORef (Map Int Int))
   }
 
 -- |
@@ -133,7 +141,9 @@ run Program {definitions, entry} = do
   arguments <- newIORef []
   programName <- newIORef (Text.pack "<interactive>")
   building <- newIORef Map.empty
-  execute World {catching, files, failure, arguments, programName, building} globals entry []
+  memory <- newIORef Map.empty
+  blocks <- newIORef Map.empty
+  execute World {catching, files, failure, arguments, programName, building, memory, blocks} globals entry []
 
 allocate :: Object -> Environment -> IO (IORef Cell)
 allocate Object {kind, method, parameters, body} environment = newIORef $ case kind of
@@ -274,7 +284,7 @@ execute world globals = go
 apply :: World -> Primitive -> [Value] -> IO Value
 apply world primitive arguments = case (primitive, arguments) of
   (Foreign name _, _) -> outside world (unpack name) arguments
-  (Call call, _) -> callC call arguments
+  (Call call, _) -> callC world call arguments
   (Field index, [Data _ fields])
     | index < length fields -> pure $ fields !! index
   (Error, [Text message]) -> do
@@ -399,8 +409,41 @@ placed array index = do
 -- A function of C, as the machine does it. The machine cannot call C, and
 -- knows only some of the functions of its library: those of numbers and of
 -- characters, which give the same in either.
-callC :: Foreign.Call -> [Value] -> IO Value
-callC Foreign.Call {symbol, result} given = case (unpack symbol, given) of
+callC :: World -> Foreign.Call -> [Value] -> IO Value
+callC World {memory, blocks} Foreign.Call {symbol, result} given = case (unpack symbol, given) of
+  -- Memory, as C's library gives it out. A block is put after the last,
+  -- on a boundary of 16 bytes, and none is used again.
+  ("malloc", [Int size]) -> Int <$> allocate size
+  ("calloc", [Int count, Int size]) -> Int <$> allocate (count * size)
+  ("realloc", [Int old, Int size]) -> do
+    new <- allocate size
+    known <- readIORef blocks
+    copy new old (min size (Map.findWithDefault 0 (fromIntegral old) known))
+    pure $ Int new
+  ("free", [Int address]) -> unit <$ modifyIORef blocks (Map.delete (fromIntegral address))
+  ("memcpy", [Int target, Int source, Int count]) -> unit <$ copy target source count
+  ("memmove", [Int target, Int source, Int count]) -> unit <$ copy target source count
+  ("memchr", [Int address, Int byte, Int count]) -> do
+    bytes <- for [0 .. count - 1] (\offset -> readBytes (address + offset) 1)
+    pure $ Int $ case lookup (toInteger byte `mod` 256) (zip bytes [0 ..]) of
+      Just offset -> address + offset
+      Nothing -> 0
+  ("memset", [Int target, Int byte, Int count]) ->
+    unit <$ for_ [0 .. count - 1] (\offset -> write (target + offset) 1 (toInteger byte))
+  -- What the runtime reads and writes memory with.
+  ('h' : 'a' : 'z' : 'y' : '_' : 'p' : 'e' : 'e' : 'k' : '_' : what, [Int address]) -> case what of
+    "f32" -> Floating . realToFrac . castWord32ToFloat . fromInteger <$> readBytes address 4
+    "f64" -> Floating . castWord64ToDouble . fromInteger <$> readBytes address 8
+    "ptr" -> Int . fromInteger <$> readBytes address 8
+    'i' : bits -> signed (read bits) <$> readBytes address (read bits `div` 8)
+    _ -> Integer <$> readBytes address (read (drop 1 what) `div` 8)
+  ('h' : 'a' : 'z' : 'y' : '_' : 'p' : 'o' : 'k' : 'e' : '_' : what, [Int address, value]) ->
+    unit <$ case (what, value) of
+      ("f32", Floating x) -> write address 4 (toInteger (castFloatToWord32 (realToFrac x)))
+      ("f64", Floating x) -> write address 8 (toInteger (castDoubleToWord64 x))
+      (_, Int n) -> write address (width what) (toInteger n)
+      (_, Integer n) -> write address (width what) n
+      _ -> bug "a value of the wrong kind was written to memory"
   (name, [Floating x])
     | Just f <- lookup name doubles -> pure $ floating (f x)
     | Just f <- single name -> pure $ floating (f x)
@@ -422,6 +465,34 @@ callC Foreign.Call {symbol, result} given = case (unpack symbol, given) of
     hPutStrLn stderr ("the machine cannot call the C function " ++ name ++ "; compile the program to native code to call it")
     exitFailure
   where
+    -- Kept as an Int if it is narrower than an Int, and as an Integer if
+    -- it is not.
+    signed :: Int -> Integer -> Value
+    signed bits n
+      | bits < 64 = Int (fromInteger value)
+      | otherwise = Integer value
+      where
+        value = if n >= 2 ^ (bits - 1) then n - 2 ^ bits else n
+    width what = case what of
+      "ptr" -> 8
+      _ -> read (drop 1 what) `div` 8
+    allocate size = do
+      known <- readIORef blocks
+      let next = case Map.lookupMax known of
+            Nothing -> 65536
+            Just (address, taken) -> (address + max taken 1 + 15) `div` 16 * 16
+      modifyIORef blocks (Map.insert next (fromIntegral size))
+      pure (fromIntegral next)
+    copy target source count = do
+      bytes <- for [0 .. count - 1] (\offset -> readBytes (source + offset) 1)
+      for_ (zip [0 ..] bytes) (\(offset, byte) -> write (target + offset) 1 byte)
+    -- What is at an address, little-endian.
+    readBytes address count = do
+      bytes <- readIORef memory
+      pure $ foldr (\offset n -> n * 256 + toInteger (Map.findWithDefault 0 (fromIntegral address + offset) bytes)) 0 [0 .. fromIntegral count - 1]
+    write address count n =
+      modifyIORef memory $ \bytes ->
+        foldr (\offset -> Map.insert (fromIntegral address + offset) (fromInteger ((n `div` 2 ^ (8 * offset)) `mod` 256))) bytes [0 .. fromIntegral count - 1]
     floating x = Floating $ case result of
       Foreign.Float -> realToFrac (realToFrac x :: Float)
       _ -> x

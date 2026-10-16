@@ -122,6 +122,8 @@ run normal All {bool, list, nonEmpty, tuplex, ordering, ratio, io, sized} Index 
     Type2.Ordering -> ordering (toEnum constructorIndex)
     Type2.Ratio -> ratio (toEnum constructorIndex)
     Type2.IO -> io (toEnum constructorIndex)
+    Type2.Ptr -> sized "Ptr"
+    Type2.FunPtr -> sized "FunPtr"
     Type2.Int8 -> sized "Int8"
     Type2.Int16 -> sized "Int16"
     Type2.Int32 -> sized "Int32"

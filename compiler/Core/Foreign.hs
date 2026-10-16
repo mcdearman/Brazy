@@ -8,6 +8,7 @@ module Core.Foreign
   )
 where
 
+import qualified Core.Tree.Constraints as Constraints (ConstraintsF (..))
 import Core.Tree.Forall (ForallOver (..))
 import Core.Tree.Type (TypeF)
 import qualified Core.Tree.Type as Type
@@ -36,6 +37,7 @@ data Marshal
   | Float
   | Char
   | Bool
+  | Pointer
   | Unit
   deriving (Eq, Ord, Show)
 
@@ -49,9 +51,13 @@ data Call = Call
   }
   deriving (Eq, Ord, Show)
 
+-- A type may have variables, as the type an address is of; but what is
+-- required of them would be given to the function, which C does not take.
 call :: Position -> Text -> ForallOver TypeF Void scope -> Call
-call position symbol ForallOver {parameters, result}
-  | not (null parameters) = unsupportedForeignType position
+call position symbol ForallOver {constraints, result}
+  | Constraints.Constraints required <- constraints,
+    not (null required) =
+      unsupportedForeignType position
   | otherwise = case go result of
       (arguments, result, action)
         | result `seq` null arguments && not action -> unsupportedForeignType position
@@ -71,6 +77,8 @@ call position symbol ForallOver {parameters, result}
       Type.Constructor Type2.Float -> Float
       Type.Constructor Type2.Char -> Char
       Type.Constructor Type2.Bool -> Bool
+      Type.Call (Type.Constructor Type2.Ptr) _ -> Pointer
+      Type.Call (Type.Constructor Type2.FunPtr) _ -> Pointer
       Type.Constructor Type2.Int8 -> Int8
       Type.Constructor Type2.Int16 -> Int16
       Type.Constructor Type2.Int32 -> Int32

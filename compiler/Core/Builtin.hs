@@ -20,6 +20,8 @@ import {-# SOURCE #-} qualified Builtin.Num as Num
 import {-# SOURCE #-} qualified Builtin.Ord as Ord
 import {-# SOURCE #-} qualified Builtin.Ordering as Ordering
 import {-# SOURCE #-} qualified Builtin.IO as IO
+import {-# SOURCE #-} qualified Builtin.Ptr as Ptr
+import {-# SOURCE #-} qualified Builtin.FunPtr as FunPtr
 import {-# SOURCE #-} qualified Builtin.Int8 as Int8
 import {-# SOURCE #-} qualified Builtin.Int16 as Int16
 import {-# SOURCE #-} qualified Builtin.Int32 as Int32
@@ -66,6 +68,8 @@ kind pure typex constructor = \case
     Type2.Ordering -> dataKind
     Type2.Ratio -> dataKind
     Type2.IO -> dataKind
+    Type2.Ptr -> dataKind
+    Type2.FunPtr -> dataKind
     Type2.Int8 -> dataKind
     Type2.Int16 -> dataKind
     Type2.Int32 -> dataKind
@@ -129,6 +133,8 @@ instance Builtin Data where
     Type2.Ordering -> pure Ordering.definition
     Type2.Ratio -> pure Ratio.definition
     Type2.IO -> pure IO.definition
+    Type2.Ptr -> pure Ptr.definition
+    Type2.FunPtr -> pure FunPtr.definition
     Type2.Int8 -> pure Int8.definition
     Type2.Int16 -> pure Int16.definition
     Type2.Int32 -> pure Int32.definition

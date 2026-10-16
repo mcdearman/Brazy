@@ -98,6 +98,8 @@ label context = \case
     Type2.Char -> builtin "Char"
     Type2.ST -> builtin "ST"
     Type2.IO -> builtin "IO"
+    Type2.Ptr -> builtin "Ptr"
+    Type2.FunPtr -> builtin "FunPtr"
     Type2.Int8 -> builtin "Int8"
     Type2.Int16 -> builtin "Int16"
     Type2.Int32 -> builtin "Int32"

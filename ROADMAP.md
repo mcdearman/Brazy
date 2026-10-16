@@ -1545,11 +1545,23 @@ Missing:
       C extends it, and a `Bool` as an `int` (`hazy_ffi_bool`,
       `hazy_ffi_integer`, and back; test `foreign-sized`, which agrees
       with GHC)
+- [x] Addresses, and values in memory. `Ptr` and `FunPtr` are builtin
+      types, newtypes of an `Int`, which C is given as an address; a foreign
+      type may have variables, as the type an address is of, but nothing
+      may be required of them. `Foreign.Ptr`, `Foreign.Storable`,
+      `Foreign.Marshal.Alloc`, `Foreign.Marshal.Array`,
+      `Foreign.Marshal.Utils`, `Foreign.Marshal` and `Foreign` are the
+      report's, written over foreign imports: of C's `malloc`, `free`,
+      `memcpy` and their kin, and of `hazy_peek_*` and `hazy_poke_*`, which
+      the runtime has for each width. The AxCut machine keeps memory of its
+      own for them, a byte at each address (test `foreign-memory`, which
+      agrees with GHC)
 - [ ] What the foreign function interface does not do yet: `foreign export`,
       an import of an address (`&`) or by a pointer to a function
-      (`dynamic`, `wrapper`), and `Ptr` and `FunPtr`, which are to become
-      builtins too, and with them `Foreign.Storable`, `Foreign.Marshal`
-      and `Foreign.C`
+      (`dynamic`, `wrapper`), a newtype of a type C is given, and so
+      `Foreign.C`'s types, and `finalizerFree`. What is had for a while by
+      `alloca` and its kin is not given back if the action throws, as
+      there is no `bracket` yet
 - [x] GADTs: see M6
 - [x] Polymorphic components: see M6
 - [ ] Strict functions

@@ -1802,6 +1802,7 @@ cType = fromString . \case
   Foreign.Word64 -> "i64"
   Foreign.Char -> "i32"
   Foreign.Bool -> "i32"
+  Foreign.Pointer -> "ptr"
   Foreign.Double -> "double"
   Foreign.Float -> "float"
   Foreign.Unit -> "void"
@@ -1862,6 +1863,14 @@ marshalIn state marshal value = case marshal of
   Foreign.Bool -> do
     truth <- temporary state
     pure (line [truth, fromString " = call i32 @hazy_ffi_bool(i64 ", value, fromString ")"], fromString "i32 " <> truth)
+  Foreign.Pointer -> do
+    number <- temporary state
+    address <- temporary state
+    pure
+      ( line [number, fromString " = ashr i64 ", value, fromString ", 1"]
+          <> line [address, fromString " = inttoptr i64 ", number, fromString " to ptr"],
+        fromString "ptr " <> address
+      )
   -- Kept as an Int.
   Foreign.Int8 -> untagged
   Foreign.Int16 -> untagged
@@ -1938,6 +1947,12 @@ marshalOut state marshal invocation = case marshal of
           <> line [value, fromString " = call i64 @hazy_ffi_from_bool(i32 ", truth, fromString ")"],
         value
       )
+  Foreign.Pointer -> do
+    address <- temporary state
+    number <- temporary state
+    tagged number $
+      line [address, fromString " = ", invocation]
+        <> line [number, fromString " = ptrtoint ptr ", address, fromString " to i64"]
   -- Kept as an Int: widened with its sign.
   Foreign.Int8 -> widened "sext"
   Foreign.Int16 -> widened "sext"

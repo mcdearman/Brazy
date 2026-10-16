@@ -656,6 +656,34 @@ pub extern "C" fn hazy_ffi_from_unsigned(number: u64) -> Value {
     from_integer(BigInt::from(number))
 }
 
+/// Reading and writing memory, which the library's Foreign.Storable does
+/// through these as functions of C.
+macro_rules! memory {
+    ($peek:ident, $poke:ident, $type:ty) => {
+        #[no_mangle]
+        pub unsafe extern "C" fn $peek(address: *const $type) -> $type {
+            address.read_unaligned()
+        }
+
+        #[no_mangle]
+        pub unsafe extern "C" fn $poke(address: *mut $type, value: $type) {
+            address.write_unaligned(value)
+        }
+    };
+}
+
+memory!(hazy_peek_i8, hazy_poke_i8, i8);
+memory!(hazy_peek_u8, hazy_poke_u8, u8);
+memory!(hazy_peek_i16, hazy_poke_i16, i16);
+memory!(hazy_peek_u16, hazy_poke_u16, u16);
+memory!(hazy_peek_i32, hazy_poke_i32, i32);
+memory!(hazy_peek_u32, hazy_poke_u32, u32);
+memory!(hazy_peek_i64, hazy_poke_i64, i64);
+memory!(hazy_peek_u64, hazy_poke_u64, u64);
+memory!(hazy_peek_f32, hazy_poke_f32, f32);
+memory!(hazy_peek_f64, hazy_poke_f64, f64);
+memory!(hazy_peek_ptr, hazy_poke_ptr, *mut u8);
+
 /// What a function of C that gives nothing gives, as a value.
 #[no_mangle]
 pub extern "C" fn hazy_ffi_unit() -> Value {

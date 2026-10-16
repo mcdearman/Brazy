@@ -84,6 +84,8 @@ executable hazy
     Builtin.Ord
     Builtin.Ordering
     Builtin.IO
+    Builtin.Ptr
+    Builtin.FunPtr
     Builtin.Int8
     Builtin.Int16
     Builtin.Int32
