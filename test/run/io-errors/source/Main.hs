@@ -17,7 +17,8 @@ main = do
   missing <- tryIOError (readFile "io-errors.missing")
   case missing of
     Left problem -> do
-      print problem
+      -- Without the system's words for it, which are its own on each system.
+      print (ioeSetErrorString problem "")
       print (isDoesNotExistError problem, isAlreadyExistsError problem, ioeGetFileName problem)
       print (ioeGetLocation problem, ioeGetErrorString problem, isNothing (ioeGetHandle problem))
     Right _ -> putStrLn "read a file that is not there"
@@ -81,7 +82,7 @@ main = do
   print (either isDoesNotExistError (const False) gone)
   -- A directory is not a file.
   directory <- tryIOError (openFile "." ReadMode)
-  print (either (\problem -> show (ioeGetErrorType problem)) (const "opened") directory)
+  putStrLn (either (const "a directory is not opened") (const "opened") directory)
   where
     isNothing Nothing = True
     isNothing (Just _) = False
