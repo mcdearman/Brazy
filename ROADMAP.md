@@ -1478,6 +1478,12 @@ Missing:
       class is known (`DataInstance`, in the resolver), not from its name
       (test `derive-functor`, which agrees with GHC). `Read` and `Ix` are
       still written out: they are next
+- [x] Literate source, as the report's chapter 10 has it: a module in a
+      `.lhs` file is read for its program, the lines after a bird track or
+      between `\begin{code}` and `\end{code}`. Every other line is read as
+      an empty one and a track as a space, so that what is said of the
+      program is where it is in the file (`Syntax.Literate`; test
+      `literate`, which agrees with GHC)
 - [x] GADTs: see M6
 - [x] Polymorphic components: see M6
 - [ ] Strict functions
