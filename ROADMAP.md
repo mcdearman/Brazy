@@ -1376,6 +1376,12 @@ Found while comparing the two backends:
   - Left: `Data.Map` and `Data.Set`, `Data.Vector`, `System.FilePath`,
     `System.Directory`, `Data.Text`, and what reads and writes through a
     `Ptr`
+  - `System.FilePath` has none left: the search path, the functions of
+    more than one extension, drives, `splitPath` and `joinPath`,
+    `normalise`, `equalFilePath`, `makeRelative` and `isValid` are
+    filepath's, for POSIX and for Windows as the system is; and a path
+    joined with an empty one is the path, as filepath has it (test
+    `filepath`, which agrees with GHC)
   - The report's modules that were not there at all are: `Data.Ix`, with
     instances for the numbers, characters, `Bool`, `Ordering`, `()` and
     tuples to five; `Data.Array`, kept as one of the runtime's arrays;
