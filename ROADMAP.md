@@ -1575,8 +1575,14 @@ Missing:
       of its own for each name, and calls a function at one by its name
       (test `foreign-dynamic`, which agrees with GHC, and
       `ForeignDynamic`). `finalizerFree` is the address of `free`
+- [x] `Foreign.C.Error`: errno, which the runtime reads and writes where each
+      system keeps it (`hazy_errno`, `hazy_set_errno`), the `IOError` of a
+      number, of the kind GHC gives it and with C's words for it, and the
+      `throwErrno` family (test `foreign-errno`, which agrees with GHC). The
+      numbers are those of Linux and Windows; some are others on macOS. The
+      AxCut machine's errno is always 0
 - [ ] What the foreign function interface does not do yet: `foreign export`
-      and `wrapper`, which call Haskell from C, and `Foreign.C.Error`
+      and `wrapper`, which call Haskell from C
 - [x] `bracket`, `bracket_`, `bracketOnError`, `finally` and `onException`
       in `Control.Exception`, over the runtime's catch: what is done when
       an action throws is done, and what was thrown is thrown on as it
