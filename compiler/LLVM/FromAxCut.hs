@@ -54,6 +54,7 @@ import qualified Data.Text as Text
 import qualified Data.Text.Lazy as Lazy.Text (Text, unpack)
 import Data.Text.Lazy.Builder (Builder, fromString, toLazyText)
 import Data.Traversable (for)
+import qualified Core.Foreign as Foreign
 import Generate.Global (Global)
 import Sequent.Primitive (Primitive (..))
 import qualified Sequent.Primitive as Primitive
@@ -206,6 +207,8 @@ data State s = State
     -- | The definitions whose code is gone to by its name, and how many
     -- arguments it is given.
     direct :: !(STRef s (Map Global Int)),
+    -- | The functions of C that are called, each with how it is declared.
+    cFunctions :: !(STRef s (Map Text Builder)),
     -- | The definitions whose second entry is called, and how many
     -- arguments it is called with.
     called :: !(STRef s (Map Global Int))
@@ -231,6 +234,7 @@ generate' shape target defined shared start = do
   standing <- newSTRef Map.empty
   called <- newSTRef Map.empty
   direct <- newSTRef Map.empty
+  cFunctions <- newSTRef Map.empty
   let state =
         State
           { target,
@@ -244,7 +248,8 @@ generate' shape target defined shared start = do
             captures,
             standing,
             called,
-            direct
+            direct,
+            cFunctions
           }
       global linkage (name, object@Object {kind}) = do
         function
@@ -313,6 +318,7 @@ generate' shape target defined shared start = do
   mentioned <- readSTRef mentioned
   called <- readSTRef called
   direct <- readSTRef direct
+  cFunctions <- readSTRef cFunctions
   -- What is used and is not here is some other unit's.
   let elsewhere = do
         name <- Set.toList mentioned
@@ -345,7 +351,7 @@ generate' shape target defined shared start = do
                   fromString ")\n"
                 ]
             ]
-  pure $ mconcat [mconcat elsewhere, mconcat entries, mconcat codes, mconcat globals, mconcat common, body, extra]
+  pure $ mconcat [mconcat elsewhere, mconcat entries, mconcat codes, mconcat (Map.elems cFunctions), mconcat globals, mconcat common, body, extra]
   where
     comment global = fromString "; " <> Sequent.global global <> fromString "\n"
 
@@ -1611,6 +1617,7 @@ wanted state token environment = \case
     let (kept, taken) = splitEnd (Primitive.arity primitive) environment
         arguments = map snd taken
     (code, value) <- case (primitive, arguments) of
+      (Call call, _) -> foreignCall state call arguments
       (Field index, [block]) -> do
         (code, pointer) <- address state block
         (code', value) <- load state pointer (fieldsAt + index)
@@ -1747,6 +1754,130 @@ primitiveName = \case
   IntegerQuot -> "hazy_prim_integer_quot"
   IntegerRem -> "hazy_prim_integer_rem"
   Foreign name _ -> "hazy_prim_" ++ unpack name
+  Call _ -> error "a function of C is called by its own name"
+
+-- |
+-- A call of a function of C: what it is given made what C has, and what it
+-- gives made a value again. It is declared once in each unit that calls it.
+foreignCall :: State s -> Foreign.Call -> [Builder] -> ST s (Builder, Builder)
+foreignCall state Foreign.Call {symbol, arguments, result} values = do
+  modifySTRef' (cFunctions state) $
+    Map.insertWith (\_ old -> old) symbol $
+      mconcat
+        [ fromString "declare ",
+          cType result,
+          fromString " @",
+          fromString (unpack symbol),
+          fromString "(",
+          commas (map cType arguments),
+          fromString ")\n"
+        ]
+  given <- sequence (zipWith (marshalIn state) arguments values)
+  let invocation =
+        mconcat
+          [ fromString "call ",
+            cType result,
+            fromString " @",
+            fromString (unpack symbol),
+            fromString "(",
+            commas (map snd given),
+            fromString ")"
+          ]
+  (code, value) <- marshalOut state result invocation
+  pure (foldMap fst given <> code, value)
+
+-- |
+-- The type C has for a value.
+cType :: Foreign.Marshal -> Builder
+cType = fromString . \case
+  Foreign.Int -> "i64"
+  Foreign.Char -> "i32"
+  Foreign.Double -> "double"
+  Foreign.Float -> "float"
+  Foreign.Unit -> "void"
+
+-- |
+-- A name for a step of passing a value to C or back, which is never
+-- counted.
+temporary :: State s -> ST s Builder
+temporary state = do
+  next <- fresh state
+  pure $ fromString "%f" <> fromString (show next)
+
+-- |
+-- A value as C is given it: the code, and the argument with its type.
+marshalIn :: State s -> Foreign.Marshal -> Builder -> ST s (Builder, Builder)
+marshalIn state marshal value = case marshal of
+  Foreign.Int -> do
+    number <- temporary state
+    pure (line [number, fromString " = ashr i64 ", value, fromString ", 1"], fromString "i64 " <> number)
+  Foreign.Char -> do
+    number <- temporary state
+    code <- temporary state
+    pure
+      ( line [number, fromString " = ashr i64 ", value, fromString ", 1"]
+          <> line [code, fromString " = trunc i64 ", number, fromString " to i32"],
+        fromString "i32 " <> code
+      )
+  Foreign.Double -> do
+    number <- temporary state
+    pure (line [number, fromString " = call double @hazy_ffi_double(i64 ", value, fromString ")"], fromString "double " <> number)
+  Foreign.Float -> do
+    double <- temporary state
+    single <- temporary state
+    pure
+      ( line [double, fromString " = call double @hazy_ffi_double(i64 ", value, fromString ")"]
+          <> line [single, fromString " = fptrunc double ", double, fromString " to float"],
+        fromString "float " <> single
+      )
+  Foreign.Unit -> error "a function of C is not given ()"
+
+-- |
+-- What C gives back, as a value: the code of the call and after, and the
+-- value.
+marshalOut :: State s -> Foreign.Marshal -> Builder -> ST s (Builder, Builder)
+marshalOut state marshal invocation = case marshal of
+  Foreign.Unit -> do
+    value <- local state
+    pure (line [invocation] <> line [value, fromString " = call i64 @hazy_ffi_unit()"], value)
+  Foreign.Int -> do
+    number <- temporary state
+    tagged number (line [number, fromString " = ", invocation])
+  Foreign.Char -> do
+    code <- temporary state
+    number <- temporary state
+    tagged number $
+      line [code, fromString " = ", invocation]
+        <> line [number, fromString " = zext i32 ", code, fromString " to i64"]
+  Foreign.Double -> do
+    number <- temporary state
+    value <- local state
+    pure
+      ( line [number, fromString " = ", invocation]
+          <> line [value, fromString " = call i64 @hazy_ffi_from_double(double ", number, fromString ")"],
+        value
+      )
+  Foreign.Float -> do
+    single <- temporary state
+    double <- temporary state
+    value <- local state
+    pure
+      ( line [single, fromString " = ", invocation]
+          <> line [double, fromString " = fpext float ", single, fromString " to double"]
+          <> line [value, fromString " = call i64 @hazy_ffi_from_double(double ", double, fromString ")"],
+        value
+      )
+  where
+    -- A number as a value: shifted left by one, and odd.
+    tagged number code = do
+      shifted <- temporary state
+      value <- localWord state
+      pure
+        ( code
+            <> line [shifted, fromString " = shl i64 ", number, fromString ", 1"]
+            <> line [value, fromString " = or i64 ", shifted, fromString ", 1"],
+          value
+        )
 
 -- |
 -- What a unit starts with: what the runtime provides, and forcing.
@@ -1791,6 +1922,9 @@ runtime =
   declare i64 @hazy_text(ptr, i64)
   declare i64 @hazy_integer(i64)
   declare i64 @hazy_integer_big(ptr, i64)
+  declare double @hazy_ffi_double(i64)
+  declare i64 @hazy_ffi_from_double(double)
+  declare i64 @hazy_ffi_unit()
   declare i64 @hazy_prim_error(i64)
   declare i64 @hazy_prim_put_str_ln(i64)
   declare i64 @hazy_prim_text_snoc(i64, i64)

@@ -20,9 +20,11 @@ import Syntax.Parser
     betweenParens,
     betweenUnorderedPragma,
     many,
+    optional,
     position,
     sepBy1Comma,
     sepByComma,
+    text,
     token,
     try,
     (<**>),
@@ -54,7 +56,9 @@ import Syntax.Tree.Marked (Marked (..))
 import qualified Syntax.Tree.Marked as Marked
 import Syntax.Tree.Qualification (Qualification)
 import Syntax.Tree.RightHandSide (RightHandSide)
+import Syntax.StringLiteral (StringLiteral)
 import Syntax.Tree.Scheme (Scheme)
+import qualified Syntax.Tree.Scheme as Scheme
 import Syntax.Tree.Type (Type)
 import qualified Syntax.Tree.Type as Type
 import Syntax.Tree.TypePattern (TypePattern)
@@ -154,6 +158,19 @@ data Declaration position
         target :: !FullQualifiers
       }
   | -- |
+    -- > foreign import ccall "name" x :: a
+    ForeignImport
+      { startPosition :: !position,
+        foreignName :: !(Marked Variable position),
+        entity :: !(Maybe StringLiteral),
+        foreignAnnotation :: !(Scheme position)
+      }
+  | -- |
+    -- > foreign export ccall "name" x :: a
+    ForeignExport
+      { startPosition :: !position
+      }
+  | -- |
     -- > {-# UNORDEREDRECORDS A #-}
     Unordered
       { constructorNames :: !(Strict.Vector1 (Marked Variable.Constructor position))
@@ -170,6 +187,7 @@ instance TermBindingVariables Declaration where
     Class {classDefinition} -> termBindingVariables classDefinition
     Data {dataDefinition} -> termBindingVariables dataDefinition
     Annotation {termNames} -> toList termNames
+    ForeignImport {foreignName} -> [foreignName]
     Infix {termNames'} -> [position :@ name | position :@ Variable name <- toList termNames']
     Definition {leftHandSide} -> termBindingVariables leftHandSide
     _ -> []
@@ -322,6 +340,7 @@ parse =
         <*> (Strict.Vector.fromList <$> many TypePattern.parse)
         <*> (token "=" *> Type.parse),
       position <**> (token "class" *> parseClass),
+      position <**> (token "foreign" *> parseForeign),
       token "instance" *> parseInstance True,
       token "deriving" *> token "instance" *> parseInstance False,
       fromClass <$> ClassDeclaration.parse,
@@ -379,6 +398,29 @@ parse =
             { position = typePosition,
               name = Lexer.variableIdentifier (Text.pack ("t" ++ show index))
             }
+    -- The calling convention and the safety are those of a C call, and are
+    -- not kept.
+    parseForeign :: Parser (Position -> Declaration Position)
+    parseForeign =
+      asum
+        [ token "import"
+            *> convention
+            *> optional safety
+            *> (foreignImport <$> optional text <*> Marked.parseLiteral <* token "::" <*> Scheme.parse),
+          foreignExport
+            <$ token "export"
+            <* convention
+            <* optional text
+            <* (Marked.parseLiteral :: Parser (Marked Variable Position))
+            <* token "::"
+            <* Scheme.parse
+        ]
+      where
+        convention = asum [token "ccall", token "capi"]
+        safety = asum [token "safe", token "unsafe", token "interruptible"]
+        foreignImport entity foreignName foreignAnnotation startPosition =
+          ForeignImport {startPosition, foreignName, entity, foreignAnnotation}
+        foreignExport startPosition = ForeignExport {startPosition}
     parseClass :: Parser (Position -> Declaration Position)
     parseClass =
       asum

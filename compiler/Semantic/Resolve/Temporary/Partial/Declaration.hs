@@ -12,7 +12,13 @@ import Data.Functor.Identity (Identity (..))
 import qualified Data.Map as Map
 import qualified Data.Set as Set
 import Data.Void (Void)
-import Error (missingMethodEntry)
+import Data.Text (Text)
+import qualified Data.Text as Text
+import qualified Data.Text.Lazy as Lazy (toStrict)
+import Data.Text.Lazy.Builder (toLazyText)
+import Error (missingMethodEntry, unsupportedFeatureForeignExport, unsupportedForeignEntity)
+import qualified Syntax.StringLiteral as StringLiteral
+import qualified Syntax.Variable as Variable
 import qualified Semantic.Index.Term as Term
 import Semantic.Layout (Normal)
 import Semantic.Resolve.Context (Context)
@@ -42,7 +48,7 @@ import qualified Semantic.Tree.Combinators.Implicit as Real (Implicit (..))
 import Semantic.Tree.Combinators.Inferred (Inferred (Inferred))
 import Semantic.Tree.Declaration (Key (..))
 import qualified Semantic.Tree.Declaration as Real (Declaration (..))
-import qualified Semantic.Tree.Definition2 as Real (Definition2 (Shared))
+import qualified Semantic.Tree.Definition2 as Real (Definition2 (Shared), ForeignCall (..))
 import qualified Semantic.Tree.Definition3 as Real (Definition3 (..), Info (..))
 import qualified Semantic.Tree.Definition4 as Real (Annotation (..), Definition4 (..))
 import Semantic.Tree.Scheme (Scheme)
@@ -88,6 +94,11 @@ data Declaration scope
       { position :: !Position,
         name :: !Key,
         selector :: !More.Selector
+      }
+  | Foreign
+      { position :: !Position,
+        name :: !Key,
+        foreignCall :: !Real.ForeignCall
       }
   | Shared
       { position :: !Position,
@@ -180,6 +191,21 @@ resolve' temporary context lookupTerm lookupType lookupShare (declaration : decl
         position :@ name <- toList termNames
         annotation <- pure $ Scheme.resolve context annotation
         pure (Named name, Annotation {position, name = Named name, annotation})
+      Syntax.ForeignImport {startPosition, foreignName = position :@ name, entity, foreignAnnotation} ->
+        [ (Named name, Annotation {position, name = Named name, annotation = Scheme.resolve context foreignAnnotation}),
+          ( Named name,
+            Foreign
+              { position,
+                name = Named name,
+                foreignCall =
+                  Real.ForeignCall
+                    { foreignPosition = startPosition,
+                      symbol = foreignSymbol startPosition name entity
+                    }
+              }
+          )
+        ]
+      Syntax.ForeignExport {startPosition} -> unsupportedFeatureForeignExport startPosition
       Syntax.Definition {leftHandSide, rightHandSide} ->
         let Complete.Definition position name functionAuto =
               Complete.resolve undefined context leftHandSide rightHandSide
@@ -256,3 +282,19 @@ resolve' temporary context lookupTerm lookupType lookupShare (declaration : decl
               | otherwise -> error "class with no methods"
       _ -> []
 resolve' _ _ _ _ _ [] = []
+
+-- |
+-- The name of the C function a foreign import calls: the last word of what
+-- is written for it, past @static@ and a header, or else the name it has
+-- in Haskell.
+foreignSymbol :: Position -> Variable -> Maybe StringLiteral.StringLiteral -> Text
+foreignSymbol position name = \case
+  Nothing -> haskell
+  Just written -> case filter wanted (Text.words (Text.pack (StringLiteral.unpack written))) of
+    [] -> haskell
+    [symbol]
+      | Text.all (\c -> c == '_' || c `elem` ['a' .. 'z'] || c `elem` ['A' .. 'Z'] || c `elem` ['0' .. '9']) symbol -> symbol
+    _ -> unsupportedForeignEntity position
+  where
+    haskell = Lazy.toStrict (toLazyText (Variable.printLiteral' name))
+    wanted word = word /= Text.pack "static" && not (Text.pack ".h" `Text.isSuffixOf` word)

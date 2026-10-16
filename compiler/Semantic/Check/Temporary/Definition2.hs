@@ -28,6 +28,7 @@ data Definition2 source mark s scope where
   Definition :: !(Definition s scope) -> Definition2 Single mark s scope
   Piece :: !(Choice s scope) -> Definition2 Single mark s scope
   Shared :: !(RightHandSide s scope) -> Definition2 Share Inferred s scope
+  Foreign :: !Semantic.ForeignCall -> Definition2 Single Annotated s scope
 
 data Choice s scope = Choice
   { index :: !(Term.Index scope),
@@ -44,6 +45,7 @@ checkManual ::
 checkManual context typex (Semantic.Definition definition) = do
   definition <- Definition.check context typex (shift definition)
   pure $ Definition definition
+checkManual _ _ (Semantic.Foreign call) = pure $ Foreign call
 checkManual context typex (Semantic.Scoped definition) = do
   definition <- Definition.check context typex definition
   pure $ Definition definition
@@ -107,3 +109,4 @@ solve position = \case
   Shared shared -> do
     shared <- RightHandSide.solve shared
     pure $ Solved.Shared shared
+  Foreign call -> pure $ Solved.Foreign call

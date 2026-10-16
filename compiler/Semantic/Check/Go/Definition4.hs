@@ -4,7 +4,9 @@ import Control.Monad.ST (ST)
 import Data.Foldable (toList)
 import Data.STRef (modifySTRef, newSTRef, readSTRef, writeSTRef)
 import Core.Substitute (logicalType)
+import qualified Core.Foreign as Foreign
 import qualified Core.Tree.Constraints as Simple.Constraints (simplify)
+import qualified Core.Tree.Forall as Forall (simplify)
 import qualified Core.Tree.Type as Core
 import qualified Core.Tree.Type as Simple (simplify)
 import qualified Core.Tree.TypeLambda as Simple (TypeLambdaOver (..))
@@ -27,6 +29,8 @@ import qualified Semantic.Shift as Shift
 import Semantic.Stage (Check, Resolve)
 import qualified Semantic.Tree.Combinators.Implicit as Implicit
 import Semantic.Tree.Combinators.Inferred (Inferred (Solved))
+import qualified Semantic.Tree.Definition2 as Definition2 (Definition2 (..), ForeignCall (..))
+import qualified Semantic.Tree.Definition3 as Tree.Definition3 (Definition3 (..))
 import Semantic.Tree.Definition4 (Annotation (..), Definition4 (..))
 import Semantic.Tree.Group (Element (..), Group (..), Set (..), Types (..))
 import Semantic.Tree.Scheme as Solved (Scheme (..))
@@ -117,6 +121,12 @@ check position Solve {solve, logical} reflection information = \case
             case self of
               Annotated annotation ::: _ -> do
                 scheme <- annotation
+                -- What a function of C is given and gives has to be what C
+                -- has, which is known from its type alone.
+                case definition of
+                  Tree.Definition3.Label _ (Definition2.Foreign Definition2.ForeignCall {foreignPosition, symbol}) ->
+                    Foreign.call foreignPosition symbol (Forall.simplify scheme) `seq` pure ()
+                  _ -> pure ()
                 definition <- checkAnnotation context position scheme $ \context typex -> do
                   definition <- Definition3.checkManual context typex definition
                   definition <- pure $ Definition3.solve position definition
