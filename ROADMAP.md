@@ -1363,8 +1363,13 @@ Found while comparing the two backends:
     A program that imports the standard modules together and names all
     they give is resolved to find them. And `foldl'`, `foldl1'` and
     `scanl'` were not given out by `Data.List` at all
-  - Left: `Text.Read`'s `ReadPrec` half and `Text.ParserCombinators`,
-    `Data.Map` and `Data.Set`, `Data.List.NonEmpty`, `Data.Vector`,
+  - `Text.ParserCombinators.ReadP` and `ReadPrec`, `Text.Read.Lex`, and
+    `Text.Read`'s `lexP`, `parens` and the list defaults are GHC's: a
+    parser runs every alternative at once, a character at a time, and gives
+    what each reads in the order of how much it read (test `readp`, which
+    agrees with GHC). `%` had no fixity, so `2 ^ 3 % 5` was `2 ^ (3 % 5)`;
+    it is `infixl 7`, as the report has it
+  - Left: `Data.Map` and `Data.Set`, `Data.List.NonEmpty`, `Data.Vector`,
     `System.FilePath`, `System.Directory`, `Data.Bifoldable`,
     `Data.Bitraversable`, `Data.Text`, and what reads and writes through
     a `Ptr`
