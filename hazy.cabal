@@ -400,6 +400,7 @@ executable hazy
     Syntax.Extensions
     Syntax.FreeVariables
     Syntax.Lexer
+    Syntax.Literate
     Syntax.Parser
     Syntax.ParserCombinator
     Syntax.Position
