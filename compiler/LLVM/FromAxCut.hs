@@ -1760,6 +1760,44 @@ primitiveName = \case
 -- A call of a function of C: what it is given made what C has, and what it
 -- gives made a value again. It is declared once in each unit that calls it.
 foreignCall :: State s -> Foreign.Call -> [Builder] -> ST s (Builder, Builder)
+foreignCall state Foreign.Call {target = Foreign.Address, symbol} _ = do
+  -- Something of C is declared as a function, whatever it is: only its
+  -- address is wanted, and a name is declared once in a unit.
+  modifySTRef' (cFunctions state) $
+    Map.insertWith (\_ old -> old) symbol $
+      mconcat [fromString "declare void @", fromString (unpack symbol), fromString "()\n"]
+  number <- temporary state
+  shifted <- temporary state
+  value <- localWord state
+  pure
+    ( line [number, fromString " = ptrtoint ptr @", fromString (unpack symbol), fromString " to i64"]
+        <> line [shifted, fromString " = shl i64 ", number, fromString ", 1"]
+        <> line [value, fromString " = or i64 ", shifted, fromString ", 1"],
+      value
+    )
+foreignCall state Foreign.Call {target = Foreign.Dynamic, arguments, result} (function : values) = do
+  -- The function is called where its address is, which is given first.
+  number <- temporary state
+  address <- temporary state
+  given <- sequence (zipWith (marshalIn state) (drop 1 arguments) values)
+  let invocation =
+        mconcat
+          [ fromString "call ",
+            cResult result,
+            fromString " ",
+            address,
+            fromString "(",
+            commas (map snd given),
+            fromString ")"
+          ]
+  (code, value) <- marshalOut state result invocation
+  pure
+    ( line [number, fromString " = ashr i64 ", function, fromString ", 1"]
+        <> line [address, fromString " = inttoptr i64 ", number, fromString " to ptr"]
+        <> foldMap fst given
+        <> code,
+      value
+    )
 foreignCall state Foreign.Call {symbol, arguments, result} values = do
   modifySTRef' (cFunctions state) $
     Map.insertWith (\_ old -> old) symbol $

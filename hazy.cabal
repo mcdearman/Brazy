@@ -108,6 +108,7 @@ executable hazy
     Core.Builtin
     Core.Eta
     Core.Foreign
+    Core.Marshal
     Core.Index.Table.Term
     Core.Substitute
     Core.Temporary.Definition

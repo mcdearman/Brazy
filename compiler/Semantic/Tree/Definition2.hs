@@ -17,6 +17,7 @@ import qualified Semantic.Tree.Combinators.Inferred as Inferred
 import Semantic.Tree.Definition (Definition)
 import Semantic.Tree.Pattern (Pattern)
 import Semantic.Tree.RightHandSide (RightHandSide)
+import qualified Core.Marshal as Marshal
 import Data.Text (Text)
 import Syntax.Position (Position)
 
@@ -99,7 +100,11 @@ instance Connect (Definition2 source mark) where
 -- the type written for it.
 data ForeignCall = ForeignCall
   { foreignPosition :: !Position,
-    symbol :: !Text
+    target :: !Marshal.Target,
+    symbol :: !Text,
+    -- | What C is given and gives, once that is worked out, where the
+    -- type is checked.
+    marshalled :: !(Maybe Marshal.Call)
   }
   deriving (Show)
 
