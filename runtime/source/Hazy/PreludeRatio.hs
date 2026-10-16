@@ -5,6 +5,8 @@ import Hazy.Prelude
 
 type Rational = Ratio Integer
 
+infixl 7 %
+
 (%) :: (Integral a) => a -> a -> Ratio a
 numerator, denominator :: (Integral a) => Ratio a -> a
 x % y = ratio (reduce (x * signum y) (abs y))
