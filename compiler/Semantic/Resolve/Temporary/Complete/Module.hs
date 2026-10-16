@@ -8,7 +8,9 @@ import qualified Data.Map as Map
 import Data.Maybe (mapMaybe)
 import Data.Vector (Vector)
 import qualified Data.Vector as Vector
-import Error (Position, duplicateModuleEntries)
+import Error (Position, duplicateModuleEntries, unsupportedFeatureConstraintedTypeDefaulting)
+import qualified Semantic.Index.Type2 as Type2
+import qualified Semantic.Index.Type3 as Type3
 import qualified Semantic.Index.Term as Term
 import qualified Semantic.Index.Term0 as Term0 (Index (..))
 import qualified Semantic.Index.Type0 as Type0
@@ -16,7 +18,7 @@ import Semantic.Layout (Normal)
 import Semantic.Resolve.Bindings (Bindings)
 import qualified Semantic.Resolve.Bindings as Bindings
 import Semantic.Resolve.Canonical (Canonical)
-import Semantic.Resolve.Context (Context (..), (</>))
+import Semantic.Resolve.Context (Context (..), (!=.*), (</>))
 import qualified Semantic.Resolve.Context as Context
 import Semantic.Resolve.Core (CoreF (Core))
 import qualified Semantic.Resolve.Core as Core
@@ -29,7 +31,7 @@ import Semantic.Scope (Global)
 import Semantic.Stage (Resolve)
 import qualified Semantic.Tree.Module as Real
 import Syntax.Extensions (Extensions (..))
-import qualified Syntax.Tree.Declaration as Syntax (toImport)
+import qualified Syntax.Tree.Declaration as Syntax (Declaration (..), toImport)
 import qualified Syntax.Tree.Declarations as Syntax (Declarations (..))
 import qualified Syntax.Tree.Module as Syntax (Module (..), declarations, name)
 import Syntax.Variable (FullQualifiers)
@@ -38,7 +40,8 @@ import Verbose (Debug (creatingIndexes))
 
 data Module = Module
   { name :: !FullQualifiers,
-    declarations :: Declarations Global
+    declarations :: Declarations Global,
+    defaulting :: Maybe (Position, [Type2.Index Global])
   }
 
 resolve :: forall verbose. (Debug verbose) => Vector (Syntax.Module Position) -> verbose (Vector Module)
@@ -79,7 +82,22 @@ resolve modules = mfix $ \main ->
           } = make <$> resolved
           where
             imports = mapMaybe Syntax.toImport (toList declarations)
-            make declarations = Module {name, declarations}
+            make declarations = Module {name, declarations, defaulting}
+            -- What the module's default declaration lists, by the types
+            -- that are in scope there. A module has one at most.
+            defaulting = case [declaration | declaration@Syntax.Default {} <- toList declarations] of
+              [] -> Nothing
+              Syntax.Default {startPosition, defaultTypes} : more
+                | null more ->
+                    Just
+                      ( startPosition,
+                        [ numeric startPosition $
+                            Type3.toType2 (unsupportedFeatureConstraintedTypeDefaulting startPosition) (context !=.* typeName)
+                        | typeName <- toList defaultTypes
+                        ]
+                      )
+                | otherwise -> unsupportedFeatureConstraintedTypeDefaulting startPosition
+              _ -> Nothing
             resolved :: verbose (Declarations Global)
             resolved =
               creatingIndexes (Variable.print' name) $
@@ -109,9 +127,20 @@ resolve modules = mfix $ \main ->
             Syntax.Module {modulePosition = right} <- modules Vector.! right =
               duplicateModuleEntries [left, right]
 
+-- |
+-- A type a default declaration can list: a builtin type of numbers.
+numeric :: Position -> Type2.Index scope -> Type2.Index scope
+numeric position index = case index of
+  Type2.Integer -> index
+  Type2.Int -> index
+  Type2.Double -> index
+  Type2.Float -> index
+  _ -> unsupportedFeatureConstraintedTypeDefaulting position
+
 shrink :: Module -> Real.Module Identity Normal Resolve Global
-shrink Module {name, declarations} =
+shrink Module {name, declarations, defaulting} =
   Real.Module
     { name,
-      declarations = Declarations.shrink declarations
+      declarations = Declarations.shrink declarations,
+      defaultDeclaration = defaulting
     }
