@@ -1511,6 +1511,12 @@ Missing:
       in backquotes, and a field that is an operator, are read too, which
       the written-out instance refused (tests `derive-read`, which agrees
       with GHC, and `test/good/Derive.hs`, Freddy's example)
+- [x] Literate source, as the report's chapter 10 has it: a module in a
+      `.lhs` file is read for its program, the lines after a bird track or
+      between `\begin{code}` and `\end{code}`. Every other line is read as
+      an empty one and a track as a space, so that what is said of the
+      program is where it is in the file (`Syntax.Literate`; test
+      `literate`, which agrees with GHC)
 - [x] The foreign function interface, as the report's chapter 8 has it, for
       the functions of C that are given and give the basic types the
       compiler knows: `foreign import ccall` (or `capi`, `safe` or `unsafe`)
