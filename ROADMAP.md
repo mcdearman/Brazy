@@ -1363,11 +1363,14 @@ Found while comparing the two backends:
     A program that imports the standard modules together and names all
     they give is resolved to find them. And `foldl'`, `foldl1'` and
     `scanl'` were not given out by `Data.List` at all
+  - `Data.List.NonEmpty` has none left, and `Data.Bifunctor`,
+    `Data.Bifoldable` and `Data.Bitraversable` have their defaults and
+    GHC's instances, for pairs, the tuples to five, `Either` and `Const`
+    (test `bifunctors`, which agrees with GHC)
   - Left: `Text.Read`'s `ReadPrec` half and `Text.ParserCombinators`,
-    `Data.Map` and `Data.Set`, `Data.List.NonEmpty`, `Data.Vector`,
-    `System.FilePath`, `System.Directory`, `Data.Bifoldable`,
-    `Data.Bitraversable`, `Data.Text`, and what reads and writes through
-    a `Ptr`
+    `Data.Map` and `Data.Set`, `Data.Vector`, `System.FilePath`,
+    `System.Directory`, `Data.Text`, and what reads and writes through a
+    `Ptr`
   - The report's modules that were not there at all are: `Data.Ix`, with
     instances for the numbers, characters, `Bool`, `Ordering`, `()` and
     tuples to five; `Data.Array`, kept as one of the runtime's arrays;
@@ -1378,6 +1381,11 @@ Found while comparing the two backends:
     Prelude's `Word` and `Data.Word`'s were two types, and are one; so are
     `Control.Applicative`'s `Const` and `Data.Functor.Const`'s, and
     `ZipList` and `WrappedMonad` have their instances
+- [x] A tuple's constructor written with only its commas, `(,)` or
+      `(,,)`, in a type or an instance's head. It was taken to hold as many
+      as it has commas, one too few, so `(,) Int Bool` was not a type and
+      `instance Bifunctor (,)` was of something no pair is (test
+      `tuple-constructor`, which agrees with GHC)
 
 Missing:
 

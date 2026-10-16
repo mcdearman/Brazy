@@ -62,7 +62,8 @@ resolve context = \case
     Constructor
       { startPosition,
         constructorPosition,
-        constructor = Type2.Tuple count,
+        -- A comma between each two of what it holds.
+        constructor = Type2.Tuple (count + 1),
         synonym = NoSynonym
       }
   Syntax.List {startPosition, element} ->
