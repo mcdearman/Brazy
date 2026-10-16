@@ -12,7 +12,7 @@ import qualified Data.Strict.Vector1 as Strict (Vector1, fromNonEmpty)
 import qualified Data.Vector.Strict as Strict (Vector)
 import qualified Data.Vector.Strict as Strict.Vector
 import Syntax.FreeVariables (TermBindingVariables (..))
-import qualified Syntax.Lexer as Lexer (runConstructorIdentifier, variableIdentifier)
+import qualified Syntax.Lexer as Lexer (variableIdentifier)
 import Syntax.Parser
   ( Parser,
     asum,
@@ -32,7 +32,6 @@ import Syntax.Tree.Alias (Alias)
 import Syntax.Tree.Brand (Brand)
 import qualified Syntax.Tree.Brand as Brand
 import Syntax.Tree.ClassDeclaration (ClassDeclaration)
-import qualified Syntax.Tree.Derived as Derived (written)
 import qualified Syntax.Tree.ClassDeclaration as ClassDeclaration
 import {-# SOURCE #-} Syntax.Tree.ClassDeclarations (ClassDeclarations)
 import {-# SOURCE #-} qualified Syntax.Tree.ClassDeclarations as ClassDeclarations
@@ -286,15 +285,10 @@ derived = \case
                   typeVariable = startPosition :@ TypePattern.name pattern,
                   arguments = Strict.Vector.empty
                 }
-            -- A class that is derived by writing its instance out. A class
-            -- of types that take an argument has its instance of the type
-            -- without its last parameter: that is done once the class is
-            -- known (see 'Semantic.Resolve.Temporary.Complete.DataInstance').
-            _ Variable.:=. called = className
-            instanceDefinition =
-              case Derived.written startPosition (Lexer.runConstructorIdentifier called) dataDefinition of
-                Just found -> found
-                Nothing -> InstanceDeclarations._derivingClause
+            -- What the instance is, and whether it is of the type without
+            -- its last parameter, is found once the class is known (see
+            -- 'Semantic.Resolve.Temporary.Complete.DataInstance').
+            instanceDefinition = InstanceDeclarations._derivingClause
         pure
           Instance
             { startPosition,

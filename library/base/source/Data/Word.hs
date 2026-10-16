@@ -7,6 +7,8 @@ module Data.Word
   )
 where
 
+import Hazy.Prelude (Ix (..))
+
 newtype Word8 = Word8 Integer
   deriving (Eq, Ord)
 
@@ -166,3 +168,31 @@ instance Integral Word64 where
 instance Bounded Word64 where
   minBound = Word64 0
   maxBound = Word64 (2 ^ (64 :: Int) - 1)
+
+instance Ix Word8 where
+  range (low, high) = [low .. high]
+  index bounds@(low, high) i
+    | low <= i && i <= high = fromInteger (toInteger i - toInteger low)
+    | otherwise = errorWithoutStackTrace ("Ix{Word8}.index: Index " ++ showsPrec 11 i "" ++ " out of range (" ++ showsPrec 11 bounds "" ++ ")")
+  inRange (low, high) i = low <= i && i <= high
+
+instance Ix Word16 where
+  range (low, high) = [low .. high]
+  index bounds@(low, high) i
+    | low <= i && i <= high = fromInteger (toInteger i - toInteger low)
+    | otherwise = errorWithoutStackTrace ("Ix{Word16}.index: Index " ++ showsPrec 11 i "" ++ " out of range (" ++ showsPrec 11 bounds "" ++ ")")
+  inRange (low, high) i = low <= i && i <= high
+
+instance Ix Word32 where
+  range (low, high) = [low .. high]
+  index bounds@(low, high) i
+    | low <= i && i <= high = fromInteger (toInteger i - toInteger low)
+    | otherwise = errorWithoutStackTrace ("Ix{Word32}.index: Index " ++ showsPrec 11 i "" ++ " out of range (" ++ showsPrec 11 bounds "" ++ ")")
+  inRange (low, high) i = low <= i && i <= high
+
+instance Ix Word64 where
+  range (low, high) = [low .. high]
+  index bounds@(low, high) i
+    | low <= i && i <= high = fromInteger (toInteger i - toInteger low)
+    | otherwise = errorWithoutStackTrace ("Ix{Word64}.index: Index " ++ showsPrec 11 i "" ++ " out of range (" ++ showsPrec 11 bounds "" ++ ")")
+  inRange (low, high) i = low <= i && i <= high

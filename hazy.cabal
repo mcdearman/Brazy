@@ -74,6 +74,7 @@ executable hazy
     Builtin.Fractional
     Builtin.Functor
     Builtin.Integral
+    Builtin.Ix
     Builtin.List
     Builtin.Monad
     Builtin.MonadFail
@@ -164,7 +165,9 @@ executable hazy
     Semantic.Check.Derive.Enum
     Semantic.Check.Derive.Eq
     Semantic.Check.Derive.Functor
+    Semantic.Check.Derive.Ix
     Semantic.Check.Derive.Ord
+    Semantic.Check.Derive.Read
     Semantic.Check.Derive.Show
     Semantic.Default
     Semantic.Check.EntryInstance
@@ -414,7 +417,6 @@ executable hazy
     Syntax.Tree.Constructor
     Syntax.Tree.Data
     Syntax.Tree.Declaration
-    Syntax.Tree.Derived
     Syntax.Tree.Declarations
     Syntax.Tree.Entry
     Syntax.Tree.Exports

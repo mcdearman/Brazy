@@ -1484,8 +1484,25 @@ Missing:
       instance, which is what the instance requires. That an instance from
       a clause is of the type without its last parameter is found once the
       class is known (`DataInstance`, in the resolver), not from its name
-      (test `derive-functor`, which agrees with GHC). `Read` and `Ix` are
-      still written out: they are next
+      (test `derive-functor`, which agrees with GHC)
+- [x] `Ix` is a builtin class, and is derived in the checker
+      (`Semantic.Check.Derive.Ix`) through another type's instance: a type
+      whose constructors hold nothing through `Int`'s, of the constructors'
+      numbers, and a type of one constructor through the tuple of what it
+      holds. The instances of the builtin types are in `Hazy.Helper`, a
+      tuple's of up to five through `HelperTuple2` to `HelperTuple5`, and
+      the sized types' are where those are defined; `Data.Ix` gives out
+      the class (test `derive-ix`, which agrees with GHC)
+- [x] `Read` is derived in the checker (`Semantic.Check.Derive.Read`), and
+      nothing is written out any more: `Syntax.Tree.Derived` is gone. Each
+      constructor is an alternative of the words it is written with and
+      what it holds, read one after another at the precedence the report
+      gives; the words are read by the runtime, as `lex` has them, through
+      three definitions in `Hazy.Helper` that Core can name now
+      (`Expression.Helper`). A constructor that is an operator, or written
+      in backquotes, and a field that is an operator, are read too, which
+      the written-out instance refused (tests `derive-read`, which agrees
+      with GHC, and `test/good/Derive.hs`, Freddy's example)
 - [x] GADTs: see M6
 - [x] Polymorphic components: see M6
 - [ ] Strict functions

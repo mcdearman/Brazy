@@ -7,6 +7,8 @@ module Data.Int
   )
 where
 
+import Hazy.Prelude (Ix (..))
+
 -- An integer brought into the range of so many bits, as one that overflowed
 -- would be.
 wrap :: Int -> Int -> Int
@@ -187,3 +189,31 @@ instance Integral Int64 where
 instance Bounded Int64 where
   minBound = Int64 (negate (2 ^ (63 :: Int)))
   maxBound = Int64 (2 ^ (63 :: Int) - 1)
+
+instance Ix Int8 where
+  range (low, high) = [low .. high]
+  index bounds@(low, high) i
+    | low <= i && i <= high = fromInteger (toInteger i - toInteger low)
+    | otherwise = errorWithoutStackTrace ("Ix{Int8}.index: Index " ++ showsPrec 11 i "" ++ " out of range (" ++ showsPrec 11 bounds "" ++ ")")
+  inRange (low, high) i = low <= i && i <= high
+
+instance Ix Int16 where
+  range (low, high) = [low .. high]
+  index bounds@(low, high) i
+    | low <= i && i <= high = fromInteger (toInteger i - toInteger low)
+    | otherwise = errorWithoutStackTrace ("Ix{Int16}.index: Index " ++ showsPrec 11 i "" ++ " out of range (" ++ showsPrec 11 bounds "" ++ ")")
+  inRange (low, high) i = low <= i && i <= high
+
+instance Ix Int32 where
+  range (low, high) = [low .. high]
+  index bounds@(low, high) i
+    | low <= i && i <= high = fromInteger (toInteger i - toInteger low)
+    | otherwise = errorWithoutStackTrace ("Ix{Int32}.index: Index " ++ showsPrec 11 i "" ++ " out of range (" ++ showsPrec 11 bounds "" ++ ")")
+  inRange (low, high) i = low <= i && i <= high
+
+instance Ix Int64 where
+  range (low, high) = [low .. high]
+  index bounds@(low, high) i
+    | low <= i && i <= high = fromInteger (toInteger i - toInteger low)
+    | otherwise = errorWithoutStackTrace ("Ix{Int64}.index: Index " ++ showsPrec 11 i "" ++ " out of range (" ++ showsPrec 11 bounds "" ++ ")")
+  inRange (low, high) i = low <= i && i <= high
