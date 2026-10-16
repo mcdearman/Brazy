@@ -20,7 +20,8 @@ import Semantic.Scope (Environment)
 import qualified Semantic.Shift0 as Shift0
 import qualified Semantic.Index.Evidence as Index.Evidence (Index (Direct))
 import qualified Semantic.Index.Type2 as Type2
-import qualified Semantic.Unify.Evidence as Evidence (Box (..), Fallback (..), Logical (..), classOf, typeOf)
+import qualified Semantic.Unify.Evidence as Evidence (Box (..), Fallback (..), Logical (..), classOf)
+import qualified Semantic.Default as Default
 import Semantic.Unify.Type (Logical, defaultFrom)
 import qualified Semantic.Unify.Type as Type (Box (..), Logical (..))
 
@@ -149,7 +150,7 @@ instance SolveEvidence EvidenceF where
             Just typex ->
               pure
                 Evidence.Variable
-                  { variable = Index.Evidence.Direct (Evidence.classOf classx) (Evidence.typeOf typex),
+                  { variable = Index.Evidence.Direct (Evidence.classOf classx) (Default.typeOf typex),
                     instanciation = Mono
                   }
             Nothing -> unsupportedFeatureConstraintedTypeDefaulting position

@@ -1398,7 +1398,15 @@ Missing:
       a class of fractions, `Double` if one is and `Integral` is not, and
       neither if both are (tests `defaulting-double` and
       `IntegralFraction`).
-      There is no `default` declaration. For this `Float` and `Double` are
+      A module's `default` declaration lists the types in its place, in its
+      order, of `Integer`, `Int`, `Double` and `Float`, and each is taken
+      only for the classes it is an instance of; `Bounded` takes part too,
+      which `Int` is an instance of (test `default-declaration`, whose
+      modules have each their own; `default ()` and a list of another type
+      are refused, tests `DefaultNone` and `DefaultBool`). The declaration
+      is resolved with the module, and the checker gives each module's
+      definitions the list it has (`defaulting`, in the context). For this
+      `Float` and `Double` are
       builtin types, and `Floating`, `RealFrac` and `RealFloat` builtin
       classes, as `Int` and `Fractional` are: their instances are newtypes
       in `Hazy.Helper`, as the other builtin types' are
