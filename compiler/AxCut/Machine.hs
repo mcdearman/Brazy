@@ -20,6 +20,7 @@ import AxCut.Tree
     Statement (..),
   )
 import qualified AxCut.Tree as Kind (Kind (..))
+import Data.Bits (popCount, shift, xor, (.&.), (.|.))
 import Data.Char (chr, generalCategory, ord)
 import Data.IORef (IORef, modifyIORef, newIORef, readIORef, writeIORef)
 import Data.Int (Int32)
@@ -425,6 +426,13 @@ outside World {catching, files, failure, building, arguments, programName} name 
   ("float_encode", [Int precision, Integer mantissa, Int exponent]) ->
     pure $ precise precision (encodeFloat mantissa (fromIntegral exponent)) (encodeFloat mantissa (fromIntegral exponent))
   ("float_truncate", [Floating x]) -> pure $ Integer $ truncate x
+  ("integer_bits", [Int operation, Integer left, Integer right]) ->
+    pure $ Integer $ case operation of
+      0 -> left .&. right
+      1 -> left .|. right
+      _ -> left `xor` right
+  ("integer_shift", [Integer number, Int places]) -> pure $ Integer $ shift number (fromIntegral places)
+  ("integer_pop_count", [Integer number]) -> pure $ Int $ fromIntegral $ popCount number
   -- A program on the machine is given no arguments, until it sets some.
   ("arg_count", []) -> Int . fromIntegral . length <$> readIORef arguments
   ("arg", [Int index]) -> Text . (!! fromIntegral index) <$> readIORef arguments

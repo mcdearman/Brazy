@@ -1,3 +1,6 @@
-module Data.Functor.Const where
+module Data.Functor.Const
+  ( Const (..),
+  )
+where
 
-newtype Const a b = Const {getConst :: a}
+import Control.Applicative (Const (..))

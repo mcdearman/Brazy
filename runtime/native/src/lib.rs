@@ -450,6 +450,41 @@ pub extern "C" fn hazy_prim_integer_rem(left: Value, right: Value) -> Value {
     from_integer(integer(left) % integer(right))
 }
 
+/// The bits of two numbers put together: both, either or one, as the
+/// operation is 0, 1 or 2. A negative number goes on with ones for ever.
+#[no_mangle]
+pub extern "C" fn hazy_prim_integer_bits(operation: Value, left: Value, right: Value) -> Value {
+    let (left, right) = (integer(left), integer(right));
+    from_integer(match int(operation) {
+        0 => left & right,
+        1 => left | right,
+        _ => left ^ right,
+    })
+}
+
+/// A number's bits moved toward the high end by so many places, or toward
+/// the low end if that is negative, where what goes past the end is gone.
+#[no_mangle]
+pub extern "C" fn hazy_prim_integer_shift(number: Value, places: Value) -> Value {
+    let places = int(places);
+    let number = integer(number);
+    from_integer(if places >= 0 {
+        number << places as u32
+    } else {
+        // Toward negative infinity, as an arithmetic shift is.
+        number >> places.unsigned_abs()
+    })
+}
+
+/// How many bits are ones; of a negative number, the negative of how many
+/// its magnitude has, as GHC has it.
+#[no_mangle]
+pub extern "C" fn hazy_prim_integer_pop_count(number: Value) -> Value {
+    let number = integer(number);
+    let count = number.magnitude().count_ones() as i32;
+    from_int(if number.is_negative() { -count } else { count })
+}
+
 // The world outside ---------------------------------------------------------
 //
 // These are the primitives that `Sequent.Primitive` calls foreign: each is

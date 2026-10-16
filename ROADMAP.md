@@ -1316,7 +1316,13 @@ Known bugs:
       names, where the declarations are parsed. The instance requires the
       class of every parameter of the type, which is more than Haskell asks
       of some types: see the README (test `derive-clause`)
-- [ ] `Ix` cannot be derived. (`Read` can: see `Syntax.Tree.Derived`)
+- [x] `Read` and `Ix` cannot be derived. Both are, by writing them out
+      (`Syntax.Tree.Derived`): an `Ix` of a type whose constructors hold
+      nothing, numbered in the order they are written, or of a type of one
+      constructor, numbered as a tuple of what it holds is
+- [x] A strict field could not be a tuple, as `!(i, i)`: what follows the
+      `!` was taken to be a type in brackets, and the comma was not looked
+      for (`Syntax.Tree.Entry`)
 
 Found while comparing the two backends:
 
@@ -1360,8 +1366,17 @@ Found while comparing the two backends:
     `Data.Map` and `Data.Set`, `Data.List.NonEmpty`, `Data.Vector`,
     `System.FilePath`, `System.Directory`, `Data.Bifoldable`,
     `Data.Bitraversable`, `Data.Text`, and what reads and writes through
-    a `Ptr`. `Data.Ix`, `Data.Array`, `Data.Bits` and `Data.Complex` are
-    not there at all
+    a `Ptr`
+  - The report's modules that were not there at all are: `Data.Ix`, with
+    instances for the numbers, characters, `Bool`, `Ordering`, `()` and
+    tuples to five; `Data.Array`, kept as one of the runtime's arrays;
+    `Data.Bits`, whose `Integer` is worked out by the runtime
+    (`integer_bits`, `integer_shift`, `integer_pop_count`) and whose other
+    types are worked out on it and made their own width again; and
+    `Data.Complex` (test `report-modules`, which agrees with GHC). The
+    Prelude's `Word` and `Data.Word`'s were two types, and are one; so are
+    `Control.Applicative`'s `Const` and `Data.Functor.Const`'s, and
+    `ZipList` and `WrappedMonad` have their instances
 
 Missing:
 
@@ -1388,7 +1403,9 @@ Missing:
       closes over the `Context`, and defaulting can try each candidate type
       through the ordinary instance lookup. That gives `default`
       declarations and classes of a program's own. When it is done, the
-      `Fallback` in `Semantic.Unify.Evidence` goes. Not now
+      `Fallback` in `Semantic.Unify.Evidence` goes. Not now. Until then a
+      type constrained by a class of the library, as `Ix` is, is not
+      defaulted, where the report would default it
 - [x] Floating point. A `Float` or a `Double` is a block of its own in the
       native heap, which holds the 64 bits of a double; a `Float` is kept
       as the double it is exactly, and what is worked out of it is worked
