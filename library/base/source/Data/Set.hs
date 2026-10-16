@@ -73,7 +73,6 @@ where
 
 import Prelude hiding (drop, filter, foldl, foldr, map, null, splitAt, take)
 import qualified Prelude
-import Hazy.Prelude (placeholder)
 
 -- A set is a tree balanced by weight: neither side of a node has more than
 -- three times the other's elements.
@@ -125,7 +124,12 @@ fromDistinctDescList :: [a] -> Set a
 fromDistinctDescList = fromDistinctAscList . Prelude.reverse
 
 powerSet :: Set a -> Set (Set a)
-powerSet = placeholder
+-- Every subset, in order: those of the first element, with it and then
+-- without it.
+powerSet set = fromDistinctAscList (Prelude.map fromDistinctAscList (subsets (toAscList set)))
+  where
+    subsets [] = [[]]
+    subsets (x : xs) = [] : Prelude.map (x :) (subsets xs) ++ Prelude.drop 1 (subsets xs)
 
 insert :: (Ord a) => a -> Set a -> Set a
 insert x = \case
@@ -144,7 +148,7 @@ delete x = \case
     EQ -> glue l r
 
 alterF :: (Ord a, Functor f) => (Bool -> f Bool) -> a -> Set a -> f (Set a)
-alterF = placeholder
+alterF f x set = (\keep -> if keep then insert x set else delete x set) <$> f (member x set)
 
 member :: (Ord a) => a -> Set a -> Bool
 member x = \case
@@ -240,7 +244,7 @@ cartesianProduct :: Set a -> Set b -> Set (a, b)
 cartesianProduct a b = fromDistinctAscList [(x, y) | x <- toAscList a, y <- toAscList b]
 
 disjointUnion :: Set a -> Set b -> Set (Either a b)
-disjointUnion = placeholder
+disjointUnion as bs = fromDistinctAscList (Prelude.map Left (toAscList as) ++ Prelude.map Right (toAscList bs))
 
 filter :: (a -> Bool) -> Set a -> Set a
 filter p = \case
@@ -250,13 +254,19 @@ filter p = \case
     | otherwise -> link2 (filter p l) (filter p r)
 
 takeWhileAntitone :: (a -> Bool) -> Set a -> Set a
-takeWhileAntitone = placeholder
+takeWhileAntitone _ Tip = Tip
+takeWhileAntitone p (Bin _ x l r)
+  | p x = link x l (takeWhileAntitone p r)
+  | otherwise = takeWhileAntitone p l
 
 dropWhileAntitone :: (a -> Bool) -> Set a -> Set a
-dropWhileAntitone = placeholder
+dropWhileAntitone _ Tip = Tip
+dropWhileAntitone p (Bin _ x l r)
+  | p x = dropWhileAntitone p r
+  | otherwise = link x (dropWhileAntitone p l) r
 
 spanAntitone :: (a -> Bool) -> Set a -> (Set a, Set a)
-spanAntitone = placeholder
+spanAntitone p set = (takeWhileAntitone p set, dropWhileAntitone p set)
 
 partition :: (a -> Bool) -> Set a -> (Set a, Set a)
 partition p set = (filter p set, filter (not . p) set)
@@ -276,7 +286,8 @@ splitMember x = \case
     EQ -> (l, True, r)
 
 splitRoot :: Set a -> [Set a]
-splitRoot = placeholder
+splitRoot Tip = []
+splitRoot (Bin _ x l r) = [l, singleton x, r]
 
 lookupIndex :: (Ord a) => a -> Set a -> Maybe Int
 lookupIndex x = go 0
@@ -419,13 +430,59 @@ toDescList :: Set a -> [a]
 toDescList = foldl (\xs x -> x : xs) []
 
 showTree :: (Show a) => Set a -> String
-showTree = placeholder
+showTree = showTreeWith True False
 
 showTreeWith :: (Show a) => Bool -> Bool -> Set a -> String
-showTreeWith = placeholder
+-- The tree drawn as containers draws it: hanging, with the root first, or
+-- on its side, with the larger elements above.
+showTreeWith hang wide set
+  | hang = hanging [] set ""
+  | otherwise = sideways [] [] set ""
+  where
+    sideways lbars rbars = \case
+      Tip -> bars lbars . showString "|\n"
+      Bin _ x Tip Tip -> bars lbars . shows x . showString "\n"
+      Bin _ x l r ->
+        sideways (withBar rbars) (withEmpty rbars) r
+          . gap rbars
+          . bars lbars
+          . shows x
+          . showString "\n"
+          . gap lbars
+          . sideways (withEmpty lbars) (withBar lbars) l
+    hanging marks = \case
+      Tip -> bars marks . showString "|\n"
+      Bin _ x Tip Tip -> bars marks . shows x . showString "\n"
+      Bin _ x l r ->
+        bars marks
+          . shows x
+          . showString "\n"
+          . gap marks
+          . hanging (withBar marks) l
+          . gap marks
+          . hanging (withEmpty marks) r
+    gap marks
+      | wide = showString (concat (reverse marks)) . showString "|\n"
+      | otherwise = id
+    bars marks = case marks of
+      [] -> id
+      _ : rest -> showString (concat (reverse rest)) . showString "+--"
+    withBar marks = "|  " : marks
+    withEmpty marks = "   " : marks
 
 valid :: (Ord a) => Set a -> Bool
-valid = placeholder
+-- | Whether the tree is as a set's must be: in order, of the sizes it says,
+-- and balanced.
+valid set = ordered (toAscList set) && sized set && balanced set
+  where
+    ordered xs = and (Prelude.zipWith (<) xs (Prelude.drop 1 xs))
+    sized Tip = True
+    sized (Bin count _ l r) = count == size l + size r + 1 && sized l && sized r
+    balanced Tip = True
+    balanced (Bin _ _ l r) =
+      (size l + size r <= 1 || (size l <= 3 * size r && size r <= 3 * size l))
+        && balanced l
+        && balanced r
 
 -- One of each run of equal elements that are next to each other.
 adjacent :: (Eq a) => [a] -> [a]

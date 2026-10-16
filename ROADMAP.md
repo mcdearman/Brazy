@@ -1373,9 +1373,14 @@ Found while comparing the two backends:
     `Data.Bifoldable` and `Data.Bitraversable` have their defaults and
     GHC's instances, for pairs, the tuples to five, `Either` and `Const`
     (test `bifunctors`, which agrees with GHC)
-  - Left: `Data.Map` and `Data.Set`, `Data.Vector`, `System.FilePath`,
-    `System.Directory`, `Data.Text`, and what reads and writes through a
-    `Ptr`
+  - `Data.Map` and `Data.Set` have none left: `mergeWithKey`, `compose`,
+    `traverseMaybeWithKey`, the `Antitone` functions, `splitRoot`,
+    `updateAt` and the updates of the least and greatest, `powerSet`,
+    `alterF`, `disjointUnion`, `showTree` and `valid` are those of
+    containers, over the trees there are (test `containers-rest`, which
+    agrees with GHC)
+  - Left: `Data.Vector`, `System.FilePath`, `System.Directory`,
+    `Data.Text`, and what reads and writes through a `Ptr`
   - The report's modules that were not there at all are: `Data.Ix`, with
     instances for the numbers, characters, `Bool`, `Ordering`, `()` and
     tuples to five; `Data.Array`, kept as one of the runtime's arrays;
