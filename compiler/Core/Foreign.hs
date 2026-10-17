@@ -86,7 +86,7 @@ callWith unwrap position target symbol ForallOver {constraints, result = typex}
     not (null required) =
       unsupportedForeignType position
   | otherwise = do
-      (arguments, result, action) <- go typex
+      (arguments, result, action) <- go (maybe typex id wrapped)
       -- A function called by its name is given something, or is an action;
       -- an address is an address, and nothing else; and a function called
       -- by its address is given that first.
@@ -95,10 +95,18 @@ callWith unwrap position target symbol ForallOver {constraints, result = typex}
             Address -> null arguments && not action && result == Pointer
             Dynamic -> take 1 arguments == [Pointer] && addressOfRest
             Export -> True
+            Wrapper -> wrapped /= Nothing
       if fits
         then pure Call {target, symbol, arguments, result, action}
         else unsupportedForeignType position
   where
+    -- A wrapper makes the address of a function of the type it is given,
+    -- as the report has it. What C gives and gets is what that function is
+    -- given and gives.
+    wrapped = case typex of
+      Type.Function function (Type.Call (Type.Constructor Type2.IO) (Type.Call (Type.Constructor Type2.FunPtr) made))
+        | function == made -> Just function
+      _ -> Nothing
     -- The address a function is called by is the address of a function of
     -- the type of the rest, as the report has it.
     addressOfRest = case typex of

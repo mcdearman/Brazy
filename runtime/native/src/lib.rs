@@ -1587,6 +1587,48 @@ pub extern "C" fn hazy_prim_callback_result(value: Value) -> Value {
     unit()
 }
 
+/// A function of C made of a function of the program, as a wrapper does:
+/// the first of the functions of C given whose place is free, which keeps
+/// the code that applies the function to what C gives, and the function.
+#[no_mangle]
+pub extern "C" fn hazy_wrapper_new(
+    slots: *mut Value,
+    stubs: *const u64,
+    count: u64,
+    entry: Value,
+    function: Value,
+) -> u64 {
+    unsafe {
+        for index in 0..count as usize {
+            let slot = slots.add(2 * index);
+            if *slot == 0 {
+                *slot = heap::share(entry);
+                *slot.add(1) = heap::share(function);
+                let address = *stubs.add(index);
+                heap::wrapped().insert(address, slot);
+                return address;
+            }
+        }
+    }
+    fail(&format!(
+        "more than {count} functions of C of one type were made of functions of the program and not freed"
+    ))
+}
+
+/// A function of C that a wrapper made is freed: what it called is given up
+/// and its place is free again. Anything else is left as it is.
+#[no_mangle]
+pub extern "C" fn hazy_wrapper_free(address: u64) {
+    if let Some(slot) = heap::wrapped().remove(&address) {
+        unsafe {
+            heap::release(*slot);
+            heap::release(*slot.add(1));
+            *slot = 0;
+            *slot.add(1) = 0;
+        }
+    }
+}
+
 /// What the call from C into the program left. The reference is C's.
 #[no_mangle]
 pub extern "C" fn hazy_callback_take() -> Value {
