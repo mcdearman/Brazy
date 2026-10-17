@@ -65,6 +65,9 @@ data Clause = Clause !Int [Text] Statement
 data Kind
   = Closure
   | Thunk
+  | -- | A consumer that is only ever given values where it is made, and
+    -- never held: it is not made, and what gives it a value goes to it.
+    Join
   deriving (Eq, Show)
 
 data Method

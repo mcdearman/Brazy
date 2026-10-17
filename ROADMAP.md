@@ -1291,6 +1291,54 @@ now. These are what went by Javascript, in the order they are moved.
 - [ ] Bun is only wanted for Hazy's own tests, which run the Javascript that
       Hazy makes
 
+### Closer to GHC
+
+Native code next to GHC's, on a program of the usual work (`p9`: queens,
+a sieve, a `Data.Map` of 100,000 entries, a `Data.Set`, folds over a
+million numbers, Collatz, big numbers): Hazy took 1.3 seconds and 118 MB
+where GHC with `-O1` took 0.06 seconds and 25 MB. Nearly all of the
+difference is blocks made and given back: in Collatz, the heap and C's
+`malloc` were three fifths of the time. So this is about making less.
+
+- [x] An `Integer` that fits in 64 bits is kept in its block, and worked out
+      without being made big. One written in the program is a constant, a
+      block that is never counted. Before, every `Integer` was a block that
+      pointed at a number of its own, and making one called `malloc` twice
+      (test `integer-boundary`)
+- [x] The fields of an instance that is known are read as what they are
+      (`Sequent.Inline.specialize`). An instance that needs nothing forces
+      its superclasses and constructs them and its methods, so once it is
+      known each of its fields is: a method is called by its name and can
+      be put where it is called. A function given evidence that is known is
+      put where it is called though it is bigger, and an `Integer` written
+      in the program and made an `Int` is the `Int`. `even` on an `Int` is a
+      remainder and a comparison, where it was a dozen blocks
+- [x] A consumer that is only given values where it is made is not made
+      (`AxCut.Join`, found by `AxCut.Lower.joined`). This is what a
+      `case` whose value is used next is: each way through the `case` goes
+      to the consumer's code, which comes once after them all, and what the
+      consumer would have held stays where it is. `size` in `Data.Map` was
+      a consumer made for each call
+
+Blocks allocated, and seconds:
+
+| Workload | Before | Integers, instances | Joins |
+| - | - | - | - |
+| Collatz up to 30,000 | 61,581,246 / 0.64 | 15,752,216 / 0.16 | 15,752,216 / 0.15 |
+| 100,000 insertions into a `Data.Map` | 21,771,671 / 0.31 | 21,771,522 / 0.30 | 9,701,435 / 0.19 |
+| `Data.Set.fromList` of 50,000 | 6,337,215 / 0.08 | 6,337,114 / 0.08 | 3,402,210 / 0.05 |
+| The compiler made by Hazy, checking itself | 5,668,269,403 / 76 | 5,309,759,508 / 70 | 5,172,541,506 / 68 |
+
+- [ ] A function that is not known is called one argument at a time, so a
+      function given to `foldr` or `map` makes a closure for each argument
+      but the last. A closure that says how many arguments it takes, and an
+      entry that takes them all, as GHC's eval and apply have it
+- [ ] A recursive function given evidence that is known is not put where it
+      is called, so `Data.Map.insert` still compares through `Ord`. A copy
+      of it for the instance
+- [ ] Making and giving back a block is a call into the runtime each time.
+      Most of it could be done where it happens, as counting is
+
 ## Track A: Hazy's own list
 
 Fixed as the milestones above run into them. Anything still open after M6 is

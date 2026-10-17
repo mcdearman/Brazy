@@ -43,7 +43,7 @@ import AxCut.Tree
 import Control.Monad.ST (ST, runST)
 import Data.Char (isAlphaNum, isAscii, ord)
 import Data.Foldable (for_, toList)
-import Data.List (intercalate, intersperse)
+import Data.List (intercalate, intersperse, nub)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Set (Set)
@@ -211,7 +211,19 @@ data State s = State
     cFunctions :: !(STRef s (Map Text Builder)),
     -- | The definitions whose second entry is called, and how many
     -- arguments it is called with.
-    called :: !(STRef s (Map Global Int))
+    called :: !(STRef s (Map Global Int)),
+    -- | The consumers that are gone to and not made, by what stands for
+    -- each where it would be.
+    joins :: !(STRef s (Map Lazy.Text.Text JoinPoint))
+  }
+
+-- |
+-- A consumer that is not made: the block it is, what it would have held,
+-- which stays where it is, and each place that goes to it with a value.
+data JoinPoint = JoinPoint
+  { joinLabel :: Builder,
+    joinHeld :: [Builder],
+    joinJumps :: [(Builder, Builder)]
   }
 
 generate' ::
@@ -235,6 +247,7 @@ generate' shape target defined shared start = do
   called <- newSTRef Map.empty
   direct <- newSTRef Map.empty
   cFunctions <- newSTRef Map.empty
+  joins <- newSTRef Map.empty
   let state =
         State
           { target,
@@ -249,7 +262,8 @@ generate' shape target defined shared start = do
             standing,
             called,
             direct,
-            cFunctions
+            cFunctions,
+            joins
           }
       global linkage (name, object@Object {kind}) = do
         function
@@ -373,6 +387,7 @@ kindOf :: Kind -> Integer
 kindOf = \case
   Closure -> closureKind
   Thunk -> thunkKind
+  Join -> error "a consumer that is gone to is never made"
 
 -- |
 -- A header: the kind, a constructor's tag, and how many fields or captured
@@ -829,6 +844,7 @@ function outer@State {target = Target {registers}, extra} name comment husk lent
   let taken = case kind of
         Closure -> open self
         Thunk -> mempty
+        Join -> mempty
   (carrying, carried, token) <- case husk of
     Nothing -> pure (mempty, [], Nothing)
     Just size -> do
@@ -1158,6 +1174,7 @@ wants :: Int -> Statement -> Bool
 wants size = \case
   Substitute _ rest -> wants size rest
   Let _ _ count rest -> count == size || wants size rest
+  New _ Object {kind = Join} rest -> wants size rest
   New _ object rest -> wants size rest || carries size object rest
   Literal _ _ rest -> wants size rest
   Global _ _ _ rest -> wants size rest
@@ -1262,8 +1279,14 @@ wanted state token environment = \case
   Substitute pairs rest -> do
     keeping <- readSTRef (holders state)
     let (adjust, after) = substitute keeping environment pairs
+    found <- readSTRef (joins state)
+    let markers values = [toLazyText value | value <- values, Map.member (toLazyText value) found]
+        before = markers (map snd environment)
+        now = markers (map snd after)
+        gone = filter (`notElem` now) before
+    if length now /= length (nub now) then error "a consumer that is gone to was copied" else pure ()
     rest <- statement state token after rest
-    pure $ adjust <> rest
+    pure $ adjust <> foldMap (\marker -> foldMap erase (joinHeld (found Map.! marker))) gone <> rest
   -- A constructor with no fields is not made: there is one of each already.
   Let name tag 0 rest
     | tag < limit -> do
@@ -1536,6 +1559,34 @@ wanted state token environment = \case
       -- Stands for the consumer while the environment is worked out. It is
       -- never written.
       unmade = fromString "%unmade"
+  -- A consumer that is only given values here is not made. What it would
+  -- hold stays where it is, and what gives it a value goes to its code,
+  -- which comes after, where those values come together.
+  New name Object {kind = Join, captured, parameters = [parameter], body} rest -> do
+    let (kept, taken) = splitEnd (length captured) environment
+    next <- fresh state
+    point <- label state
+    let marker = fromString "%join" <> fromString (show next)
+        key = toLazyText marker
+    modifySTRef' (joins state) (Map.insert key JoinPoint {joinLabel = point, joinHeld = map snd taken, joinJumps = []})
+    rest <- statement state token (kept ++ [(name, marker)]) rest
+    found <- readSTRef (joins state)
+    case Map.lookup key found of
+      Just JoinPoint {joinJumps = jumps@(_ : _)} -> do
+        value <- local state
+        body <- statement state Nothing ((parameter, value) : zip captured (map snd taken)) body
+        pure $
+          mconcat
+            [ rest,
+              point <> fromString ":\n",
+              line
+                [ value,
+                  fromString " = phi i64 ",
+                  commas [fromString "[ " <> given <> fromString ", %" <> from <> fromString " ]" | (given, from) <- reverse jumps]
+                ],
+              body
+            ]
+      _ -> pure rest
   -- A consumer that builds a value the block kept back can be used for: the
   -- block goes with it.
   New name object@Object {captured} rest
@@ -1566,8 +1617,22 @@ wanted state token environment = \case
         first = foldMap (erase . snd) late
     case (method, map snd named') of
       (Return, [value, consumer]) -> do
-        code <- invoke state consumer [value]
-        pure $ own value <> first <> code
+        found <- readSTRef (joins state)
+        case Map.lookup (toLazyText consumer) found of
+          Just JoinPoint {joinLabel} -> do
+            from <- label state
+            modifySTRef' (joins state) (Map.adjust (\point -> point {joinJumps = (value, from) : joinJumps point}) (toLazyText consumer))
+            pure $
+              mconcat
+                [ own value,
+                  first,
+                  line [fromString "br label %", from],
+                  from <> fromString ":\n",
+                  line [fromString "br label %", joinLabel]
+                ]
+          Nothing -> do
+            code <- invoke state consumer [value]
+            pure $ own value <> first <> code
       (Apply, values@(_ : _ : _)) -> call state first (last values) (init values)
       _ -> error $ "bad invoke " ++ show method
   Force -> do
@@ -1678,7 +1743,12 @@ wanted state token environment = \case
     pure $ mconcat [foldMap (own . snd) taken, foldMap fst made, filled, rest]
   Abort -> pure $ line [fromString "call void @hazy_abort()"] <> line [fromString "unreachable"]
   -- The program is over: whatever is still held is given up.
-  Halt -> pure $ foldMap (erase . snd) environment <> line [fromString "ret void"]
+  Halt -> do
+    found <- readSTRef (joins state)
+    let given value = case Map.lookup (toLazyText value) found of
+          Just JoinPoint {joinHeld} -> foldMap erase joinHeld
+          Nothing -> erase value
+    pure $ foldMap (given . snd) environment <> line [fromString "ret void"]
 
 -- |
 -- An @Integer@ written in the program that fits in 64 bits, as a constant

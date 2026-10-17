@@ -219,6 +219,7 @@ callback world@World {catching, returned} globals cell given =
 allocate :: Object -> Environment -> IO (IORef Cell)
 allocate Object {kind, method, parameters, body} environment = newIORef $ case kind of
   Kind.Closure -> Closure method parameters body environment
+  Kind.Join -> Closure method parameters body environment
   Kind.Thunk -> Delayed parameters body environment
 
 bug :: String -> IO a
