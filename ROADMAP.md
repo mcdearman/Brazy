@@ -1381,6 +1381,14 @@ Found while comparing the two backends:
     agrees with GHC)
   - Left: `Data.Vector`, `System.FilePath`, `System.Directory`,
     `Data.Text`, and what reads and writes through a `Ptr`
+  - `Data.Vector` and `Data.Vector.Strict` have none left: the monadic
+    unfolds, `constructN` and `constructrN`, the `_` updates, the zips of
+    more than four, `mapMaybeM`, `partitionWith`, `groupBy`, the least and
+    greatest by a key or an order, `fold1M` and its kin, the pre-, post- and
+    indexed scans, and `spanR` and `breakR`. `Data.Vector` gave out none of
+    the names that end in a prime, `foldl'` and the rest, but each of them
+    twice without it (tests `vector-rest` and `vector-strict-rest`, which
+    agree with GHC given vector)
   - The report's modules that were not there at all are: `Data.Ix`, with
     instances for the numbers, characters, `Bool`, `Ordering`, `()` and
     tuples to five; `Data.Array`, kept as one of the runtime's arrays;
