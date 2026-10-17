@@ -7,6 +7,7 @@ module Sequent.Primitive where
 
 import qualified Core.Foreign as Foreign
 import Data.Text (Text, pack)
+import Generate.Global (Global)
 
 data Primitive
   = -- | A field of a constructed value, counting from zero.
@@ -55,6 +56,9 @@ data Primitive
     Foreign !Text !Int
   | -- | A function of C, called as its type says.
     Call !Foreign.Call
+  | -- | Where C calls a definition by a name, as a foreign export says,
+    -- written where the definition starts. Running it does nothing.
+    Export !Foreign.Call !Global
   deriving (Eq, Show)
 
 -- |
@@ -126,7 +130,8 @@ outside =
     ("pack_new", 0),
     ("pack_push", 2),
     ("pack_append", 2),
-    ("pack_done", 1)
+    ("pack_done", 1),
+    ("callback_result", 1)
   ]
 
 -- |
@@ -181,3 +186,4 @@ arity = \case
   IntegerRem -> 2
   Foreign _ count -> count
   Call Foreign.Call {arguments} -> length arguments
+  Export _ _ -> 0

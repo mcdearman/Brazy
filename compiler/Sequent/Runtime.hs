@@ -15,6 +15,7 @@ module Sequent.Runtime
     member,
     helperGlobal,
     foreignCall,
+    outside,
     showGlobal,
   )
 where

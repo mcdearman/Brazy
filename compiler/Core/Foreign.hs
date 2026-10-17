@@ -94,6 +94,7 @@ callWith unwrap position target symbol ForallOver {constraints, result = typex}
             Static -> not (null arguments) || action
             Address -> null arguments && not action && result == Pointer
             Dynamic -> take 1 arguments == [Pointer] && addressOfRest
+            Export -> True
       if fits
         then pure Call {target, symbol, arguments, result, action}
         else unsupportedForeignType position

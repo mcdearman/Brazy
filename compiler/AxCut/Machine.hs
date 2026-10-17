@@ -120,7 +120,11 @@ data World = World
     symbols :: !(IORef (Map Text Int)),
     -- | What C says went wrong last, which the machine says for what it
     -- does in C's place.
-    errno :: !(IORef Int)
+    errno :: !(IORef Int),
+    -- | The definitions that C calls by a name, as foreign exports say,
+    -- each as what calls it; and what the last of them left for C.
+    exported :: Map Text ([Value] -> IO Value),
+    returned :: !(IORef Value)
   }
 
 -- |
@@ -159,7 +163,49 @@ run Program {definitions, entry} = do
   blocks <- newIORef Map.empty
   symbols <- newIORef Map.empty
   errno <- newIORef 0
-  execute World {catching, files, failure, arguments, programName, building, memory, blocks, symbols, errno} globals entry []
+  returned <- newIORef unit
+  let world = World {catching, files, failure, arguments, programName, building, memory, blocks, symbols, errno, exported, returned}
+      exported =
+        Map.fromList
+          [ (symbol, callback world globals cell)
+            | Object {body} <- Map.elems definitions,
+              (Foreign.Call {symbol}, global) <- exportsIn body,
+              Just cell <- [Map.lookup global globals]
+          ]
+  execute world globals entry []
+
+-- |
+-- Where C calls definitions by a name, as foreign exports say.
+exportsIn :: Statement -> [(Foreign.Call, Global)]
+exportsIn = \case
+  Substitute _ rest -> exportsIn rest
+  Let _ _ _ rest -> exportsIn rest
+  Switch clauses fallback -> concat [exportsIn body | Clause _ _ body <- clauses] ++ foldMap exportsIn fallback
+  New _ Object {body} rest -> exportsIn body ++ exportsIn rest
+  Literal _ _ rest -> exportsIn rest
+  Global _ _ _ rest -> exportsIn rest
+  Primitive _ (Export call global) rest -> (call, global) : exportsIn rest
+  Primitive _ _ rest -> exportsIn rest
+  Rec objects rest -> concat [exportsIn body | Recursive {object = Object {body}} <- objects] ++ exportsIn rest
+  Invoke _ -> []
+  Force -> []
+  Abort -> []
+  Halt -> []
+
+-- |
+-- Run a definition that C calls, on what C gave, until it stops, and give
+-- back what it left. A catch begun before C was called is out of its reach.
+callback :: World -> Globals -> IORef Cell -> [Value] -> IO Value
+callback world@World {catching, returned} globals cell given =
+  readIORef cell >>= \case
+    Closure Apply parameters body environment
+      | length parameters == length given + 1 -> do
+          outer <- readIORef catching
+          writeIORef catching []
+          execute world globals body (zip parameters (given ++ [unit]) ++ environment)
+          writeIORef catching outer
+          readIORef returned
+    _ -> bug "a foreign export is not a function of what C gives"
 
 allocate :: Object -> Environment -> IO (IORef Cell)
 allocate Object {kind, method, parameters, body} environment = newIORef $ case kind of
@@ -301,6 +347,7 @@ apply :: World -> Primitive -> [Value] -> IO Value
 apply world primitive arguments = case (primitive, arguments) of
   (Foreign name _, _) -> outside world (unpack name) arguments
   (Call call, _) -> callC world call arguments
+  (Export _ _, _) -> pure unit
   (Field index, [Data _ fields])
     | index < length fields -> pure $ fields !! index
   (Error, [Text message]) -> do
@@ -441,6 +488,8 @@ callC world@World {symbols} call@Foreign.Call {target = Foreign.Dynamic} (Int ad
     [] -> do
       hPutStrLn stderr "the machine cannot call a function of C at an address it did not give out"
       exitFailure
+callC World {exported} Foreign.Call {target = Foreign.Static, symbol} given
+  | Just enter <- Map.lookup symbol exported = enter given
 callC World {memory, blocks, errno, files} Foreign.Call {symbol, result} given = case (unpack symbol, given) of
   -- Memory, as C's library gives it out. A block is put after the last,
   -- on a boundary of 16 bytes, and none is used again.
@@ -681,7 +730,8 @@ callC World {memory, blocks, errno, files} Foreign.Call {symbol, result} given =
 -- |
 -- What the runtime does under a name of its own, as the machine does it.
 outside :: World -> String -> [Value] -> IO Value
-outside World {catching, files, failure, building, arguments, programName} name given = case (name, given) of
+outside World {catching, files, failure, building, arguments, programName, returned} name given = case (name, given) of
+  ("callback_result", [value]) -> unit <$ writeIORef returned value
   ("new_ref", [value]) -> Box <$> newIORef value
   ("read_ref", [Box box]) -> readIORef box
   ("write_ref", [Box box, value]) -> unit <$ writeIORef box value

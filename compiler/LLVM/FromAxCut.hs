@@ -1618,6 +1618,9 @@ wanted state token environment = \case
         arguments = map snd taken
     (code, value) <- case (primitive, arguments) of
       (Call call, _) -> foreignCall state call arguments
+      (Export call exported, _) -> do
+        exportStub state call exported
+        pure (mempty, fromString "ptrtoint (ptr @hazy_nullary to i64)")
       (Field index, [block]) -> do
         (code, pointer) <- address state block
         (code', value) <- load state pointer (fieldsAt + index)
@@ -1755,6 +1758,7 @@ primitiveName = \case
   IntegerRem -> "hazy_prim_integer_rem"
   Foreign name _ -> "hazy_prim_" ++ unpack name
   Call _ -> error "a function of C is called by its own name"
+  Export _ _ -> error "a foreign export is nothing to run"
 
 -- |
 -- A call of a function of C: what it is given made what C has, and what it
@@ -1787,7 +1791,7 @@ foreignCall state Foreign.Call {target = Foreign.Dynamic, arguments, result} (fu
             fromString " ",
             address,
             fromString "(",
-            commas (map snd given),
+            commas (zipWith typed (drop 1 arguments) (map snd given)),
             fromString ")"
           ]
   (code, value) <- marshalOut state result invocation
@@ -1818,11 +1822,63 @@ foreignCall state Foreign.Call {symbol, arguments, result} values = do
             fromString " @",
             fromString (unpack symbol),
             fromString "(",
-            commas (map snd given),
+            commas (zipWith typed arguments (map snd given)),
             fromString ")"
           ]
   (code, value) <- marshalOut state result invocation
   pure (foldMap fst given <> code, value)
+
+-- |
+-- A function of C that calls a definition, as a foreign export says: what C
+-- gives is made values, the definition's code is run on them until it
+-- stops, and what it left is made what C gets. What is thrown there and
+-- not caught there ends the program; a catch begun before C was called is
+-- out of its reach. Whatever else the unit says of the name, it is this.
+exportStub :: State s -> Foreign.Call -> Global -> ST s ()
+exportStub state@State {target = Target {registers}} Foreign.Call {symbol = name, arguments, result} exported = do
+  parameters <- traverse (const (temporary state)) arguments
+  given <- for (zip arguments parameters) $ \(marshal, parameter) ->
+    marshalOut state marshal (fromString "freeze " <> cType marshal <> fromString " " <> parameter)
+  taken <- local state
+  (code, returned) <- case result of
+    Foreign.Unit -> pure (mempty, fromString "void")
+    _ -> do
+      (code, value) <- marshalIn state result taken
+      pure (code, cType result <> fromString " " <> value)
+  let self = fromString "ptrtoint (ptr " <> quoted (symbol exported) <> fromString " to i64)"
+      -- The code never gives its result to its consumer.
+      consumer = fromString "ptrtoint (ptr @hazy_nullary to i64)"
+      (passed, spilled) = splitAt registers (self : map snd given ++ [consumer])
+      stub =
+        mconcat
+          [ fromString "\ndefine ",
+            cResult result,
+            fromString " @",
+            fromString (unpack name),
+            fromString "(",
+            commas (zipWith typed arguments parameters),
+            fromString ") {\n",
+            foldMap fst given,
+            line [fromString "call void @hazy_catch_barrier()"],
+            mconcat
+              [ line [fromString "store i64 ", argument, fromString ", ptr ", spill index]
+                | (index, argument) <- zip [0 ..] spilled
+              ],
+            line
+              [ fromString "call tailcc void ",
+                quoted (symbol exported <> fromString ".code"),
+                fromString "(",
+                commas [fromString "i64 " <> argument | argument <- passed],
+                fromString ")"
+              ],
+            line [fromString "call void @hazy_catch_unbarrier()"],
+            line [taken, fromString " = call i64 @hazy_callback_take()"],
+            code,
+            erase taken,
+            line [fromString "ret ", returned],
+            fromString "}\n"
+          ]
+  modifySTRef' (cFunctions state) (Map.insert name stub)
 
 -- |
 -- The type C has for a value.
@@ -1873,41 +1929,47 @@ temporary state = do
   pure $ fromString "%f" <> fromString (show next)
 
 -- |
--- A value as C is given it: the code, and the argument with its type.
+-- A value as C has it, written with its type.
+typed :: Foreign.Marshal -> Builder -> Builder
+typed marshal value = cParameter marshal <> fromString " " <> value
+
+-- |
+-- A value as C is given it: the code, and what C is given, of the type
+-- 'cParameter' says.
 marshalIn :: State s -> Foreign.Marshal -> Builder -> ST s (Builder, Builder)
 marshalIn state marshal value = case marshal of
   Foreign.Int -> do
     number <- temporary state
-    pure (line [number, fromString " = ashr i64 ", value, fromString ", 1"], fromString "i64 " <> number)
+    pure (line [number, fromString " = ashr i64 ", value, fromString ", 1"], number)
   Foreign.Char -> do
     number <- temporary state
     code <- temporary state
     pure
       ( line [number, fromString " = ashr i64 ", value, fromString ", 1"]
           <> line [code, fromString " = trunc i64 ", number, fromString " to i32"],
-        fromString "i32 " <> code
+        code
       )
   Foreign.Double -> do
     number <- temporary state
-    pure (line [number, fromString " = call double @hazy_ffi_double(i64 ", value, fromString ")"], fromString "double " <> number)
+    pure (line [number, fromString " = call double @hazy_ffi_double(i64 ", value, fromString ")"], number)
   Foreign.Float -> do
     double <- temporary state
     single <- temporary state
     pure
       ( line [double, fromString " = call double @hazy_ffi_double(i64 ", value, fromString ")"]
           <> line [single, fromString " = fptrunc double ", double, fromString " to float"],
-        fromString "float " <> single
+        single
       )
   Foreign.Bool -> do
     truth <- temporary state
-    pure (line [truth, fromString " = call i32 @hazy_ffi_bool(i64 ", value, fromString ")"], fromString "i32 " <> truth)
+    pure (line [truth, fromString " = call i32 @hazy_ffi_bool(i64 ", value, fromString ")"], truth)
   Foreign.Pointer -> do
     number <- temporary state
     address <- temporary state
     pure
       ( line [number, fromString " = ashr i64 ", value, fromString ", 1"]
           <> line [address, fromString " = inttoptr i64 ", number, fromString " to ptr"],
-        fromString "ptr " <> address
+        address
       )
   -- Kept as an Int.
   Foreign.Int8 -> untagged
@@ -1928,18 +1990,18 @@ marshalIn state marshal value = case marshal of
       pure
         ( line [number, fromString " = ashr i64 ", value, fromString ", 1"]
             <> line [narrow, fromString " = trunc i64 ", number, fromString " to ", cType marshal],
-          cParameter marshal <> fromString " " <> narrow
+          narrow
         )
     whole = do
       number <- temporary state
-      pure (line [number, fromString " = call i64 @hazy_ffi_integer(i64 ", value, fromString ")"], fromString "i64 " <> number)
+      pure (line [number, fromString " = call i64 @hazy_ffi_integer(i64 ", value, fromString ")"], number)
     integral = do
       number <- temporary state
       narrow <- temporary state
       pure
         ( line [number, fromString " = call i64 @hazy_ffi_integer(i64 ", value, fromString ")"]
             <> line [narrow, fromString " = trunc i64 ", number, fromString " to ", cType marshal],
-          cParameter marshal <> fromString " " <> narrow
+          narrow
         )
 
 -- |
@@ -2082,6 +2144,9 @@ runtime =
   declare i64 @hazy_ffi_from_bool(i32)
   declare i64 @hazy_ffi_integer(i64)
   declare i64 @hazy_ffi_from_unsigned(i64)
+  declare void @hazy_catch_barrier()
+  declare void @hazy_catch_unbarrier()
+  declare i64 @hazy_callback_take()
   declare i64 @hazy_prim_error(i64)
   declare i64 @hazy_prim_put_str_ln(i64)
   declare i64 @hazy_prim_text_snoc(i64, i64)

@@ -1574,8 +1574,8 @@ Missing:
       and what is given back made a value again (`hazy_ffi_*` in the
       runtime). The AxCut machine cannot call C: it knows the functions of
       numbers and characters of C's library, and stops with a word for any
-      other (tests `foreign-import`, which agrees with GHC, `ForeignInteger`
-      and `ForeignExport`)
+      other (tests `foreign-import`, which agrees with GHC, and
+      `ForeignInteger`)
 - [x] The numbers of a fixed width and `Bool`, given to C and given back.
       `Int8` to `Int64`, `Word` and `Word8` to `Word64` are builtin types
       now, newtypes of an `Int` or an `Integer` as they were in the
@@ -1620,8 +1620,23 @@ Missing:
       `throwErrno` family (test `foreign-errno`, which agrees with GHC). The
       numbers are those of Linux and Windows; some are others on macOS. The
       AxCut machine's errno is always 0
-- [ ] What the foreign function interface does not do yet: `foreign export`
-      and `wrapper`, which call Haskell from C
+- [x] `foreign export`: a function of Haskell that C calls by a name, the
+      one written for it or else its own. It is a definition of its own, of
+      what is exported at the type it is exported at
+      (`Definition2.Exported`), whose code takes what C gives, leaves the
+      result with the runtime (`callback_result`) and stops. In LLVM a
+      function of C of that name makes values of what it is given, runs the
+      code until it stops, and makes what was left what C has. Such a
+      definition is kept though nothing in the program uses it. What is
+      thrown there and not caught there ends the program: a catch begun
+      before C was called is out of its reach (`hazy_catch_barrier`). The
+      heap is not checked inside a call from C, where what the program held
+      before is out of sight. The AxCut machine runs the definition by
+      itself when it is called by its name or its address (test
+      `foreign-export`, which agrees with GHC, compiled, as GHCi cannot
+      export; `ForeignExport` and `ForeignExportType`)
+- [ ] `wrapper`, which makes a function of C of a function of Haskell as the
+      program runs, to call it by its address
 - [x] `bracket`, `bracket_`, `bracketOnError`, `finally` and `onException`
       in `Control.Exception`, over the runtime's catch: what is done when
       an action throws is done, and what was thrown is thrown on as it
