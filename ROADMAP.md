@@ -1373,9 +1373,18 @@ Found while comparing the two backends:
     `Data.Bifoldable` and `Data.Bitraversable` have their defaults and
     GHC's instances, for pairs, the tuples to five, `Either` and `Const`
     (test `bifunctors`, which agrees with GHC)
-  - Left: `Data.Map` and `Data.Set`, `Data.Vector`, `System.FilePath`,
-    `System.Directory`, `Data.Text`, and what reads and writes through a
-    `Ptr`
+  - `Data.Map` and `Data.Set` have none left: `mergeWithKey`, `compose`,
+    `traverseMaybeWithKey`, the `Antitone` functions, `splitRoot`,
+    `updateAt` and the updates of the least and greatest, `powerSet`,
+    `alterF`, `disjointUnion`, `showTree` and `valid` are those of
+    containers, over the trees there are (test `containers-rest`, which
+    agrees with GHC)
+  - `System.FilePath` has none left: the search path, the functions of
+    more than one extension, drives, `splitPath` and `joinPath`,
+    `normalise`, `equalFilePath`, `makeRelative` and `isValid` are
+    filepath's, for POSIX and for Windows as the system is; and a path
+    joined with an empty one is the path, as filepath has it (test
+    `filepath`, which agrees with GHC)
   - `Data.Text` and `Data.Text.Lazy` have none left (`breakOnEnd`,
     `breakOnAll`, `commonPrefixes`, `spanM` and `spanEndM`, `foldr'`,
     `findIndex`, `measureOff`, and the folds of the chunks of a lazy text,
@@ -1384,6 +1393,8 @@ Found while comparing the two backends:
     was not given out), and `GHC.Clock` has `getMonotonicTime` (test
     `library-holes`, which agrees with GHC given text and
     parser-combinators)
+  - Left: `Data.Vector`, `System.Directory`, and what reads and writes
+    through a `Ptr`
   - The report's modules that were not there at all are: `Data.Ix`, with
     instances for the numbers, characters, `Bool`, `Ordering`, `()` and
     tuples to five; `Data.Array`, kept as one of the runtime's arrays;
@@ -1584,8 +1595,14 @@ Missing:
       of its own for each name, and calls a function at one by its name
       (test `foreign-dynamic`, which agrees with GHC, and
       `ForeignDynamic`). `finalizerFree` is the address of `free`
+- [x] `Foreign.C.Error`: errno, which the runtime reads and writes where each
+      system keeps it (`hazy_errno`, `hazy_set_errno`), the `IOError` of a
+      number, of the kind GHC gives it and with C's words for it, and the
+      `throwErrno` family (test `foreign-errno`, which agrees with GHC). The
+      numbers are those of Linux and Windows; some are others on macOS. The
+      AxCut machine's errno is always 0
 - [ ] What the foreign function interface does not do yet: `foreign export`
-      and `wrapper`, which call Haskell from C, and `Foreign.C.Error`
+      and `wrapper`, which call Haskell from C
 - [x] `bracket`, `bracket_`, `bracketOnError`, `finally` and `onException`
       in `Control.Exception`, over the runtime's catch: what is done when
       an action throws is done, and what was thrown is thrown on as it
