@@ -420,17 +420,8 @@ exportOf :: Context s scope -> Global.Global -> Foreign.Call -> Expression scope
 exportOf context global call@Foreign.Call {arguments, action} exported = do
   names <- traverse (const (fresh context)) arguments
   result <- fresh context
-  value <- fresh context
-  left <- fresh context
   marker <- fresh context
-  let finish =
-        MuTilde (byValue value) $
-          Primitive (Runtime.outside "callback_result") [Variable value] $
-            MuTilde (byValue left) Halt
-      ran
-        | action = Apply [] (Force finish)
-        | otherwise = finish
-  body <- evaluate context exported (foldr (\name -> Apply [Variable name]) ran names)
+  body <- evaluate context exported (foldr (\name -> Apply [Variable name]) (Runtime.callbackDone action) names)
   pure $
     Function (byValue <$> names) result $
       Primitive (Export call global) [] (MuTilde (byValue marker) body)

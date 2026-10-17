@@ -59,6 +59,10 @@ data Primitive
   | -- | Where C calls a definition by a name, as a foreign export says,
     -- written where the definition starts. Running it does nothing.
     Export !Foreign.Call !Global
+  | -- | A function of C made of a function of the program, as a wrapper
+    -- does, given the code that applies the function to what C gives and
+    -- the function. It gives the address.
+    Wrap !Foreign.Call
   deriving (Eq, Show)
 
 -- |
@@ -187,3 +191,4 @@ arity = \case
   Foreign _ count -> count
   Call Foreign.Call {arguments} -> length arguments
   Export _ _ -> 0
+  Wrap _ -> 2

@@ -121,10 +121,16 @@ data World = World
     -- | What C says went wrong last, which the machine says for what it
     -- does in C's place.
     errno :: !(IORef Int),
-    -- | The definitions that C calls by a name, as foreign exports say,
-    -- each as what calls it; and what the last of them left for C.
-    exported :: Map Text ([Value] -> IO Value),
-    returned :: !(IORef Value)
+    -- | The definitions that C calls by a name, as foreign exports say;
+    -- and what the last call into the program left for C.
+    exported :: Map Text (IORef Cell),
+    returned :: !(IORef Value),
+    -- | The functions of C that wrappers made, each by its address, with
+    -- the code that applies the function to what C gives, and the function.
+    wrappers :: !(IORef (Map Int (Value, Value))),
+    -- | Run a function of the program, as C calls it, on what C gave, and
+    -- give back what it left.
+    enter :: IORef Cell -> [Value] -> IO Value
   }
 
 -- |
@@ -164,14 +170,16 @@ run Program {definitions, entry} = do
   symbols <- newIORef Map.empty
   errno <- newIORef 0
   returned <- newIORef unit
-  let world = World {catching, files, failure, arguments, programName, building, memory, blocks, symbols, errno, exported, returned}
+  wrappers <- newIORef Map.empty
+  let world = World {catching, files, failure, arguments, programName, building, memory, blocks, symbols, errno, exported, returned, wrappers, enter}
       exported =
         Map.fromList
-          [ (symbol, callback world globals cell)
+          [ (symbol, cell)
             | Object {body} <- Map.elems definitions,
               (Foreign.Call {symbol}, global) <- exportsIn body,
               Just cell <- [Map.lookup global globals]
           ]
+      enter = callback world globals
   execute world globals entry []
 
 -- |
@@ -193,8 +201,9 @@ exportsIn = \case
   Halt -> []
 
 -- |
--- Run a definition that C calls, on what C gave, until it stops, and give
--- back what it left. A catch begun before C was called is out of its reach.
+-- Run a function of the program that C calls, on what C gave, until it
+-- stops, and give back what it left. A catch begun before C was called is
+-- out of its reach.
 callback :: World -> Globals -> IORef Cell -> [Value] -> IO Value
 callback world@World {catching, returned} globals cell given =
   readIORef cell >>= \case
@@ -205,7 +214,7 @@ callback world@World {catching, returned} globals cell given =
           execute world globals body (zip parameters (given ++ [unit]) ++ environment)
           writeIORef catching outer
           readIORef returned
-    _ -> bug "a foreign export is not a function of what C gives"
+    _ -> bug "what C calls is not a function of what C gives"
 
 allocate :: Object -> Environment -> IO (IORef Cell)
 allocate Object {kind, method, parameters, body} environment = newIORef $ case kind of
@@ -348,6 +357,11 @@ apply world primitive arguments = case (primitive, arguments) of
   (Foreign name _, _) -> outside world (unpack name) arguments
   (Call call, _) -> callC world call arguments
   (Export _ _, _) -> pure unit
+  (Wrap _, [entry, function]) -> do
+    made <- readIORef (wrappers world)
+    let address = maybe 0x40000000 ((+ 16) . fst) (Map.lookupMax made)
+    modifyIORef (wrappers world) (Map.insert address (entry, function))
+    pure (Int (fromIntegral address))
   (Field index, [Data _ fields])
     | index < length fields -> pure $ fields !! index
   (Error, [Text message]) -> do
@@ -481,15 +495,55 @@ callC World {symbols} Foreign.Call {target = Foreign.Address, symbol} _ = do
       let address = 0x100000 + 16 * Map.size known
       modifyIORef symbols (Map.insert symbol address)
       pure (Int (fromIntegral address))
-callC world@World {symbols} call@Foreign.Call {target = Foreign.Dynamic} (Int address : given) = do
+callC world@World {symbols, wrappers, enter} call@Foreign.Call {target = Foreign.Dynamic} (Int address : given) = do
   known <- readIORef symbols
+  made <- readIORef wrappers
   case [name | (name, at) <- Map.toList known, at == fromIntegral address] of
+    _ | Just (Reference entry, function) <- Map.lookup (fromIntegral address) made -> enter entry (function : given)
     name : _ -> callC world call {Foreign.target = Foreign.Static, Foreign.symbol = name, Foreign.arguments = drop 1 (Foreign.arguments call)} given
     [] -> do
       hPutStrLn stderr "the machine cannot call a function of C at an address it did not give out"
       exitFailure
-callC World {exported} Foreign.Call {target = Foreign.Static, symbol} given
-  | Just enter <- Map.lookup symbol exported = enter given
+callC World {exported, enter} Foreign.Call {target = Foreign.Static, symbol} given
+  | Just cell <- Map.lookup symbol exported = enter cell given
+callC World {wrappers} Foreign.Call {target = Foreign.Static, symbol} [Int address]
+  | symbol == Text.pack "hazy_wrapper_free" = unit <$ modifyIORef wrappers (Map.delete (fromIntegral address))
+callC world@World {memory} Foreign.Call {target = Foreign.Static, symbol} [Int base, count, size, Int compare]
+  | symbol == Text.pack "qsort" = do
+      let whole = \case
+            Int number -> fromIntegral number
+            Integer number -> fromInteger number
+            _ -> 0
+          width = whole size :: Int
+          at index = fromIntegral base + index * width
+          element index = do
+            bytes <- readIORef memory
+            pure [Map.findWithDefault 0 (at index + offset) bytes | offset <- [0 .. width - 1]]
+          put index element =
+            modifyIORef memory $ \bytes ->
+              foldr (\(offset, byte) -> Map.insert (at index + offset) byte) bytes (zip [0 ..] element)
+          comparing =
+            Foreign.Call
+              { target = Foreign.Dynamic,
+                symbol = Text.empty,
+                arguments = [Foreign.Pointer, Foreign.Pointer, Foreign.Pointer],
+                result = Foreign.Int32,
+                action = True
+              }
+          insert index
+            | index <= 0 = pure ()
+            | otherwise = do
+                order <- callC world comparing [Int compare, Int (fromIntegral (at (index - 1))), Int (fromIntegral (at index))]
+                case order of
+                  Int order | order > 0 -> do
+                    before <- element (index - 1)
+                    after <- element index
+                    put (index - 1) after
+                    put index before
+                    insert (index - 1)
+                  _ -> pure ()
+      for_ [1 .. whole count - 1] insert
+      pure unit
 callC World {memory, blocks, errno, files} Foreign.Call {symbol, result} given = case (unpack symbol, given) of
   -- Memory, as C's library gives it out. A block is put after the last,
   -- on a boundary of 16 bytes, and none is used again.

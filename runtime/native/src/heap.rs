@@ -207,6 +207,9 @@ struct Heap {
     /// What catches a thrown value, the last begun last: a handler and where
     /// to go on with what it gives. The program holds these through here.
     catching: Vec<(Value, Value)>,
+    /// The functions of C that wrappers made, each by its address, with the
+    /// place of the two values it calls, which the program holds there.
+    wrapped: HashMap<u64, *mut Value>,
     /// How many bytes are in blocks.
     live: usize,
     /// After how many allocations every count is checked, if they are.
@@ -256,6 +259,7 @@ fn heap() -> &'static mut Heap {
                 pending: Vec::new(),
                 roots: Vec::new(),
                 catching: Vec::new(),
+                wrapped: HashMap::new(),
                 live: 0,
                 check: setting("HAZY_CHECK").map(|value| value.parse().unwrap_or(1).max(1)),
                 since: 0,
@@ -389,6 +393,10 @@ impl Heap {
             reach(handler, &mut stack);
             reach(resume, &mut stack);
         }
+        for &slot in self.wrapped.values() {
+            reach(*slot, &mut stack);
+            reach(*slot.add(1), &mut stack);
+        }
         while let Some(block) = stack.pop() {
             for &child in children(block) {
                 reach(child, &mut stack);
@@ -444,6 +452,10 @@ impl Heap {
             refer(handler, "a catch");
             refer(resume, "a catch");
         }
+        for &slot in self.wrapped.values() {
+            refer(*slot, "a wrapper");
+            refer(*slot.add(1), "a wrapper");
+        }
         for &block in blocks {
             let counted = references(*block);
             let found = expected.get(&block).copied().unwrap_or(0);
@@ -494,6 +506,11 @@ pub const BARRIER: Value = 0;
 /// What catches a thrown value.
 pub fn catching() -> &'static mut Vec<(Value, Value)> {
     &mut heap().catching
+}
+
+/// The functions of C that wrappers made.
+pub fn wrapped() -> &'static mut HashMap<u64, *mut Value> {
+    &mut heap().wrapped
 }
 
 /// A new block of some words with a header, and one reference to it.

@@ -56,9 +56,8 @@ castFunPtrToPtr (FunPtr address) = Ptr address
 castPtrToFunPtr :: Ptr a -> FunPtr b
 castPtrToFunPtr (Ptr address) = FunPtr address
 
--- | Nothing is made by a wrapper yet, so there is nothing to free.
-freeHaskellFunPtr :: FunPtr a -> IO ()
-freeHaskellFunPtr _ = pure ()
+-- | Free a function of C that a wrapper made, which is not called again.
+foreign import ccall "hazy_wrapper_free" freeHaskellFunPtr :: FunPtr a -> IO ()
 
 newtype IntPtr = IntPtr Int
   deriving (Eq, Ord, Show)

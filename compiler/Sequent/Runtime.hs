@@ -16,6 +16,7 @@ module Sequent.Runtime
     helperGlobal,
     foreignCall,
     outside,
+    callbackDone,
     showGlobal,
   )
 where
@@ -370,8 +371,44 @@ effect = effectOf . outside
 foreignCall :: Foreign.Call -> Producer
 foreignCall call@Foreign.Call {target, action}
   | Foreign.Address <- target = Mu (pack "k") (Primitive (Primitive.Call call) [] (covariable "k"))
+  -- A wrapper is a function whose result is the action of making a
+  -- function of C of what it is given.
+  | Foreign.Wrapper <- target =
+      function "function" "k" $
+        Cut
+          ( Function [] (pack "done") $
+              Cut (callback call) $
+                MuTilde (byNeed "entry") $
+                  Primitive (Primitive.Wrap call) [variable "entry", variable "function"] (covariable "done")
+          )
+          (covariable "k")
   | action = effectOf (Primitive.Call call)
   | otherwise = wrap (Primitive.Call call)
+
+-- |
+-- The code a function of C made of a function of the program runs: it is
+-- given the function and what C gave, and applies the one to the other.
+callback :: Foreign.Call -> Producer
+callback Foreign.Call {arguments, action} =
+  Function (byNeed "function" : map byValue names) (pack "unused") $
+    Cut (variable "function") $
+      Force (foldr (\name -> Apply [variable name]) (callbackDone action) names)
+  where
+    names = ["x" ++ show index | index <- [1 .. length arguments]]
+
+-- |
+-- What is done, where C called into the program, with what a function of
+-- the program gave for what C gave: it is run if it is an action, the
+-- result is left for C, and the program stops, which goes back to C.
+callbackDone :: Bool -> Consumer
+callbackDone action
+  | action = Apply [] (Force done)
+  | otherwise = done
+  where
+    done =
+      MuTilde (byValue "result") $
+        Primitive (outside "callback_result") [variable "result"] $
+          MuTilde (byValue "left") Halt
 
 effectOf :: Primitive -> Producer
 effectOf primitive = go 0

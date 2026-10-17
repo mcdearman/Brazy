@@ -43,6 +43,9 @@ data Target
   | Dynamic
   | -- | A function of Haskell that C calls by a name.
     Export
+  | -- | A function of C made of a function of Haskell as the program runs,
+    -- which C calls by its address.
+    Wrapper
   deriving (Eq, Ord, Show)
 
 -- | A call of a function of C, by its name: what it is given, what it gives,

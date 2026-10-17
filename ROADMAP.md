@@ -1635,8 +1635,16 @@ Missing:
       itself when it is called by its name or its address (test
       `foreign-export`, which agrees with GHC, compiled, as GHCi cannot
       export; `ForeignExport` and `ForeignExportType`)
-- [ ] `wrapper`, which makes a function of C of a function of Haskell as the
-      program runs, to call it by its address
+- [x] `wrapper`, which makes a function of C of a function of Haskell as the
+      program runs, to call it by its address. A unit has 128 functions of C
+      for each type a wrapper makes, each of which calls what is kept in a
+      place of its own: the code that applies a function to what C gives,
+      as an object, and the function. The runtime gives out the places
+      (`hazy_wrapper_new`), and `freeHaskellFunPtr` gives one back
+      (`hazy_wrapper_free`); more than 128 of a type at once stops the
+      program. The AxCut machine gives out an address of its own for each,
+      and has C's `qsort`, which calls back (test `foreign-wrapper`, which
+      agrees with GHC)
 - [x] `bracket`, `bracket_`, `bracketOnError`, `finally` and `onException`
       in `Control.Exception`, over the runtime's catch: what is done when
       an action throws is done, and what was thrown is thrown on as it

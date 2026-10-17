@@ -51,7 +51,7 @@ import qualified Data.Set as Set
 import Data.STRef (STRef, modifySTRef', newSTRef, readSTRef, writeSTRef)
 import Data.Text (Text, unpack)
 import qualified Data.Text as Text
-import qualified Data.Text.Lazy as Lazy.Text (Text, unpack)
+import qualified Data.Text.Lazy as Lazy.Text (Text, toStrict, unpack)
 import Data.Text.Lazy.Builder (Builder, fromString, toLazyText)
 import Data.Traversable (for)
 import qualified Core.Foreign as Foreign
@@ -1621,6 +1621,7 @@ wanted state token environment = \case
       (Export call exported, _) -> do
         exportStub state call exported
         pure (mempty, fromString "ptrtoint (ptr @hazy_nullary to i64)")
+      (Wrap call, [entry, function]) -> wrapperNew state call entry function
       (Field index, [block]) -> do
         (code, pointer) <- address state block
         (code', value) <- load state pointer (fieldsAt + index)
@@ -1759,6 +1760,7 @@ primitiveName = \case
   Foreign name _ -> "hazy_prim_" ++ unpack name
   Call _ -> error "a function of C is called by its own name"
   Export _ _ -> error "a foreign export is nothing to run"
+  Wrap _ -> error "a wrapper is made in place"
 
 -- |
 -- A call of a function of C: what it is given made what C has, and what it
@@ -1835,21 +1837,11 @@ foreignCall state Foreign.Call {symbol, arguments, result} values = do
 -- not caught there ends the program; a catch begun before C was called is
 -- out of its reach. Whatever else the unit says of the name, it is this.
 exportStub :: State s -> Foreign.Call -> Global -> ST s ()
-exportStub state@State {target = Target {registers}} Foreign.Call {symbol = name, arguments, result} exported = do
+exportStub state call@Foreign.Call {symbol = name, arguments, result} exported = do
   parameters <- traverse (const (temporary state)) arguments
-  given <- for (zip arguments parameters) $ \(marshal, parameter) ->
-    marshalOut state marshal (fromString "freeze " <> cType marshal <> fromString " " <> parameter)
-  taken <- local state
-  (code, returned) <- case result of
-    Foreign.Unit -> pure (mempty, fromString "void")
-    _ -> do
-      (code, value) <- marshalIn state result taken
-      pure (code, cType result <> fromString " " <> value)
   let self = fromString "ptrtoint (ptr " <> quoted (symbol exported) <> fromString " to i64)"
-      -- The code never gives its result to its consumer.
-      consumer = fromString "ptrtoint (ptr @hazy_nullary to i64)"
-      (passed, spilled) = splitAt registers (self : map snd given ++ [consumer])
-      stub =
+  body <- entering state call parameters (quoted (symbol exported <> fromString ".code")) [self]
+  let stub =
         mconcat
           [ fromString "\ndefine ",
             cResult result,
@@ -1858,27 +1850,171 @@ exportStub state@State {target = Target {registers}} Foreign.Call {symbol = name
             fromString "(",
             commas (zipWith typed arguments parameters),
             fromString ") {\n",
-            foldMap fst given,
-            line [fromString "call void @hazy_catch_barrier()"],
-            mconcat
-              [ line [fromString "store i64 ", argument, fromString ", ptr ", spill index]
-                | (index, argument) <- zip [0 ..] spilled
-              ],
-            line
-              [ fromString "call tailcc void ",
-                quoted (symbol exported <> fromString ".code"),
-                fromString "(",
-                commas [fromString "i64 " <> argument | argument <- passed],
-                fromString ")"
-              ],
-            line [fromString "call void @hazy_catch_unbarrier()"],
-            line [taken, fromString " = call i64 @hazy_callback_take()"],
-            code,
-            erase taken,
-            line [fromString "ret ", returned],
+            body,
             fromString "}\n"
           ]
   modifySTRef' (cFunctions state) (Map.insert name stub)
+
+-- |
+-- What a function of C does to call into the program: what C gave, in the
+-- parameters, is made values; some code is run on what comes first and
+-- them until it stops, with what is thrown there and not caught there out
+-- of reach of a catch begun before; and what was left is made what C gets.
+entering :: State s -> Foreign.Call -> [Builder] -> Builder -> [Builder] -> ST s Builder
+entering state@State {target = Target {registers}} Foreign.Call {arguments, result} parameters code first = do
+  given <- for (zip arguments parameters) $ \(marshal, parameter) ->
+    marshalOut state marshal (fromString "freeze " <> cType marshal <> fromString " " <> parameter)
+  taken <- local state
+  (made, returned) <- case result of
+    Foreign.Unit -> pure (mempty, fromString "void")
+    _ -> do
+      (made, value) <- marshalIn state result taken
+      pure (made, cType result <> fromString " " <> value)
+  let -- The code never gives its result to its consumer.
+      consumer = fromString "ptrtoint (ptr @hazy_nullary to i64)"
+      (passed, spilled) = splitAt registers (first ++ map snd given ++ [consumer])
+  pure $
+    mconcat
+      [ foldMap fst given,
+        line [fromString "call void @hazy_catch_barrier()"],
+        mconcat
+          [ line [fromString "store i64 ", argument, fromString ", ptr ", spill index]
+            | (index, argument) <- zip [0 ..] spilled
+          ],
+        line
+          [ fromString "call tailcc void ",
+            code,
+            fromString "(",
+            commas [fromString "i64 " <> argument | argument <- passed],
+            fromString ")"
+          ],
+        line [fromString "call void @hazy_catch_unbarrier()"],
+        line [taken, fromString " = call i64 @hazy_callback_take()"],
+        made,
+        erase taken,
+        line [fromString "ret ", returned]
+      ]
+
+-- |
+-- How many functions of C a unit has for wrappers of a type: how many
+-- there can be at once, until some are freed.
+wrappers :: Int
+wrappers = 128
+
+-- |
+-- A function of C made of a function of the program, as a wrapper does. A
+-- unit has a number of functions of C for each type, each of which calls
+-- what is kept in a place of its own: the code that applies the function to
+-- what C gives, as an object, and the function. The runtime gives out the
+-- places, and takes them back when the function of C is freed.
+wrapperNew :: State s -> Foreign.Call -> Builder -> Builder -> ST s (Builder, Builder)
+wrapperNew state call entry function = do
+  let name = wrapperName call
+      key = Lazy.Text.toStrict (toLazyText name)
+  known <- readSTRef (cFunctions state)
+  if Map.member key known
+    then pure ()
+    else do
+      made <- wrapperFunctions state call name
+      modifySTRef' (cFunctions state) (Map.insert key made)
+  marshalOut state Foreign.Pointer $
+    mconcat
+      [ fromString "call ptr @hazy_wrapper_new(ptr ",
+        quoted (name <> fromString ".slots"),
+        fromString ", ptr ",
+        quoted (name <> fromString ".stubs"),
+        fromString ", i64 ",
+        fromString (show wrappers),
+        fromString ", i64 ",
+        entry,
+        fromString ", i64 ",
+        function,
+        fromString ")"
+      ]
+
+-- |
+-- The name of the functions of C a unit has for wrappers of a type.
+wrapperName :: Foreign.Call -> Builder
+wrapperName Foreign.Call {arguments, result, action} =
+  fromString $
+    "hazy.wrapper."
+      ++ concatMap ((++ ".") . show) arguments
+      ++ "to."
+      ++ show result
+      ++ (if action then ".io" else "")
+
+-- |
+-- The functions of C for wrappers of a type, the places they call what is
+-- kept in, and where each function is.
+wrapperFunctions :: State s -> Foreign.Call -> Builder -> ST s Builder
+wrapperFunctions state call@Foreign.Call {arguments, result} name = do
+  parameters <- traverse (const (temporary state)) arguments
+  body <- entering state call parameters (fromString "%code") [fromString "%entry", fromString "%function"]
+  let slots = quoted (name <> fromString ".slots")
+      place index = fromString "getelementptr ([" <> number (toInteger (2 * wrappers)) <> fromString " x i64], ptr " <> slots <> fromString ", i64 0, i64 " <> number index <> fromString ")"
+      header = commas (zipWith typed arguments parameters)
+      stub index =
+        mconcat
+          [ fromString "\ndefine internal ",
+            cResult result,
+            fromString " ",
+            quoted (name <> fromString "." <> fromString (show index)),
+            fromString "(",
+            header,
+            fromString ") {\n",
+            line [fromString "%entry = load i64, ptr ", place (2 * index)],
+            line [fromString "%function = load i64, ptr ", place (2 * index + 1)],
+            line
+              [ case result of
+                  Foreign.Unit -> mempty
+                  _ -> fromString "%result = ",
+                fromString "tail call ",
+                cResult result,
+                fromString " ",
+                quoted name,
+                fromString "(",
+                commas ([fromString "i64 %entry", fromString "i64 %function"] ++ zipWith typed arguments parameters),
+                fromString ")"
+              ],
+            line
+              [ case result of
+                  Foreign.Unit -> fromString "ret void"
+                  _ -> fromString "ret " <> cType result <> fromString " %result"
+              ],
+            fromString "}\n"
+          ]
+  pure $
+    mconcat
+      [ fromString "\n",
+        slots,
+        fromString " = internal global [",
+        number (toInteger (2 * wrappers)),
+        fromString " x i64] zeroinitializer\n",
+        quoted (name <> fromString ".stubs"),
+        fromString " = internal constant [",
+        number (toInteger wrappers),
+        fromString " x ptr] [",
+        commas [fromString "ptr " <> quoted (name <> fromString "." <> fromString (show index)) | index <- [0 .. wrappers - 1]],
+        fromString "]\n",
+        foldMap stub [0 .. toInteger wrappers - 1],
+        -- What is called: the code of the object kept first, given it, the
+        -- function kept second, and what C gave. The code takes a reference
+        -- to each, and the place keeps its own.
+        fromString "\ndefine internal ",
+        cResult result,
+        fromString " ",
+        quoted name,
+        fromString "(",
+        commas ([fromString "i64 %entry", fromString "i64 %function"] ++ zipWith typed arguments parameters),
+        fromString ") {\n",
+        line [fromString "call void @hazy_share(i64 %entry)"],
+        line [fromString "call void @hazy_share(i64 %function)"],
+        line [fromString "%object = inttoptr i64 %entry to ptr"],
+        line [fromString "%place = getelementptr i64, ptr %object, i64 ", fromString (show codeAt)],
+        line [fromString "%code = load ptr, ptr %place"],
+        body,
+        fromString "}\n"
+      ]
 
 -- |
 -- The type C has for a value.
@@ -2147,6 +2283,7 @@ runtime =
   declare void @hazy_catch_barrier()
   declare void @hazy_catch_unbarrier()
   declare i64 @hazy_callback_take()
+  declare ptr @hazy_wrapper_new(ptr, ptr, i64, i64, i64)
   declare i64 @hazy_prim_error(i64)
   declare i64 @hazy_prim_put_str_ln(i64)
   declare i64 @hazy_prim_text_snoc(i64, i64)

@@ -351,14 +351,16 @@ exportDeclarations position hidden exported annotation =
 -- |
 -- What a foreign import is of, as the report has it: past @static@ and a
 -- header, the name of a C function, or of something whose address it is
--- if that is written after an @&@; or @dynamic@, a C function called by its
--- address. With no name, the name is the one it has in Haskell.
+-- if that is written after an @&@; @dynamic@, a C function called by its
+-- address; or @wrapper@, a function of C made of a function of Haskell.
+-- With no name, the name is the one it has in Haskell.
 foreignSymbol :: Position -> Variable -> Maybe StringLiteral.StringLiteral -> (Marshal.Target, Text)
 foreignSymbol position name = \case
   Nothing -> (Marshal.Static, haskell)
   Just written -> case filter wanted (Text.words (Text.pack (StringLiteral.unpack written))) of
     [] -> (Marshal.Static, haskell)
     [word] | word == Text.pack "dynamic" -> (Marshal.Dynamic, Text.empty)
+    [word] | word == Text.pack "wrapper" -> (Marshal.Wrapper, Text.empty)
     [word] | word == Text.pack "&" -> (Marshal.Address, haskell)
     [ampersand, symbol] | ampersand == Text.pack "&" -> (Marshal.Address, checked symbol)
     [word] | Just symbol <- Text.stripPrefix (Text.pack "&") word -> (Marshal.Address, checked symbol)
