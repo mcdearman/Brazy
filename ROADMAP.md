@@ -1385,8 +1385,16 @@ Found while comparing the two backends:
     filepath's, for POSIX and for Windows as the system is; and a path
     joined with an empty one is the path, as filepath has it (test
     `filepath`, which agrees with GHC)
-  - Left: `Data.Vector`, `System.Directory`, `Data.Text`, and what reads
-    and writes through a `Ptr`
+  - `System.Directory` has none left. What it asks of the system the
+    runtime does as functions of C (`runtime/native/src/directory.rs`), over
+    Rust's own: each is given paths in UTF-8 and says what went wrong with
+    errno, as the system numbers it or, on Windows, as POSIX does, and the
+    library throws it as `Foreign.C.Error` does. Permissions are what
+    `access` says on a POSIX system, as GHC has them. The AxCut machine does
+    each with the System.Directory it is made with, and has an errno of its
+    own (test `directory`, which agrees with GHC)
+  - Left: `Data.Vector`, `Data.Text`, and what reads and writes through a
+    `Ptr`
   - The report's modules that were not there at all are: `Data.Ix`, with
     instances for the numbers, characters, `Bool`, `Ordering`, `()` and
     tuples to five; `Data.Array`, kept as one of the runtime's arrays;

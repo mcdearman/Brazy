@@ -16,6 +16,7 @@
 //! A primitive borrows its arguments: the program still owns them afterwards
 //! and gives them up itself. What a primitive gives back is the program's.
 
+mod directory;
 mod heap;
 
 use heap::{hazy_alloc, header, nullary, Value, ARRAY, DATA, FLOAT, INTEGER, SLICE, TEXT};
