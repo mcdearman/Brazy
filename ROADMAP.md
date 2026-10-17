@@ -1393,6 +1393,14 @@ Found while comparing the two backends:
     `access` says on a POSIX system, as GHC has them. The AxCut machine does
     each with the System.Directory it is made with, and has an errno of its
     own (test `directory`, which agrees with GHC)
+  - `Data.Text` and `Data.Text.Lazy` have none left (`breakOnEnd`,
+    `breakOnAll`, `commonPrefixes`, `spanM` and `spanEndM`, `foldr'`,
+    `findIndex`, `measureOff`, and the folds of the chunks of a lazy text,
+    which are given each chunk as a strict text, as text has it), nor do
+    `Control.Applicative.Combinators` and its `NonEmpty` (whose `count'`
+    was not given out), and `GHC.Clock` has `getMonotonicTime` (test
+    `library-holes`, which agrees with GHC given text and
+    parser-combinators)
   - `Data.Vector` and `Data.Vector.Strict` have none left: the monadic
     unfolds, `constructN` and `constructrN`, the `_` updates, the zips of
     more than four, `mapMaybeM`, `partitionWith`, `groupBy`, the least and
@@ -1401,7 +1409,7 @@ Found while comparing the two backends:
     the names that end in a prime, `foldl'` and the rest, but each of them
     twice without it (tests `vector-rest` and `vector-strict-rest`, which
     agree with GHC given vector)
-  - Left: `Data.Text`, and what reads and writes through a `Ptr`
+  - Left: what reads and writes through a `Ptr`
   - The report's modules that were not there at all are: `Data.Ix`, with
     instances for the numbers, characters, `Bool`, `Ordering`, `()` and
     tuples to five; `Data.Array`, kept as one of the runtime's arrays;
@@ -1466,7 +1474,8 @@ Missing:
       readers of other bases, and showing and reading are GHC's: the
       shortest digits that read back the same, with `NaN`, `Infinity` and
       negative zero (tests `floating-point` and `floating-edges`, which
-      agree with GHC). `showHFloat` is still a placeholder
+      agree with GHC). `showHFloat` is GHC's, over `decodeFloat`, since
+      `floatToDigits` has only tens
 - [x] What goes wrong with input and output. An `IOError` is GHC's
       `IOException`, a record of the handle, the kind, where, the system's
       words and the file, shown as GHC shows it, and `ioError`, `userError`

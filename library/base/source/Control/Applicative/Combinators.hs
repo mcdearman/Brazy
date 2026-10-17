@@ -7,7 +7,7 @@ module Control.Applicative.Combinators
     between,
     choice,
     count,
-    count,
+    count',
     eitherP,
     endBy,
     endBy1,
@@ -29,7 +29,6 @@ module Control.Applicative.Combinators
 where
 
 import Control.Applicative (Alternative (empty, many, some, (<|>)), optional)
-import Hazy.Prelude (placeholder)
 
 between :: (Applicative m) => m open -> m close -> m a -> m a
 between open close p = open *> p <* close
@@ -41,10 +40,14 @@ count :: (Applicative m) => Int -> m a -> m [a]
 count n p = if n <= 0 then pure [] else (:) <$> p <*> count (n - 1) p
 
 count' :: (Alternative m) => Int -> Int -> m a -> m [a]
-count' = placeholder
+-- | At least the first many, and at most the second.
+count' atLeast atMost p
+  | atMost <= 0 || atLeast > atMost = pure []
+  | atLeast > 0 = (:) <$> p <*> count' (atLeast - 1) (atMost - 1) p
+  | otherwise = ((:) <$> p <*> count' 0 (atMost - 1) p) <|> pure []
 
 eitherP :: (Alternative m) => m a -> m b -> m (Either a b)
-eitherP = placeholder
+eitherP a b = (Left <$> a) <|> (Right <$> b)
 
 endBy :: (Alternative m) => m a -> m sep -> m [a]
 endBy p sep = many (p <* sep)
@@ -53,16 +56,20 @@ endBy1 :: (Alternative m) => m a -> m sep -> m [a]
 endBy1 p sep = some (p <* sep)
 
 manyTill :: (Alternative m) => m a -> m end -> m [a]
-manyTill = placeholder
+manyTill p end = go
+  where
+    go = ([] <$ end) <|> ((:) <$> p <*> go)
 
 manyTill_ :: (Alternative m) => m a -> m end -> m ([a], end)
-manyTill_ = placeholder
+manyTill_ p end = go
+  where
+    go = ((\final -> ([], final)) <$> end) <|> ((\x (xs, final) -> (x : xs, final)) <$> p <*> go)
 
 someTill :: (Alternative m) => m a -> m end -> m [a]
-someTill = placeholder
+someTill p end = (:) <$> p <*> manyTill p end
 
 someTill_ :: (Alternative m) => m a -> m end -> m ([a], end)
-someTill_ = placeholder
+someTill_ p end = (\x (xs, final) -> (x : xs, final)) <$> p <*> manyTill_ p end
 
 option :: (Alternative m) => a -> m a -> m a
 option x p = p <|> pure x
@@ -86,10 +93,12 @@ skipSome :: (Alternative m) => m a -> m ()
 skipSome p = p *> skipMany p
 
 skipCount :: (Applicative m) => Int -> m a -> m ()
-skipCount = placeholder
+skipCount n p = () <$ count n p
 
 skipManyTill :: (Alternative m) => m a -> m end -> m end
-skipManyTill = placeholder
+skipManyTill p end = go
+  where
+    go = end <|> (p *> go)
 
 skipSomeTill :: (Alternative m) => m a -> m end -> m end
-skipSomeTill = placeholder
+skipSomeTill p end = p *> skipManyTill p end
