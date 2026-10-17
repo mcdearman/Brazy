@@ -80,8 +80,8 @@ simplify = \case
 
     definition2 :: Forall scope' -> Semantic.Definition2 source mark Normal Check scope -> Expression scope
     definition2 solved = \case
-      Semantic.Definition2.Foreign Semantic.Definition2.ForeignCall {foreignPosition, symbol} ->
-        Expression.Foreign {foreignCall = Foreign.call foreignPosition symbol solved}
+      Semantic.Definition2.Foreign Semantic.Definition2.ForeignCall {foreignPosition, target, symbol, marshalled} ->
+        Expression.Foreign {foreignCall = maybe (Foreign.call foreignPosition target symbol solved) id marshalled}
       Semantic.Definition definition -> Expression.simplify definition
       Semantic.Piece Semantic.Choice {index, instanciation = Solved instanciation, patternx, bound} ->
         Expression.Join

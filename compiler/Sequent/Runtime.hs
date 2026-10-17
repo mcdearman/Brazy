@@ -367,7 +367,8 @@ effect = effectOf . outside
 -- it; or, if it is an action, as a function of what it is given that is the
 -- action of calling it.
 foreignCall :: Foreign.Call -> Producer
-foreignCall call@Foreign.Call {action}
+foreignCall call@Foreign.Call {target, action}
+  | Foreign.Address <- target = Mu (pack "k") (Primitive (Primitive.Call call) [] (covariable "k"))
   | action = effectOf (Primitive.Call call)
   | otherwise = wrap (Primitive.Call call)
 

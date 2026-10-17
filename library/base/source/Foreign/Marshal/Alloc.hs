@@ -14,11 +14,12 @@ module Foreign.Marshal.Alloc
     realloc,
     reallocBytes,
     free,
+    finalizerFree,
   )
 where
 
 import Control.Exception (bracket)
-import Foreign.Ptr (Ptr, castPtr, nullPtr)
+import Foreign.Ptr (FunPtr, Ptr, castPtr, nullPtr)
 import Foreign.Storable (Storable (..))
 
 foreign import ccall unsafe "malloc" c_malloc :: Int -> IO (Ptr a)
@@ -28,6 +29,9 @@ foreign import ccall unsafe "calloc" c_calloc :: Int -> Int -> IO (Ptr a)
 foreign import ccall unsafe "realloc" c_realloc :: Ptr a -> Int -> IO (Ptr b)
 
 foreign import ccall unsafe "free" c_free :: Ptr a -> IO ()
+
+-- | The address of C's free, for what frees memory to be called with.
+foreign import ccall unsafe "&free" finalizerFree :: FunPtr (Ptr a -> IO ())
 
 -- The type of what an address is of, for its size; it is never looked at.
 pointee :: IO (Ptr a) -> a
