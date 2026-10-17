@@ -100,7 +100,7 @@ import Data.Text (pack)
 import Data.Text (unpack)
 import Foreign.Ptr (Ptr)
 import Hazy (primClock, primFileSize, primSeek, primSetFileSize, primTell)
-import Hazy.Prelude (IO (..), placeholder)
+import Hazy.Prelude (IO (..))
 import Hazy.PreludeIO (endOfFile)
 import System.IO.Error (catchIOError, isAlreadyExistsError, ioError)
 import System.IO.Internal (Handle (..))
@@ -293,20 +293,29 @@ openBinaryFile = openFile
 hSetBinaryMode :: Handle -> Bool -> IO ()
 hSetBinaryMode _ _ = pure ()
 
+-- | So many bytes from memory, written to the file as they are.
 hPutBuf :: Handle -> Ptr a -> Int -> IO ()
-hPutBuf = placeholder
+hPutBuf (Handle descriptor) = c_putBuf descriptor
 
+-- | So many bytes read from the file into memory, or fewer at its end; how
+-- many were read.
 hGetBuf :: Handle -> Ptr a -> Int -> IO Int
-hGetBuf = placeholder
+hGetBuf (Handle descriptor) address count = c_getBuf descriptor address count 0
 
+-- | As many bytes as can be had at once, and no more than so many.
 hGetBufSome :: Handle -> Ptr a -> Int -> IO Int
-hGetBufSome = placeholder
+hGetBufSome (Handle descriptor) address count = c_getBuf descriptor address count 1
 
+-- | Writing does not wait here, so all is written.
 hPutBufNonBlocking :: Handle -> Ptr a -> Int -> IO Int
-hPutBufNonBlocking = placeholder
+hPutBufNonBlocking handle address count = count <$ hPutBuf handle address count
 
 hGetBufNonBlocking :: Handle -> Ptr a -> Int -> IO Int
-hGetBufNonBlocking = placeholder
+hGetBufNonBlocking = hGetBufSome
+
+foreign import ccall unsafe "hazy_put_buf" c_putBuf :: Int -> Ptr a -> Int -> IO ()
+
+foreign import ccall unsafe "hazy_get_buf" c_getBuf :: Int -> Ptr a -> Int -> Int -> IO Int
 
 -- A file that was not there, made in a directory and named after a
 -- template: what is before the template's extension, a number, and the

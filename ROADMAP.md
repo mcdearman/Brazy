@@ -1395,6 +1395,10 @@ Found while comparing the two backends:
     own (test `directory`, which agrees with GHC)
   - Left: `Data.Vector`, `Data.Text`, and what reads and writes through a
     `Ptr`
+  - `System.IO`'s `hPutBuf`, `hGetBuf`, `hGetBufSome` and their kin write
+    and read bytes as they are, between memory and a file the runtime has
+    open (`hazy_put_buf`, `hazy_get_buf`; test `buffers`, which agrees with
+    GHC)
   - The report's modules that were not there at all are: `Data.Ix`, with
     instances for the numbers, characters, `Bool`, `Ordering`, `()` and
     tuples to five; `Data.Array`, kept as one of the runtime's arrays;
