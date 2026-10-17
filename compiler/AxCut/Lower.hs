@@ -24,6 +24,7 @@ import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Text (Text, pack, unpack)
 import Generate.Global (Global)
+import qualified Sequent.Tree as Tree (free)
 import Sequent.Tree
   ( Alternative (..),
     Binder (..),
@@ -301,6 +302,41 @@ renamed new old Linear {free, build} =
   where
     after = Set.delete new free
 
+-- |
+-- Whether a consumer is only given values where it is made: at the end of
+-- some way through the statement, which goes no further, and never inside
+-- an object, which would hold it, nor to something that is called or
+-- forced, which would be given it. Such a consumer need not be made. What
+-- gives it a value goes to what it does, as a choice goes to one of its
+-- alternatives.
+joined :: Text -> Statement -> Bool
+joined consumer = go
+  where
+    go = \case
+      Halt -> True
+      Abort -> True
+      Cut (Variable _) (Covariable _) -> True
+      Cut (Variable _) (MuTilde _ body) -> go body
+      Cut (Variable _) (Case alternatives otherwise) ->
+        and [go body | Alternative _ _ body <- alternatives] && all go otherwise
+      Cut (Variable _) (Apply _ (Covariable result)) -> result /= consumer
+      Cut (Variable _) (Force (Covariable result)) -> result /= consumer
+      Cut (Literal _) (MuTilde _ body) -> go body
+      Cut (Global _) (MuTilde _ body) -> go body
+      Cut (Constructor _ _) (MuTilde _ body) -> go body
+      Cut made@Function {} (MuTilde _ body) -> Set.notMember consumer (Tree.free made) && go body
+      Cut made@Thunk {} (MuTilde _ body) -> Set.notMember consumer (Tree.free made) && go body
+      -- A consumer made inside is one more place to go to, if it is not
+      -- made either; otherwise it would hold this one.
+      Cut (Mu inner first) (MuTilde _ outer) ->
+        go first && (Set.notMember consumer (Tree.free outer) || (joined inner first && go outer))
+      Cut (Mu new body) (Covariable old)
+        | old == consumer -> joined new body && Set.notMember consumer (Tree.free body)
+        | otherwise -> go body
+      Primitive _ _ (MuTilde _ body) -> go body
+      LetRec bindings body -> Set.notMember consumer (Tree.free (map snd bindings)) && go body
+      _ -> False
+
 named :: Producer -> Text
 named = \case
   Variable name -> name
@@ -356,7 +392,7 @@ linearly = \case
                   kept = live environment before
                   object =
                     AxCut.Object
-                      { kind = AxCut.Closure,
+                      { kind = if joined covariable inner then AxCut.Join else AxCut.Closure,
                         captured,
                         method = AxCut.Return,
                         parameters = [name],
