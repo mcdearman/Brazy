@@ -132,18 +132,18 @@ module Data.Vector
     elemIndices,
     foldl,
     foldl1,
-    foldl,
-    foldl1,
+    foldl',
+    foldl1',
     foldr,
     foldr1,
-    foldr,
-    foldr1,
+    foldr',
+    foldr1',
     ifoldl,
-    ifoldl,
+    ifoldl',
     ifoldr,
-    ifoldr,
+    ifoldr',
     foldMap,
-    foldMap,
+    foldMap',
     all,
     any,
     and,
@@ -162,38 +162,38 @@ module Data.Vector
     maxIndexBy,
     foldM,
     ifoldM,
-    foldM,
-    ifoldM,
+    foldM',
+    ifoldM',
     fold1M,
-    fold1M,
+    fold1M',
     foldM_,
     ifoldM_,
-    foldM,
-    ifoldM,
+    foldM'_,
+    ifoldM'_,
     fold1M_,
-    fold1M,
+    fold1M'_,
     sequence,
     sequence_,
     prescanl,
-    prescanl,
+    prescanl',
     postscanl,
-    postscanl,
+    postscanl',
     scanl,
-    scanl,
+    scanl',
     scanl1,
-    scanl1,
+    scanl1',
     iscanl,
-    iscanl,
+    iscanl',
     prescanr,
-    prescanr,
+    prescanr',
     postscanr,
-    postscanr,
+    postscanr',
     scanr,
-    scanr,
+    scanr',
     scanr1,
-    scanr1,
+    scanr1',
     iscanr,
-    iscanr,
+    iscanr',
     eqBy,
     cmpBy,
     toList,
@@ -204,7 +204,6 @@ where
 
 import Prelude hiding ((++), all, and, any, break, concat, concatMap, drop, dropWhile, elem, filter, foldMap, foldl, foldl1, foldr, foldr1, head, init, last, length, map, mapM, mapM_, maximum, minimum, notElem, null, or, product, replicate, reverse, scanl, scanl1, scanr, scanr1, sequence, sequence_, span, splitAt, sum, tail, take, takeWhile, unzip, unzip3, zip, zip3, zipWith, zipWith3)
 import qualified Prelude
-import Hazy.Prelude (placeholder)
 import Control.Monad.ST (runST)
 import Hazy (primArrayIndex, primArrayNew, primArrayRead, primArrayWrite, primSTBind, primSTPure, primUnsafeCoerce)
 
@@ -374,7 +373,12 @@ generateM :: (Monad m) => Int -> (Int -> m a) -> m (Vector a)
 generateM count f = fromListN (max 0 count) <$> Prelude.mapM f [0 .. count - 1]
 
 iterateNM :: (Monad m) => Int -> (a -> m a) -> a -> m (Vector a)
-iterateNM = placeholder
+iterateNM n f x
+  | n <= 0 = pure empty
+  | otherwise = fromList <$> go n x
+  where
+    go 1 y = pure [y]
+    go k y = (y :) <$> (f y >>= go (k - 1))
 
 unfoldr :: (b -> Maybe (a, b)) -> b -> Vector a
 unfoldr f seed = fromList (go seed)
@@ -393,22 +397,57 @@ unfoldrN count f seed = fromList (go count seed)
           Nothing -> []
 
 unfoldrExactN :: Int -> (b -> (a, b)) -> b -> Vector a
-unfoldrExactN = placeholder
+unfoldrExactN n f = fromList . go n
+  where
+    go k seed
+      | k <= 0 = []
+      | otherwise = case f seed of
+          (a, seed') -> a : go (k - 1) seed'
 
 unfoldrM :: (Monad m) => (b -> m (Maybe (a, b))) -> b -> m (Vector a)
-unfoldrM = placeholder
+unfoldrM f = fmap fromList . go
+  where
+    go seed = do
+      next <- f seed
+      case next of
+        Nothing -> pure []
+        Just (a, seed') -> (a :) <$> go seed'
 
 unfoldrNM :: (Monad m) => Int -> (b -> m (Maybe (a, b))) -> b -> m (Vector a)
-unfoldrNM = placeholder
+unfoldrNM n f = fmap fromList . go n
+  where
+    go k seed
+      | k <= 0 = pure []
+      | otherwise = do
+          next <- f seed
+          case next of
+            Nothing -> pure []
+            Just (a, seed') -> (a :) <$> go (k - 1) seed'
 
 unfoldrExactNM :: (Monad m) => Int -> (b -> m (a, b)) -> b -> m (Vector a)
-unfoldrExactNM = placeholder
+unfoldrExactNM n f = fmap fromList . go n
+  where
+    go k seed
+      | k <= 0 = pure []
+      | otherwise = do
+          (a, seed') <- f seed
+          (a :) <$> go (k - 1) seed'
 
 constructN :: Int -> (Vector a -> a) -> Vector a
-constructN = placeholder
+-- | Each element made from the vector of those before it.
+constructN n f = go [] 0
+  where
+    go made i
+      | i >= n = fromList (Prelude.reverse made)
+      | otherwise = go (f (fromList (Prelude.reverse made)) : made) (i + 1)
 
 constructrN :: Int -> (Vector a -> a) -> Vector a
-constructrN = placeholder
+-- | Each element made from the vector of those after it, the last first.
+constructrN n f = go [] 0
+  where
+    go made i
+      | i >= n = fromList made
+      | otherwise = go (f (fromList made) : made) (i + 1)
 
 enumFromN :: (Num a) => a -> Int -> Vector a
 enumFromN start count = fromList (Prelude.take count (Prelude.iterate (+ 1) start))
@@ -446,7 +485,7 @@ update :: Vector a -> Vector (Int, a) -> Vector a
 update vector changes = vector // toList changes
 
 update_ :: Vector a -> Vector Int -> Vector a -> Vector a
-update_ = placeholder
+update_ vector indices values = update vector (zip indices values)
 
 unsafeUpd :: Vector a -> [(Int, a)] -> Vector a
 unsafeUpd = (//)
@@ -455,7 +494,7 @@ unsafeUpdate :: Vector a -> Vector (Int, a) -> Vector a
 unsafeUpdate = update
 
 unsafeUpdate_ :: Vector a -> Vector Int -> Vector a -> Vector a
-unsafeUpdate_ = placeholder
+unsafeUpdate_ = update_
 
 accum :: (a -> b -> a) -> Vector a -> [(Int, b)] -> Vector a
 accum f vector changes = changed vector f changes
@@ -464,7 +503,7 @@ accumulate :: (a -> b -> a) -> Vector a -> Vector (Int, b) -> Vector a
 accumulate f vector changes = accum f vector (toList changes)
 
 accumulate_ :: (a -> b -> a) -> Vector a -> Vector Int -> Vector b -> Vector a
-accumulate_ = placeholder
+accumulate_ f vector indices values = accumulate f vector (zip indices values)
 
 unsafeAccum :: (a -> b -> a) -> Vector a -> [(Int, b)] -> Vector a
 unsafeAccum = accum
@@ -473,7 +512,7 @@ unsafeAccumulate :: (a -> b -> a) -> Vector a -> Vector (Int, b) -> Vector a
 unsafeAccumulate = accumulate
 
 unsafeAccumulate_ :: (a -> b -> a) -> Vector a -> Vector Int -> Vector b -> Vector a
-unsafeAccumulate_ = placeholder
+unsafeAccumulate_ = accumulate_
 
 reverse :: Vector a -> Vector a
 reverse vector = fromListN (length vector) (Prelude.reverse (toList vector))
@@ -551,10 +590,14 @@ izipWith3 :: (Int -> a -> b -> c -> d) -> Vector a -> Vector b -> Vector c -> Ve
 izipWith3 f a b c = fromList (zipLists4 f [0 ..] (toList a) (toList b) (toList c))
 
 izipWith4 :: (Int -> a -> b -> c -> d -> e) -> Vector a -> Vector b -> Vector c -> Vector d -> Vector e
-izipWith4 = placeholder
+izipWith4 f a b c d =
+  generate (Prelude.minimum [length a, length b, length c, length d]) $ \i ->
+    f i (a ! i) (b ! i) (c ! i) (d ! i)
 
 izipWith5 :: (Int -> a -> b -> c -> d -> e -> f) -> Vector a -> Vector b -> Vector c -> Vector d -> Vector e -> Vector f
-izipWith5 = placeholder
+izipWith5 f a b c d e =
+  generate (Prelude.minimum [length a, length b, length c, length d, length e]) $ \i ->
+    f i (a ! i) (b ! i) (c ! i) (d ! i) (e ! i)
 
 izipWith6 ::
   (Int -> a -> b -> c -> d -> e -> f -> g) ->
@@ -565,7 +608,9 @@ izipWith6 ::
   Vector e ->
   Vector f ->
   Vector g
-izipWith6 = placeholder
+izipWith6 f a b c d e g =
+  generate (Prelude.minimum [length a, length b, length c, length d, length e, length g]) $ \i ->
+    f i (a ! i) (b ! i) (c ! i) (d ! i) (e ! i) (g ! i)
 
 zip :: Vector a -> Vector b -> Vector (a, b)
 zip = zipWith (\a b -> (a, b))
@@ -577,10 +622,14 @@ zip4 :: Vector a -> Vector b -> Vector c -> Vector d -> Vector (a, b, c, d)
 zip4 = zipWith4 (\a b c d -> (a, b, c, d))
 
 zip5 :: Vector a -> Vector b -> Vector c -> Vector d -> Vector e -> Vector (a, b, c, d, e)
-zip5 = placeholder
+zip5 a b c d e =
+  generate (Prelude.minimum [length a, length b, length c, length d, length e]) $ \i ->
+    (a ! i, b ! i, c ! i, d ! i, e ! i)
 
 zip6 :: Vector a -> Vector b -> Vector c -> Vector d -> Vector e -> Vector f -> Vector (a, b, c, d, e, f)
-zip6 = placeholder
+zip6 a b c d e g =
+  generate (Prelude.minimum [length a, length b, length c, length d, length e, length g]) $ \i ->
+    (a ! i, b ! i, c ! i, d ! i, e ! i, g ! i)
 
 zipWithM :: (Monad m) => (a -> b -> m c) -> Vector a -> Vector b -> m (Vector c)
 zipWithM f a b = fromList <$> Prelude.sequence (Prelude.zipWith f (toList a) (toList b))
@@ -601,13 +650,31 @@ unzip3 :: Vector (a, b, c) -> (Vector a, Vector b, Vector c)
 unzip3 vector = (map (\(a, _, _) -> a) vector, map (\(_, b, _) -> b) vector, map (\(_, _, c) -> c) vector)
 
 unzip4 :: Vector (a, b, c, d) -> (Vector a, Vector b, Vector c, Vector d)
-unzip4 = placeholder
+unzip4 v =
+  ( map (\(a, _, _, _) -> a) v,
+    map (\(_, b, _, _) -> b) v,
+    map (\(_, _, c, _) -> c) v,
+    map (\(_, _, _, d) -> d) v
+  )
 
 unzip5 :: Vector (a, b, c, d, e) -> (Vector a, Vector b, Vector c, Vector d, Vector e)
-unzip5 = placeholder
+unzip5 v =
+  ( map (\(a, _, _, _, _) -> a) v,
+    map (\(_, b, _, _, _) -> b) v,
+    map (\(_, _, c, _, _) -> c) v,
+    map (\(_, _, _, d, _) -> d) v,
+    map (\(_, _, _, _, e) -> e) v
+  )
 
 unzip6 :: Vector (a, b, c, d, e, f) -> (Vector a, Vector b, Vector c, Vector d, Vector e, Vector f)
-unzip6 = placeholder
+unzip6 v =
+  ( map (\(a, _, _, _, _, _) -> a) v,
+    map (\(_, b, _, _, _, _) -> b) v,
+    map (\(_, _, c, _, _, _) -> c) v,
+    map (\(_, _, _, d, _, _) -> d) v,
+    map (\(_, _, _, _, e, _) -> e) v,
+    map (\(_, _, _, _, _, g) -> g) v
+  )
 
 filter :: (a -> Bool) -> Vector a -> Vector a
 filter p vector = fromList (Prelude.filter p (toList vector))
@@ -636,10 +703,14 @@ imapMaybe :: (Int -> a -> Maybe b) -> Vector a -> Vector b
 imapMaybe f vector = fromList [y | Just y <- Prelude.zipWith f [0 ..] (toList vector)]
 
 mapMaybeM :: (Monad m) => (a -> m (Maybe b)) -> Vector a -> m (Vector b)
-mapMaybeM = placeholder
+mapMaybeM f v = do
+  found <- Prelude.mapM f (toList v)
+  pure (fromList [b | Just b <- found])
 
 imapMaybeM :: (Monad m) => (Int -> a -> m (Maybe b)) -> Vector a -> m (Vector b)
-imapMaybeM = placeholder
+imapMaybeM f v = do
+  found <- Prelude.mapM (uncurry f) (Prelude.zip [0 ..] (toList v))
+  pure (fromList [b | Just b <- found])
 
 catMaybes :: Vector (Maybe a) -> Vector a
 catMaybes vector = fromList [x | Just x <- toList vector]
@@ -657,7 +728,9 @@ unstablePartition :: (a -> Bool) -> Vector a -> (Vector a, Vector a)
 unstablePartition = partition
 
 partitionWith :: (a -> Either b c) -> Vector a -> (Vector b, Vector c)
-partitionWith = placeholder
+partitionWith f v = (fromList [b | Left b <- sorted], fromList [c | Right c <- sorted])
+  where
+    sorted = Prelude.map f (toList v)
 
 span :: (a -> Bool) -> Vector a -> (Vector a, Vector a)
 span p vector = case Prelude.span p (toList vector) of
@@ -667,10 +740,14 @@ break :: (a -> Bool) -> Vector a -> (Vector a, Vector a)
 break p = span (not . p)
 
 groupBy :: (a -> a -> Bool) -> Vector a -> [Vector a]
-groupBy = placeholder
+groupBy same v = Prelude.map fromList (grouped (toList v))
+  where
+    grouped [] = []
+    grouped (x : xs) = case Prelude.span (same x) xs of
+      (ys, zs) -> (x : ys) : grouped zs
 
 group :: (Eq a) => Vector a -> [Vector a]
-group = placeholder
+group = groupBy (==)
 
 infix 4 `elem`
 
@@ -782,7 +859,8 @@ maximumBy :: (a -> a -> Ordering) -> Vector a -> a
 maximumBy order vector = Prelude.foldl1 (\a b -> if order a b == GT then a else b) (toList vector)
 
 maximumOn :: (Ord b) => (a -> b) -> Vector a -> a
-maximumOn = placeholder
+-- | The first element of which the key is greatest.
+maximumOn key v = Prelude.foldl1 (\best x -> if key x > key best then x else best) (toList v)
 
 minimum :: (Ord a) => Vector a -> a
 minimum vector = Prelude.minimum (toList vector)
@@ -791,19 +869,22 @@ minimumBy :: (a -> a -> Ordering) -> Vector a -> a
 minimumBy order vector = Prelude.foldl1 (\a b -> if order a b == GT then b else a) (toList vector)
 
 minimumOn :: (Ord b) => (a -> b) -> Vector a -> a
-minimumOn = placeholder
+-- | The first element of which the key is least.
+minimumOn key v = Prelude.foldl1 (\best x -> if key x < key best then x else best) (toList v)
 
 minIndex :: (Ord a) => Vector a -> Int
-minIndex = placeholder
+minIndex = minIndexBy compare
 
 minIndexBy :: (a -> a -> Ordering) -> Vector a -> Int
-minIndexBy = placeholder
+-- | Where the first least element is.
+minIndexBy order v = fst (Prelude.foldl1 (\best x -> if order (snd x) (snd best) == LT then x else best) (Prelude.zip [0 ..] (toList v)))
 
 maxIndex :: (Ord a) => Vector a -> Int
-maxIndex = placeholder
+maxIndex = maxIndexBy compare
 
 maxIndexBy :: (a -> a -> Ordering) -> Vector a -> Int
-maxIndexBy = placeholder
+-- | Where the first greatest element is.
+maxIndexBy order v = fst (Prelude.foldl1 (\best x -> if order (snd x) (snd best) == GT then x else best) (Prelude.zip [0 ..] (toList v)))
 
 foldM :: (Monad m) => (a -> b -> m a) -> a -> Vector b -> m a
 foldM f z vector = go z (toList vector)
@@ -821,10 +902,16 @@ ifoldM' :: (Monad m) => (a -> Int -> b -> m a) -> a -> Vector b -> m a
 ifoldM' = ifoldM
 
 fold1M :: (Monad m) => (a -> a -> m a) -> Vector a -> m a
-fold1M = placeholder
+fold1M f v = case toList v of
+  x : xs -> foldM' f x xs
+  [] -> errorWithoutStackTrace "fold1M: empty vector"
+  where
+    foldM' g acc = \case
+      [] -> pure acc
+      y : ys -> g acc y >>= \acc' -> foldM' g acc' ys
 
 fold1M' :: (Monad m) => (a -> a -> m a) -> Vector a -> m a
-fold1M' = placeholder
+fold1M' = fold1M
 
 foldM_ :: (Monad m) => (a -> b -> m a) -> a -> Vector b -> m ()
 foldM_ f z vector = foldM f z vector >> pure ()
@@ -839,10 +926,10 @@ ifoldM'_ :: (Monad m) => (a -> Int -> b -> m a) -> a -> Vector b -> m ()
 ifoldM'_ = ifoldM_
 
 fold1M_ :: (Monad m) => (a -> a -> m a) -> Vector a -> m ()
-fold1M_ = placeholder
+fold1M_ f v = () <$ fold1M f v
 
 fold1M'_ :: (Monad m) => (a -> a -> m a) -> Vector a -> m ()
-fold1M'_ = placeholder
+fold1M'_ = fold1M_
 
 sequence :: (Monad m) => Vector (m a) -> m (Vector a)
 sequence vector = mapM id vector
@@ -851,16 +938,16 @@ sequence_ :: (Monad m) => Vector (m a) -> m ()
 sequence_ vector = mapM_ id vector
 
 prescanl :: (a -> b -> a) -> a -> Vector b -> Vector a
-prescanl = placeholder
+prescanl f z = init . scanl f z
 
 prescanl' :: (a -> b -> a) -> a -> Vector b -> Vector a
-prescanl' = placeholder
+prescanl' f z = init . scanl' f z
 
 postscanl :: (a -> b -> a) -> a -> Vector b -> Vector a
-postscanl = placeholder
+postscanl f z = tail . scanl f z
 
 postscanl' :: (a -> b -> a) -> a -> Vector b -> Vector a
-postscanl' = placeholder
+postscanl' f z = tail . scanl' f z
 
 scanl :: (a -> b -> a) -> a -> Vector b -> Vector a
 scanl f z vector = fromList (Prelude.scanl f z (toList vector))
@@ -875,22 +962,22 @@ scanl1' :: (a -> a -> a) -> Vector a -> Vector a
 scanl1' = scanl1
 
 iscanl :: (Int -> a -> b -> a) -> a -> Vector b -> Vector a
-iscanl = placeholder
+iscanl f z = scanl (\a (i, b) -> f i a b) z . indexed
 
 iscanl' :: (Int -> a -> b -> a) -> a -> Vector b -> Vector a
-iscanl' = placeholder
+iscanl' f z = scanl' (\a (i, b) -> f i a b) z . indexed
 
 prescanr :: (a -> b -> b) -> b -> Vector a -> Vector b
-prescanr = placeholder
+prescanr f z = tail . scanr f z
 
 prescanr' :: (a -> b -> b) -> b -> Vector a -> Vector b
-prescanr' = placeholder
+prescanr' f z = tail . scanr' f z
 
 postscanr :: (a -> b -> b) -> b -> Vector a -> Vector b
-postscanr = placeholder
+postscanr f z = init . scanr f z
 
 postscanr' :: (a -> b -> b) -> b -> Vector a -> Vector b
-postscanr' = placeholder
+postscanr' f z = init . scanr' f z
 
 scanr :: (a -> b -> b) -> b -> Vector a -> Vector b
 scanr f z vector = fromList (Prelude.scanr f z (toList vector))
@@ -905,10 +992,10 @@ scanr1' :: (a -> a -> a) -> Vector a -> Vector a
 scanr1' = scanr1
 
 iscanr :: (Int -> a -> b -> b) -> b -> Vector a -> Vector b
-iscanr = placeholder
+iscanr f z = scanr (\(i, a) b -> f i a b) z . indexed
 
 iscanr' :: (Int -> a -> b -> b) -> b -> Vector a -> Vector b
-iscanr' = placeholder
+iscanr' f z = scanr' (\(i, a) b -> f i a b) z . indexed
 
 eqBy :: (a -> b -> Bool) -> Vector a -> Vector b -> Bool
 eqBy same a b = length a == length b && Prelude.and (Prelude.zipWith same (toList a) (toList b))
