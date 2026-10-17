@@ -12,6 +12,7 @@ module Sequent.FromCore (generate, complete, definitionOf, Unit (..), Unshared (
 
 import Control.Monad (replicateM)
 import Control.Monad.ST (ST, runST)
+import qualified Core.Foreign as Foreign
 import Core.Tree.Constraints (ConstraintsF (..))
 import Core.Tree.ConstructorInfo (ConstructorInfo (..))
 import Core.Tree.Declaration (Declaration (..))
@@ -70,7 +71,7 @@ import Semantic.Index.Type2 (Index (Index, Tuple))
 import qualified Semantic.Index.Type2 as Type2 (Index (..))
 import Semantic.Scope (Environment ((:+)))
 import qualified Semantic.Scope as Scope
-import Sequent.Primitive (Primitive (Field))
+import Sequent.Primitive (Primitive (Export, Field))
 import Sequent.Borrow (Lending, lending)
 import Sequent.Hoist (Unshared (..), hoist)
 import Sequent.Inline (inline)
@@ -103,7 +104,7 @@ generate entry modules = fst (complete entry modules)
 complete :: Global.Global -> Vector Core.Module -> (Program, Global.Global -> Maybe Lending)
 complete entry modules =
   ( Program
-      { definitions = reach Map.empty (globals (start entry)),
+      { definitions = reach Map.empty (globals (start entry) <> Set.fromList (exportsOf modules [0 .. Vector.length modules - 1])),
         entry = start entry
       },
     lends
@@ -119,6 +120,19 @@ complete entry modules =
       Just (global, wanted) ->
         let found = find global
          in reach (Map.insert global found known) (wanted <> globals found)
+
+-- |
+-- The definitions of some of the modules that C calls by a name, as foreign
+-- exports say. Nothing in the program may use them, and they are kept.
+exportsOf :: Vector Core.Module -> [Int] -> [Global.Global]
+exportsOf modules indexes = do
+  let Precontext {terms = termNames} = precontext modules
+  index <- indexes
+  let Core.Module {name, declarations = Declarations {terms}} = modules Vector.! index
+  -- The module of primitives has only what they are said to be.
+  if name == Runtime.hazy then [] else pure ()
+  (termIndex, Declaration {definition = TypeLambdaOver {result = Core.ForeignExport {}}}) <- zip [0 ..] (toList terms)
+  pure (termNames Vector.! index Vector.! termIndex)
 
 -- |
 -- What a name is defined as, anywhere in a program. Given the modules alone
@@ -290,7 +304,10 @@ data Unit = Unit
     -- whether it is this unit's or another's. A call that gives that many
     -- can go to the definition's code, and has no need to ask the
     -- definition where its code is.
-    arities :: Global.Global -> Maybe Int
+    arities :: Global.Global -> Maybe Int,
+    -- | The unit's own definitions that C calls by a name, which are kept
+    -- in a program though nothing in it uses them.
+    exports :: [Global.Global]
   }
 
 -- |
@@ -298,10 +315,10 @@ data Unit = Unit
 -- it starts. Nothing outside a program uses what is in it, so the rest is
 -- never run: most of it is instances that are derived and never asked for.
 reached :: Statement -> Unit -> Unit
-reached entry unit@Unit {own, shared} =
+reached entry unit@Unit {own, shared, exports} =
   unit {own = Map.restrictKeys own wanted, shared = Map.restrictKeys shared wanted}
   where
-    wanted = go Set.empty (Set.toList (globals entry))
+    wanted = go Set.empty (Set.toList (globals entry) ++ exports)
     go seen = \case
       [] -> seen
       global : rest
@@ -321,7 +338,8 @@ unit indexes modules =
       shared = reach Map.empty (globals (Map.elems own)),
       unshared = concatMap lost names,
       lends,
-      arities
+      arities,
+      exports = exportsOf modules indexes
     }
   where
     pre = precontext modules
@@ -373,7 +391,7 @@ moduleDefinitions
       termDefinitions = do
         (termIndex, Declaration {definition}) <- zip [0 ..] (toList terms)
         let global = termNames Vector.! moduleIndex Vector.! termIndex
-        pure (global, runST (globalDeclaration pre definition))
+        pure (global, runST (globalDeclaration pre global definition))
       classDefinitions = do
         (typeIndex, instances) <- zip [0 ..] (toList classInstances)
         (target, instancex) <- Map.toList instances
@@ -385,10 +403,37 @@ moduleDefinitions
         let global = typeNames Vector.! moduleIndex Vector.! typeIndex `GlobalType.indexData` target
         instanceDefinitions global instancex
 
-globalDeclaration :: Precontext -> TypeLambda Scope.Global -> ST s Producer
-globalDeclaration pre definition = do
+globalDeclaration :: Precontext -> Global.Global -> TypeLambda Scope.Global -> ST s Producer
+globalDeclaration pre global definition = do
   context <- Context.start pre
-  declaration context definition
+  case definition of
+    TypeLambdaOver {constraints = None, result = Core.ForeignExport {foreignCall, exported}} ->
+      exportOf (Context.evidenceBindings Vector.empty context) global foreignCall exported
+    _ -> declaration context definition
+
+-- |
+-- What C calls by a name, as a foreign export says: a function of the
+-- values C gives, which applies what is exported to them, runs that if it
+-- is an action, leaves the result for C and stops. C calls its code, which
+-- comes back to C when it stops.
+exportOf :: Context s scope -> Global.Global -> Foreign.Call -> Expression scope -> ST s Producer
+exportOf context global call@Foreign.Call {arguments, action} exported = do
+  names <- traverse (const (fresh context)) arguments
+  result <- fresh context
+  value <- fresh context
+  left <- fresh context
+  marker <- fresh context
+  let finish =
+        MuTilde (byValue value) $
+          Primitive (Runtime.outside "callback_result") [Variable value] $
+            MuTilde (byValue left) Halt
+      ran
+        | action = Apply [] (Force finish)
+        | otherwise = finish
+  body <- evaluate context exported (foldr (\name -> Apply [Variable name]) ran names)
+  pure $
+    Function (byValue <$> names) result $
+      Primitive (Export call global) [] (MuTilde (byValue marker) body)
 
 globalInstance :: Precontext -> Maybe Global.Global -> Instance Scope.Global -> ST s Producer
 globalInstance pre lifted instancex = do
@@ -700,6 +745,7 @@ evaluate context expression consumer = case expression of
     pure $ Cut dictionary consumer
   Core.Helper {helperName} -> pure $ Cut (Global (Runtime.helperGlobal (unpack helperName))) (Force consumer)
   Core.Foreign {foreignCall} -> pure $ Cut (Runtime.foreignCall foreignCall) consumer
+  Core.ForeignExport {} -> error "a foreign export is only at the top of a module"
   -- An action is a function of nothing, and what it gives may be yet to be
   -- evaluated.
   Core.Run {imperative} -> evaluate context imperative (Apply [] (Force consumer))

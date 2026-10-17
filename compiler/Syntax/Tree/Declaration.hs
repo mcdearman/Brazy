@@ -7,7 +7,9 @@ module Syntax.Tree.Declaration where
 import Data.Foldable (toList)
 import Data.List.NonEmpty (NonEmpty ((:|)))
 import qualified Data.Strict.Maybe as Strict (Maybe (..))
-import qualified Data.Text as Text (pack)
+import qualified Data.Text as Text
+import qualified Data.Text.Lazy as Lazy (toStrict)
+import Data.Text.Lazy.Builder (toLazyText)
 import qualified Data.Strict.Vector1 as Strict (Vector1, fromNonEmpty)
 import qualified Data.Vector.Strict as Strict (Vector)
 import qualified Data.Vector.Strict as Strict.Vector
@@ -57,6 +59,7 @@ import qualified Syntax.Tree.Marked as Marked
 import Syntax.Tree.Qualification (Qualification)
 import Syntax.Tree.RightHandSide (RightHandSide)
 import Syntax.StringLiteral (StringLiteral)
+import qualified Syntax.StringLiteral as StringLiteral
 import Syntax.Tree.Scheme (Scheme)
 import qualified Syntax.Tree.Scheme as Scheme
 import Syntax.Tree.Type (Type)
@@ -168,7 +171,10 @@ data Declaration position
   | -- |
     -- > foreign export ccall "name" x :: a
     ForeignExport
-      { startPosition :: !position
+      { startPosition :: !position,
+        exportName :: !(Marked Variable position),
+        exportEntity :: !(Maybe StringLiteral),
+        exportAnnotation :: !(Scheme position)
       }
   | -- |
     -- > default (Integer, Double)
@@ -194,6 +200,7 @@ instance TermBindingVariables Declaration where
     Data {dataDefinition} -> termBindingVariables dataDefinition
     Annotation {termNames} -> toList termNames
     ForeignImport {foreignName} -> [foreignName]
+    ForeignExport {exportName = position :@ name, exportEntity} -> [position :@ exportBinding name exportEntity]
     Infix {termNames'} -> [position :@ name | position :@ Variable name <- toList termNames']
     Definition {leftHandSide} -> termBindingVariables leftHandSide
     _ -> []
@@ -204,6 +211,22 @@ typeBindingVariables = \case
   Data {typePosition, typeName} -> [(typeName, typePosition)]
   Synonym {typePosition, typeName} -> [(typeName, typePosition)]
   _ -> []
+
+-- |
+-- The name of C a foreign export gives what it exports: what is written for
+-- it, or else the name it has in Haskell.
+exportSymbol :: Variable -> Maybe StringLiteral -> Text.Text
+exportSymbol name = \case
+  Just written | [symbol] <- Text.words (Text.pack (StringLiteral.unpack written)) -> symbol
+  Just written | (_ : _ : _) <- Text.words (Text.pack (StringLiteral.unpack written)) -> Text.empty
+  _ -> Lazy.toStrict (toLazyText (Variable.printLiteral' name))
+
+-- |
+-- The name of the definition a foreign export makes of what it exports, at
+-- the type it is exported at. A program can hardly write it.
+exportBinding :: Variable -> Maybe StringLiteral -> Variable
+exportBinding name entity =
+  Variable.VariableIdentifier (Lexer.variableIdentifier (Text.pack "foreign'export'" <> exportSymbol name entity))
 
 fromClass :: ClassDeclaration position -> Declaration position
 fromClass = \case
@@ -415,20 +438,17 @@ parse =
             *> convention
             *> optional safety
             *> (foreignImport <$> optional text <*> Marked.parseLiteral <* token "::" <*> Scheme.parse),
-          foreignExport
-            <$ token "export"
-            <* convention
-            <* optional text
-            <* (Marked.parseLiteral :: Parser (Marked Variable Position))
-            <* token "::"
-            <* Scheme.parse
+          token "export"
+            *> convention
+            *> (foreignExport <$> optional text <*> Marked.parseLiteral <* token "::" <*> Scheme.parse)
         ]
       where
         convention = asum [token "ccall", token "capi"]
         safety = asum [token "safe", token "unsafe", token "interruptible"]
         foreignImport entity foreignName foreignAnnotation startPosition =
           ForeignImport {startPosition, foreignName, entity, foreignAnnotation}
-        foreignExport startPosition = ForeignExport {startPosition}
+        foreignExport exportEntity exportName exportAnnotation startPosition =
+          ForeignExport {startPosition, exportName, exportEntity, exportAnnotation}
     parseClass :: Parser (Position -> Declaration Position)
     parseClass =
       asum

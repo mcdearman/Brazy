@@ -360,6 +360,13 @@ impl Heap {
     /// Check every count, given everything the program holds, and that
     /// every block there is can be reached from that.
     unsafe fn examine(&mut self, given: &[Value]) {
+        // Inside a call from C into the program, what the program held
+        // before it called C is held where this cannot see it.
+        if self.catching.iter().any(|&(handler, _)| handler == BARRIER) {
+            self.since = 0;
+            hazy_check_due = 0;
+            return;
+        }
         // So that every block there is has its references counted in full.
         self.settle(usize::MAX);
 
@@ -479,6 +486,10 @@ pub fn share(value: Value) -> Value {
 pub fn release(value: Value) {
     unsafe { heap().erase(value) }
 }
+
+/// What a catch is where C called into the program: the end of what can be
+/// seen from there.
+pub const BARRIER: Value = 0;
 
 /// What catches a thrown value.
 pub fn catching() -> &'static mut Vec<(Value, Value)> {

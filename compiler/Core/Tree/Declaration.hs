@@ -82,6 +82,11 @@ simplify = \case
     definition2 solved = \case
       Semantic.Definition2.Foreign Semantic.Definition2.ForeignCall {foreignPosition, target, symbol, marshalled} ->
         Expression.Foreign {foreignCall = maybe (Foreign.call foreignPosition target symbol solved) id marshalled}
+      Semantic.Definition2.Exported Semantic.Definition2.ForeignCall {foreignPosition, target, symbol, marshalled} exported ->
+        Expression.ForeignExport
+          { foreignCall = maybe (Foreign.call foreignPosition target symbol solved) id marshalled,
+            exported = definition2 solved exported
+          }
       Semantic.Definition definition -> Expression.simplify definition
       Semantic.Piece Semantic.Choice {index, instanciation = Solved instanciation, patternx, bound} ->
         Expression.Join

@@ -44,6 +44,8 @@ data Definition2 source mark layout stage scope where
   Piece :: !(Choice stage scope) -> Definition2 Single mark layout stage scope
   Shared :: !(RightHandSide layout stage scope) -> Definition2 Share Inferred layout stage scope
   Foreign :: !ForeignCall -> Definition2 Single Annotated layout stage scope
+  -- | A definition that a foreign export makes, which C calls by a name.
+  Exported :: !ForeignCall -> !(Definition2 Single Annotated layout stage scope) -> Definition2 Single Annotated layout stage scope
 
 instance Scope.Show (Definition2 source mark layout stage) where
   showsPrec = showsPrec
@@ -61,6 +63,8 @@ instance Show (Definition2 source mark layout stage scope) where
     showParen (d > 10) $ showString "Shared " . showsPrec 11 definition
   showsPrec d (Foreign call) =
     showParen (d > 10) $ showString "Foreign " . showsPrec 11 call
+  showsPrec d (Exported call definition) =
+    showParen (d > 10) $ showString "Exported " . showsPrec 11 call . showString " " . showsPrec 11 definition
 
 instance Shift0.Functor (Definition2 source mark stage layout) where
   map = Shift.mapDefault
@@ -72,6 +76,7 @@ instance Shift.Functor (Definition2 source mark stage layout) where
     Piece choice -> Piece (Shift.map category choice)
     Shared definition -> Shared (Shift.map category definition)
     Foreign call -> Foreign call
+    Exported call definition -> Exported call (Shift.map category definition)
 
 instance FreeTermVariables (Definition2 source mark) where
   freeTermVariables target = \case
@@ -81,6 +86,7 @@ instance FreeTermVariables (Definition2 source mark) where
     Piece Choice {index} -> FreeVariables.term target index
     Shared definition -> freeTermVariables target definition
     Foreign _ -> mempty
+    Exported _ definition -> freeTermVariables target definition
 
 instance Connect (Definition2 source mark) where
   connect = \case
@@ -89,11 +95,13 @@ instance Connect (Definition2 source mark) where
     Piece choice -> Piece choice
     Shared definition -> Shared (connect definition)
     Foreign call -> Foreign call
+    Exported call definition -> Exported call (connect definition)
   seperate = \case
     Definition definition -> Definition (seperate definition)
     Piece choice -> Piece choice
     Shared definition -> Shared (seperate definition)
     Foreign call -> Foreign call
+    Exported call definition -> Exported call (seperate definition)
 
 -- |
 -- A function of C, by its name there. What it is given and gives is said by

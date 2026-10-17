@@ -134,6 +134,11 @@ check position Solve {solve, logical} reflection information = \case
                         content index = assumeData <$> TypeBinding.content (typeEnvironment Table.Type.! index)
                     marshalled <- Foreign.callThrough (Builtin.index pure content) foreignPosition target symbol (Forall.simplify scheme)
                     marshalled `seq` pure (Tree.Definition3.Label info (Definition2.Foreign call {Definition2.marshalled = Just marshalled}))
+                  Tree.Definition3.Label info (Definition2.Exported call@Definition2.ForeignCall {foreignPosition, target, symbol} exported) -> do
+                    let Context {typeEnvironment} = context
+                        content index = assumeData <$> TypeBinding.content (typeEnvironment Table.Type.! index)
+                    marshalled <- Foreign.callThrough (Builtin.index pure content) foreignPosition target symbol (Forall.simplify scheme)
+                    marshalled `seq` pure (Tree.Definition3.Label info (Definition2.Exported call {Definition2.marshalled = Just marshalled} exported))
                   _ -> pure definition
                 definition <- checkAnnotation context position scheme $ \context typex -> do
                   definition <- Definition3.checkManual context typex definition

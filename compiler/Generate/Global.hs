@@ -7,4 +7,4 @@ data Global = Global
   { path :: !FullQualifiers,
     name :: !Text
   }
-  deriving (Eq, Ord)
+  deriving (Eq, Ord, Show)

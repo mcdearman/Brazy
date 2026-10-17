@@ -137,6 +137,11 @@ data Expression scope
     Foreign
       { foreignCall :: !Foreign.Call
       }
+  | -- | What a foreign export exports, which C calls as the call says.
+    ForeignExport
+      { foreignCall :: !Foreign.Call,
+        exported :: !(Expression scope)
+      }
   | -- | A value of a type with a @forall@ of its own, for a constructor to
     -- hold. If the type requires something, the value is a function of the
     -- evidence for it, as a definition of such a type is.
@@ -161,6 +166,7 @@ instance Substitute.Functor Expression where
   map category = \case
     Helper {helperName} -> Helper {helperName}
     Foreign {foreignCall} -> Foreign {foreignCall}
+    ForeignExport {foreignCall, exported} -> ForeignExport {foreignCall, exported = Substitute.map category exported}
     Variable {variable, instanciation} ->
       Variable
         { variable = Substitute.map category variable,

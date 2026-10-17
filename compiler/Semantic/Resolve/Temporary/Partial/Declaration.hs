@@ -16,7 +16,7 @@ import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Text.Lazy as Lazy (toStrict)
 import Data.Text.Lazy.Builder (toLazyText)
-import Error (missingMethodEntry, unsupportedFeatureForeignExport, unsupportedForeignEntity)
+import Error (missingMethodEntry, unsupportedForeignEntity)
 import qualified Core.Marshal as Marshal
 import qualified Syntax.StringLiteral as StringLiteral
 import qualified Syntax.Variable as Variable
@@ -57,7 +57,16 @@ import Syntax.FreeVariables (TermBindingVariables (..))
 import Syntax.Position (Position)
 import qualified Syntax.Tree.ClassDeclaration as Syntax.ClassDefinition
 import qualified Syntax.Tree.ClassDeclarations as Syntax (ClassDeclarations (..))
-import qualified Syntax.Tree.Declaration as Syntax (Declaration (..))
+import qualified Syntax.Tree.Declaration as Syntax (Declaration (..), exportBinding, exportSymbol)
+import Data.List.NonEmpty (NonEmpty (..))
+import qualified Data.Strict.Vector1 as Strict.Vector1 (fromNonEmpty)
+import qualified Data.Vector.Strict as Strict.Vector (empty)
+import qualified Syntax.Lexer as Lexer (Qualifiers (Local))
+import qualified Syntax.Tree.Body as Syntax.Body
+import qualified Syntax.Tree.Declarations as Syntax.Declarations
+import qualified Syntax.Tree.Expression as Syntax.Expression
+import qualified Syntax.Tree.Pattern as Syntax.Pattern
+import qualified Syntax.Tree.Scheme as Syntax (Scheme)
 import Syntax.Tree.Fixity (Fixity)
 import qualified Syntax.Tree.LeftHandSide as Syntax (LeftHandSide (Pattern))
 import Syntax.Tree.Marked (Marked (..))
@@ -209,7 +218,27 @@ resolve' temporary context lookupTerm lookupType lookupShare (declaration : decl
               }
           )
         ]
-      Syntax.ForeignExport {startPosition} -> unsupportedFeatureForeignExport startPosition
+      Syntax.ForeignExport {startPosition, exportName = position :@ exported, exportEntity, exportAnnotation}
+        | symbol <- Syntax.exportSymbol exported exportEntity,
+          hidden <- Syntax.exportBinding exported exportEntity ->
+            if Text.null symbol || not (Text.all (\c -> c == '_' || c `elem` ['a' .. 'z'] || c `elem` ['A' .. 'Z'] || c `elem` ['0' .. '9']) symbol)
+              then unsupportedForeignEntity startPosition
+              else
+                resolve' temporary context lookupTerm lookupType lookupShare (exportDeclarations position hidden exported exportAnnotation)
+                  ++ [ ( Named hidden,
+                         Foreign
+                           { position,
+                             name = Named hidden,
+                             foreignCall =
+                               Real.ForeignCall
+                                 { foreignPosition = startPosition,
+                                   target = Marshal.Export,
+                                   symbol,
+                                   marshalled = Nothing
+                                 }
+                           }
+                       )
+                     ]
       Syntax.Definition {leftHandSide, rightHandSide} ->
         let Complete.Definition position name functionAuto =
               Complete.resolve undefined context leftHandSide rightHandSide
@@ -286,6 +315,38 @@ resolve' temporary context lookupTerm lookupType lookupShare (declaration : decl
               | otherwise -> error "class with no methods"
       _ -> []
 resolve' _ _ _ _ _ [] = []
+
+-- |
+-- What a foreign export is, as declarations: the annotation of a definition
+-- of its own name, and the definition, which is what it exports.
+exportDeclarations :: Position -> Variable -> Variable -> Syntax.Scheme Position -> [Syntax.Declaration Position]
+exportDeclarations position hidden exported annotation =
+  [ Syntax.Annotation {termNames = Strict.Vector1.fromNonEmpty ((position :@ hidden) :| []), annotation},
+    Syntax.Definition
+      { startPosition = position,
+        leftHandSide =
+          Syntax.Pattern
+            Syntax.Pattern.Variable
+              { startPosition = position,
+                variable = position :@ hidden
+              },
+        rightHandSide =
+          Syntax.RightHandSide.RightHandSide
+            { equalPosition = position,
+              body =
+                Syntax.Body.Body
+                  { expression =
+                      Syntax.Expression.Variable
+                        { variable = position :@ (Lexer.Local Variable.:- exported)
+                        }
+                  },
+              declarations =
+                Syntax.Declarations.Declarations
+                  { declarations = Strict.Vector.empty
+                  }
+            }
+      }
+  ]
 
 -- |
 -- What a foreign import is of, as the report has it: past @static@ and a

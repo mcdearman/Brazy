@@ -41,6 +41,8 @@ data Target
   = Static
   | Address
   | Dynamic
+  | -- | A function of Haskell that C calls by a name.
+    Export
   deriving (Eq, Ord, Show)
 
 -- | A call of a function of C, by its name: what it is given, what it gives,

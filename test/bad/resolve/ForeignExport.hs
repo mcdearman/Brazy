@@ -1,7 +1,7 @@
 module ForeignExport where
 
--- A function of Haskell is not yet given to C.
-foreign export ccall "twice" twice :: Int -> Int
+-- What C calls a function of Haskell is one name.
+foreign export ccall "twice over" twice :: Int -> Int
 
 twice :: Int -> Int
 twice x = x * 2

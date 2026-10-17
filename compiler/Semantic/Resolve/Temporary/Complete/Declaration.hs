@@ -39,7 +39,8 @@ import qualified Semantic.Tree.Combinators.Implicit as Real (Implicit (..))
 import Semantic.Tree.Combinators.Inferred (Inferred (Inferred))
 import qualified Semantic.Tree.Declaration as Real (Declaration (..), locality)
 import qualified Semantic.Tree.Definition as Definition (merge)
-import qualified Semantic.Tree.Definition2 as Real (Choice (..), Definition2 (..))
+import qualified Core.Marshal as Marshal
+import qualified Semantic.Tree.Definition2 as Real (Choice (..), Definition2 (..), ForeignCall (..))
 import qualified Semantic.Tree.Definition3 as Real (Definition3 (..), Info (..))
 import qualified Semantic.Tree.Definition4 as Real (Annotation (..), Definition4 (..))
 import Semantic.Tree.Scheme (Scheme)
@@ -87,10 +88,10 @@ merge entries@(entry :| _) =
               fmap fst selection,
               fmap fst method,
               fmap fst choice,
-              fmap fst foreignCall
+              fmap fst imported
             ] =
           duplicateVariableEntries entries
-      | Just (position, call) <- foreignCall,
+      | Just (position, call) <- imported,
         Just annotation <- annotation =
           let cast declaration = Real $ Real.locality declaration
               real =
@@ -181,9 +182,11 @@ merge entries@(entry :| _) =
                             let body =
                                   Real.Resolve
                                     ( Real.Name properName fixity
-                                        `Real.Label` if Scheme.implicit annotation
-                                          then Real.Definition auto
-                                          else Real.Scoped manual
+                                        `Real.Label` marked
+                                          ( if Scheme.implicit annotation
+                                              then Real.Definition auto
+                                              else Real.Scoped manual
+                                          )
                                     )
                              in Real.Annotated (Identity annotation) Real.::: Identity (Identity body),
                           typex = Identity Inferred
@@ -238,6 +241,14 @@ merge entries@(entry :| _) =
             Just (position, method)
           _ -> Nothing
 
+    -- What a foreign import or export says. An export marks a definition,
+    -- and is not one of its own.
+    imported = case foreignCall of
+      Just (_, Real.ForeignCall {target = Marshal.Export}) -> Nothing
+      found -> found
+    marked definition = case foreignCall of
+      Just (_, call@Real.ForeignCall {target = Marshal.Export}) -> Real.Exported call definition
+      _ -> definition
     foreignCall = case mapMaybe foreignCall (toList entries) of
       [] -> Nothing
       [call] -> Just call

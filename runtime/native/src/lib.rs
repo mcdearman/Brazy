@@ -1557,10 +1557,44 @@ pub extern "C" fn hazy_prim_catch_push(handler: Value, resume: Value) -> Value {
     unit()
 }
 
-/// Whether anything is catching.
+/// Whether anything is catching. Inside a call from C into the program,
+/// a catch begun before C was called is out of reach.
 #[no_mangle]
 pub extern "C" fn hazy_prim_catching() -> Value {
-    boolean(!heap::catching().is_empty())
+    boolean(matches!(heap::catching().last(), Some(&(handler, _)) if handler != heap::BARRIER))
+}
+
+/// C calls into the program: what is thrown there and not caught there is
+/// not caught by a catch begun before C was called.
+#[no_mangle]
+pub extern "C" fn hazy_catch_barrier() {
+    heap::catching().push((heap::BARRIER, heap::BARRIER));
+}
+
+/// The call from C into the program is over.
+#[no_mangle]
+pub extern "C" fn hazy_catch_unbarrier() {
+    heap::catching().pop();
+}
+
+/// What a call from C into the program left for C, until C takes it.
+static mut CALLBACK_RESULT: Value = 0;
+
+/// Leave a value for C, at the end of a call from C into the program.
+#[no_mangle]
+pub extern "C" fn hazy_prim_callback_result(value: Value) -> Value {
+    unsafe { CALLBACK_RESULT = heap::share(value) };
+    unit()
+}
+
+/// What the call from C into the program left. The reference is C's.
+#[no_mangle]
+pub extern "C" fn hazy_callback_take() -> Value {
+    unsafe {
+        let value = CALLBACK_RESULT;
+        CALLBACK_RESULT = 0;
+        value
+    }
 }
 
 /// A value was thrown and nothing catches it. It said what the program

@@ -98,7 +98,6 @@ module Error
     unsupportedFeaturePolymorphicComponents,
     unsupportedFeatureGADTs,
     unsupportedFeatureEqualityConstraints,
-    unsupportedFeatureForeignExport,
     unsupportedForeignType,
     unsupportedForeignEntity,
   )
@@ -633,8 +632,6 @@ unsupportedFeaturePolymorphicComponents =
 unsupportedFeatureGADTs :: Position -> a
 unsupportedFeatureGADTs = unsupportedFeature gadts
 
-unsupportedFeatureForeignExport :: Position -> a
-unsupportedFeatureForeignExport = unsupportedFeature (fromString "foreign export")
 
 -- | A foreign function of a type that is not passed to C.
 unsupportedForeignType :: Position -> a
