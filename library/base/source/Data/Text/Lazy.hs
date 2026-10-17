@@ -115,7 +115,6 @@ import qualified Data.List as List
 import Prelude hiding (all, any, break, concat, concatMap, cycle, drop, dropWhile, elem, filter, foldl, foldl1, foldr, foldr1, head, init, iterate, last, length, lines, map, maximum, minimum, null, repeat, replicate, reverse, scanl, scanl1, scanr, scanr1, span, splitAt, tail, take, takeWhile, unlines, unwords, words, zip, zipWith)
 import qualified Prelude
 import Data.Int (Int64)
-import Hazy.Prelude (placeholder)
 import qualified Data.Text as Whole (concat, length)
 import qualified Hazy.Prelude as Strict (Text, pack, unpack)
 
@@ -168,11 +167,11 @@ toStrict (Text chunks) = Whole.concat chunks
 fromStrict :: Strict.Text -> Text
 fromStrict text = Text [text]
 
-foldrChunks :: (Text -> a -> a) -> a -> Text -> a
-foldrChunks = placeholder
+foldrChunks :: (Strict.Text -> a -> a) -> a -> Text -> a
+foldrChunks f z (Text chunks) = Prelude.foldr f z chunks
 
-foldlChunks :: (a -> Text -> a) -> a -> Text -> a
-foldlChunks = placeholder
+foldlChunks :: (a -> Strict.Text -> a) -> a -> Text -> a
+foldlChunks f z (Text chunks) = Prelude.foldl f z chunks
 
 infixr 5 `cons`
 
@@ -414,17 +413,28 @@ span p text = case Prelude.span p (unpack text) of
   (before, after) -> (pack before, pack after)
 
 spanM :: (Monad m) => (Char -> m Bool) -> Text -> m (Text, Text)
-spanM = placeholder
+spanM p text = go [] (unpack text)
+  where
+    go taken [] = pure (pack (Prelude.reverse taken), pack [])
+    go taken rest@(c : more) = do
+      keep <- p c
+      if keep then go (c : taken) more else pure (pack (Prelude.reverse taken), pack rest)
 
 spanEndM :: (Monad m) => (Char -> m Bool) -> Text -> m (Text, Text)
-spanEndM = placeholder
+spanEndM p text = go [] (Prelude.reverse (unpack text))
+  where
+    go taken [] = pure (pack [], pack taken)
+    go taken rest@(c : more) = do
+      keep <- p c
+      if keep then go (c : taken) more else pure (pack (Prelude.reverse rest), pack taken)
 
 breakOn :: Text -> Text -> (Text, Text)
 breakOn needle text = case found (unpack needle) (unpack text) of
   (before, after) -> (pack before, pack after)
 
 breakOnEnd :: Text -> Text -> (Text, Text)
-breakOnEnd = placeholder
+breakOnEnd needle haystack = case breakOn (reverse needle) (reverse haystack) of
+  (after, before) -> (reverse before, reverse after)
 
 break :: (Char -> Bool) -> Text -> (Text, Text)
 break p text = case Prelude.break p (unpack text) of
@@ -501,7 +511,13 @@ stripSuffix suffix text = case List.stripPrefix (Prelude.reverse (unpack suffix)
   Nothing -> Nothing
 
 commonPrefixes :: Text -> Text -> Maybe (Text, Text, Text)
-commonPrefixes = placeholder
+commonPrefixes a b = case go (unpack a) (unpack b) of
+  ([], _, _) -> Nothing
+  (common, a', b') -> Just (pack common, pack a', pack b')
+  where
+    go (x : xs) (y : ys) | x == y = case go xs ys of
+      (common, xs', ys') -> (x : common, xs', ys')
+    go xs ys = ([], xs, ys)
 
 filter :: (Char -> Bool) -> Text -> Text
 filter p = lift (Prelude.filter p)
@@ -515,7 +531,17 @@ elem :: Char -> Text -> Bool
 elem c text = Prelude.elem c (unpack text)
 
 breakOnAll :: Text -> Text -> [(Text, Text)]
-breakOnAll = placeholder
+breakOnAll needle haystack
+  | Prelude.null wanted = errorWithoutStackTrace "Data.Text.Lazy.breakOnAll: empty input"
+  | otherwise = go [] (unpack haystack)
+  where
+    wanted = unpack needle
+    go _ [] = []
+    go before rest@(c : more)
+      | List.isPrefixOf wanted rest =
+          (pack (Prelude.reverse before), pack rest)
+            : go (Prelude.reverse wanted ++ before) (Prelude.drop (Prelude.length wanted) rest)
+      | otherwise = go (c : before) more
 
 partition :: (Char -> Bool) -> Text -> (Text, Text)
 partition p text = (filter p text, filter (not . p) text)
