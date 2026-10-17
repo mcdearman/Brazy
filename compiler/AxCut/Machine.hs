@@ -448,6 +448,15 @@ callC World {memory, blocks} Foreign.Call {symbol, result} given = case (unpack 
   ("hazy_cast_u64_f64", [Integer bits]) -> pure $ Floating $ castWord64ToDouble (fromInteger bits)
   ("hazy_cast_f64_u64", [Floating x]) -> pure $ Integer $ toInteger $ castDoubleToWord64 x
   ("strlen", [Int address]) -> Integer . toInteger . length <$> string address
+  -- Nothing the machine does goes wrong in C's way, so errno is always 0,
+  -- and C's words for a number are not known.
+  ("hazy_errno", []) -> pure (Int 0)
+  ("hazy_set_errno", [_]) -> pure unit
+  ("strerror", [Int number]) -> do
+    let text = map (fromIntegral . fromEnum) ("errno " ++ show number) ++ [0 :: Integer]
+    address <- allocate (length text)
+    for_ (zip [0 ..] text) (\(offset, byte) -> write (address + offset) 1 byte)
+    pure (Int address)
   ("strcmp", [Int left, Int right]) -> do
     left <- string left
     right <- string right
