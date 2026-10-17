@@ -684,6 +684,25 @@ memory!(hazy_peek_f32, hazy_poke_f32, f32);
 memory!(hazy_peek_f64, hazy_poke_f64, f64);
 memory!(hazy_peek_ptr, hazy_poke_ptr, *mut u8);
 
+// Where C keeps errno, which each system names its own way.
+extern "C" {
+    #[cfg_attr(target_os = "linux", link_name = "__errno_location")]
+    #[cfg_attr(target_os = "windows", link_name = "_errno")]
+    #[cfg_attr(target_os = "macos", link_name = "__error")]
+    fn errno_location() -> *mut i32;
+}
+
+/// What C says went wrong last, which the library's Foreign.C.Error reads.
+#[no_mangle]
+pub extern "C" fn hazy_errno() -> i32 {
+    unsafe { *errno_location() }
+}
+
+#[no_mangle]
+pub extern "C" fn hazy_set_errno(number: i32) {
+    unsafe { *errno_location() = number }
+}
+
 /// The bits of a floating-point number, and the number of some bits, which
 /// the library's GHC.Float has as functions of C.
 #[no_mangle]
