@@ -1,0 +1,10 @@
+(["bin","usr/bin","x"],True)
+("file.tar.zip",("dir/file",".tar.gz"),"a",".tar.gz","x.zip")
+(True,True,False,Just "x.tar",Nothing)
+("dir/new.md","dir/new.txt","other/a.txt")
+(["/","usr/","local/","bin/"],["/","usr","local","bin"],"a/b/c.txt")
+("/","a/b",True,False,"")
+["/a/b/c/","x/",".","a/../b","/share/x"]
+(True,False)
+("docs/a.txt","/etc/passwd",".")
+(False,True,"_","fine/name")

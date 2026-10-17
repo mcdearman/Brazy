@@ -25,6 +25,7 @@ import qualified Core.Foreign as Foreign
 import Data.Char (chr, generalCategory, isAlpha, isDigit, isSpace, ord, toLower, toUpper)
 import Data.IORef (IORef, modifyIORef, newIORef, readIORef, writeIORef)
 import Data.Foldable (for_)
+import qualified System.Directory as Directory
 import Data.Word (Word8)
 import GHC.Float (castDoubleToWord64, castFloatToWord32, castWord32ToFloat, castWord64ToDouble)
 import Data.List (sort)
@@ -72,7 +73,7 @@ import System.IO
     stdout,
     utf8,
   )
-import System.IO.Error (alreadyExistsErrorType, ioeSetErrorString, mkIOError, tryIOError)
+import System.IO.Error (alreadyExistsErrorType, ioeSetErrorString, isAlreadyExistsError, isDoesNotExistError, isPermissionError, mkIOError, tryIOError)
 import System.Info (os)
 
 data Value
@@ -110,7 +111,10 @@ data World = World
     -- | The addresses that the things of C whose addresses were asked for
     -- were given, each by its name. A function of C called by its address
     -- is called by that name.
-    symbols :: !(IORef (Map Text Int))
+    symbols :: !(IORef (Map Text Int)),
+    -- | What C says went wrong last, which the machine says for what it
+    -- does in C's place.
+    errno :: !(IORef Int)
   }
 
 -- |
@@ -148,7 +152,8 @@ run Program {definitions, entry} = do
   memory <- newIORef Map.empty
   blocks <- newIORef Map.empty
   symbols <- newIORef Map.empty
-  execute World {catching, files, failure, arguments, programName, building, memory, blocks, symbols} globals entry []
+  errno <- newIORef 0
+  execute World {catching, files, failure, arguments, programName, building, memory, blocks, symbols, errno} globals entry []
 
 allocate :: Object -> Environment -> IO (IORef Cell)
 allocate Object {kind, method, parameters, body} environment = newIORef $ case kind of
@@ -430,7 +435,7 @@ callC world@World {symbols} call@Foreign.Call {target = Foreign.Dynamic} (Int ad
     [] -> do
       hPutStrLn stderr "the machine cannot call a function of C at an address it did not give out"
       exitFailure
-callC World {memory, blocks} Foreign.Call {symbol, result} given = case (unpack symbol, given) of
+callC World {memory, blocks, errno} Foreign.Call {symbol, result} given = case (unpack symbol, given) of
   -- Memory, as C's library gives it out. A block is put after the last,
   -- on a boundary of 16 bytes, and none is used again.
   ("malloc", [Int size]) -> Int <$> allocate size
@@ -448,10 +453,40 @@ callC World {memory, blocks} Foreign.Call {symbol, result} given = case (unpack 
   ("hazy_cast_u64_f64", [Integer bits]) -> pure $ Floating $ castWord64ToDouble (fromInteger bits)
   ("hazy_cast_f64_u64", [Floating x]) -> pure $ Integer $ toInteger $ castDoubleToWord64 x
   ("strlen", [Int address]) -> Integer . toInteger . length <$> string address
-  -- Nothing the machine does goes wrong in C's way, so errno is always 0,
-  -- and C's words for a number are not known.
-  ("hazy_errno", []) -> pure (Int 0)
-  ("hazy_set_errno", [_]) -> pure unit
+  -- C's words for a number are not known.
+  ("hazy_errno", []) -> Int . fromIntegral <$> readIORef errno
+  ("hazy_set_errno", [Int number]) -> unit <$ writeIORef errno (fromIntegral number)
+  -- What the runtime asks of the system for System.Directory, done with
+  -- the System.Directory the machine is made with.
+  ("hazy_remove_directory", [Int path]) -> status (pathOf path >>= Directory.removeDirectory)
+  ("hazy_remove_directory_recursive", [Int path]) -> status (pathOf path >>= Directory.removeDirectoryRecursive)
+  ("hazy_rename", [Int from, Int to]) -> status (Directory.renamePath <$> pathOf from <*> pathOf to >>= id)
+  ("hazy_current_directory", []) -> made Directory.getCurrentDirectory
+  ("hazy_set_current_directory", [Int path]) -> status (pathOf path >>= Directory.setCurrentDirectory)
+  ("hazy_home_directory", []) -> made Directory.getHomeDirectory
+  ("hazy_temporary_directory", []) -> made Directory.getTemporaryDirectory
+  ("hazy_copy_file", [Int from, Int to]) -> status (Directory.copyFile <$> pathOf from <*> pathOf to >>= id)
+  ("hazy_file_size", [Int path]) -> sizeOf path
+  ("hazy_canonicalize", [Int path]) -> made (pathOf path >>= Directory.canonicalizePath)
+  ("hazy_create_link", [Int target, Int link, Int directory]) ->
+    status $ do
+      target' <- pathOf target
+      link' <- pathOf link
+      (if directory /= 0 then Directory.createDirectoryLink else Directory.createFileLink) target' link'
+  ("hazy_remove_link", [Int path]) -> status (pathOf path >>= Directory.removeDirectoryLink)
+  ("hazy_read_link", [Int path]) -> made (pathOf path >>= Directory.getSymbolicLinkTarget)
+  ("hazy_is_link", [Int path]) -> answer (fromEnum <$> (pathOf path >>= Directory.pathIsSymbolicLink))
+  ("hazy_permissions", [Int path]) -> answer $ do
+    permissions <- pathOf path >>= Directory.getPermissions
+    pure $ sum [bit | (bit, True) <- zip [1, 2, 4, 8] (map ($ permissions) [Directory.readable, Directory.writable, Directory.executable, Directory.searchable])]
+  ("hazy_set_permissions", [Int path, Int bits]) -> status $ do
+    path' <- pathOf path
+    let has bit = bits `div` bit `mod` 2 == 1
+    Directory.setPermissions path' $
+      Directory.setOwnerReadable (has 1) $
+        Directory.setOwnerWritable (has 2) $
+          Directory.setOwnerExecutable (has 4) $
+            Directory.setOwnerSearchable (has 8) Directory.emptyPermissions
   ("strerror", [Int number]) -> do
     let text = map (fromIntegral . fromEnum) ("errno " ++ show number) ++ [0 :: Integer]
     address <- allocate (length text)
@@ -527,6 +562,40 @@ callC World {memory, blocks} Foreign.Call {symbol, result} given = case (unpack 
     copy target source count = do
       bytes <- for [0 .. count - 1] (\offset -> readBytes (source + offset) 1)
       for_ (zip [0 ..] bytes) (\(offset, byte) -> write (target + offset) 1 byte)
+    -- What the system says went wrong, as C would say it.
+    failed :: IOException -> IO ()
+    failed problem = writeIORef errno (number problem)
+    number problem
+      | isDoesNotExistError problem = 2
+      | isAlreadyExistsError problem = 17
+      | isPermissionError problem = 13
+      | otherwise = 5
+    -- 0 if the action was done, and -1 if it went wrong.
+    status action = answer (0 <$ action)
+    answer :: IO Int -> IO Value
+    answer action = do
+      done <- tryIOError action
+      case done of
+        Right number -> pure (Int (fromIntegral number))
+        Left problem -> Int (-1) <$ failed problem
+    sizeOf path = do
+      done <- tryIOError (pathOf path >>= Directory.getFileSize)
+      case done of
+        Right size -> pure (Integer size)
+        Left problem -> Integer (-1) <$ failed problem
+    -- A string made in the machine's memory, as C's malloc would make it,
+    -- or a null address if the action went wrong.
+    made action = do
+      done <- tryIOError action
+      case done of
+        Right text -> do
+          let bytes = map toInteger (encodeUtf8' text) ++ [0]
+          address <- allocate (length bytes)
+          for_ (zip [0 ..] bytes) (\(offset, byte) -> write (address + offset) 1 byte)
+          pure (Int address)
+        Left problem -> Int 0 <$ failed problem
+    -- A path given as a string of C in UTF-8.
+    pathOf address = decodeUtf8' . map fromInteger <$> string address
     -- The bytes from an address up to the first 0.
     string address = do
       byte <- readBytes address 1
@@ -810,3 +879,35 @@ outside World {catching, files, failure, building, arguments, programName} name 
       InappropriateType -> 8
       InvalidArgument -> 9
       _ -> 0
+
+-- |
+-- A string as the bytes of UTF-8, and those bytes as the string, a byte
+-- that is not part of a character being the character it is the code of.
+encodeUtf8' :: String -> [Word8]
+encodeUtf8' = concatMap character
+  where
+    character c
+      | code < 0x80 = [fromIntegral code]
+      | code < 0x800 = [0xc0 + high 6, continuing 0]
+      | code < 0x10000 = [0xe0 + high 12, continuing 6, continuing 0]
+      | otherwise = [0xf0 + high 18, continuing 12, continuing 6, continuing 0]
+      where
+        code = ord c
+        high shift' = fromIntegral (code `div` 2 ^ shift')
+        continuing shift' = 0x80 + fromIntegral (code `div` 2 ^ shift' `mod` 64)
+
+decodeUtf8' :: [Word8] -> String
+decodeUtf8' = \case
+  [] -> []
+  byte : rest
+    | byte < 0x80 -> chr (fromIntegral byte) : decodeUtf8' rest
+    | byte >= 0xc0 && byte < 0xe0 -> continued 1 (byte - 0xc0) rest
+    | byte >= 0xe0 && byte < 0xf0 -> continued 2 (byte - 0xe0) rest
+    | byte >= 0xf0 && byte < 0xf8 -> continued 3 (byte - 0xf0) rest
+    | otherwise -> chr (fromIntegral byte) : decodeUtf8' rest
+  where
+    continued count first rest = case splitAt count rest of
+      (following, after)
+        | length following == count && all (\byte -> byte >= 0x80 && byte < 0xc0) following ->
+            chr (foldl (\code byte -> code * 64 + fromIntegral byte - 0x80) (fromIntegral first) following) : decodeUtf8' after
+      _ -> chr (fromIntegral first) : decodeUtf8' rest

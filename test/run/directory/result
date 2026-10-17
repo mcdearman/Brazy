@@ -1,0 +1,19 @@
+5
+["a.txt","c.txt","sub2"]
+[".","..","a.txt","c.txt","sub2"]
+"hazy-directory-test"
+("c.txt",True)
+"c.txt"
+"c.txt"
+(True,True,False)
+False
+True
+Just "x"
+["c.txt"]
+not empty
+no such file
+False
+False
+False
+(True,True,True)
+(False,True)
