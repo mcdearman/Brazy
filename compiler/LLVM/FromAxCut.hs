@@ -694,7 +694,7 @@ allocate state words head = do
   pure
     ( line
         [ block,
-          fromString " = call ptr @hazy_alloc(i64 ",
+          fromString (if words <= smallBlock then " = call ptr @hazy_take(i64 " else " = call ptr @hazy_alloc(i64 "),
           fromString (show words),
           fromString ", i64 ",
           number head,
@@ -702,6 +702,12 @@ allocate state words head = do
         ],
       block
     )
+
+-- |
+-- The most words a block can have and still be taken from a list of free
+-- blocks of its size where it is made. The runtime has the same.
+smallBlock :: Int
+smallBlock = 32
 
 -- |
 -- An address as a word.
@@ -1689,6 +1695,7 @@ wanted state token environment = \case
         arguments = map snd taken
     (code, value) <- case (primitive, arguments) of
       (Call call, _) -> foreignCall state call arguments
+      _ | Just made <- intInline state primitive arguments -> made
       (Export call exported, _) -> do
         exportStub state call exported
         pure (mempty, fromString "ptrtoint (ptr @hazy_nullary to i64)")
@@ -1812,6 +1819,105 @@ primitiveWord = \case
   IntegerCastToInt -> True
   IntegerTruncateToInt -> True
   _ -> False
+
+-- |
+-- A primitive of @Int@s done where it is used, on the words they are: a
+-- number @n@ is the word @2n + 1@. A sum, a difference, a product and the
+-- rest are a few instructions on that, which come round at the bounds as
+-- the runtime's do. A comparison gives one of the two constructors of
+-- @Bool@, which are never counted. A division by zero is left to the
+-- runtime, which stops the program.
+intInline :: State s -> Primitive -> [Builder] -> Maybe (ST s (Builder, Builder))
+intInline state primitive arguments = case (primitive, arguments) of
+  (IntAdd, [left, right]) -> Just $ do
+    sum' <- temporary state
+    value <- localWord state
+    pure (line [sum', fromString " = add i64 ", left, fromString ", ", right] <> line [value, fromString " = sub i64 ", sum', fromString ", 1"], value)
+  (IntMinus, [left, right]) -> Just $ do
+    difference <- temporary state
+    value <- localWord state
+    pure (line [difference, fromString " = sub i64 ", left, fromString ", ", right] <> line [value, fromString " = add i64 ", difference, fromString ", 1"], value)
+  (IntMultiply, [left, right]) -> Just $ do
+    number <- temporary state
+    twice <- temporary state
+    product' <- temporary state
+    value <- localWord state
+    pure
+      ( line [number, fromString " = ashr i64 ", left, fromString ", 1"]
+          <> line [twice, fromString " = sub i64 ", right, fromString ", 1"]
+          <> line [product', fromString " = mul i64 ", number, fromString ", ", twice]
+          <> line [value, fromString " = add i64 ", product', fromString ", 1"],
+        value
+      )
+  (IntNegate, [given]) -> Just $ do
+    value <- localWord state
+    pure (line [value, fromString " = sub i64 2, ", given], value)
+  (IntAbs, [given]) -> Just $ do
+    negative <- temporary state
+    negated <- temporary state
+    value <- localWord state
+    pure
+      ( line [negative, fromString " = icmp slt i64 ", given, fromString ", 0"]
+          <> line [negated, fromString " = sub i64 2, ", given]
+          <> line [value, fromString " = select i1 ", negative, fromString ", i64 ", negated, fromString ", i64 ", given],
+        value
+      )
+  (IntSignum, [given]) -> Just $ do
+    positive <- temporary state
+    negative <- temporary state
+    either' <- temporary state
+    value <- localWord state
+    pure
+      ( line [positive, fromString " = icmp sgt i64 ", given, fromString ", 1"]
+          <> line [negative, fromString " = icmp slt i64 ", given, fromString ", 0"]
+          <> line [either', fromString " = select i1 ", negative, fromString ", i64 -1, i64 1"]
+          <> line [value, fromString " = select i1 ", positive, fromString ", i64 3, i64 ", either'],
+        value
+      )
+  (IntEqual, [left, right]) -> Just $ compared "eq" left right
+  (IntLessThenEqual, [left, right]) -> Just $ compared "sle" left right
+  (IntQuot, [left, right]) -> Just $ divided "sdiv" "hazy_prim_int_quot" left right
+  (IntRem, [left, right]) -> Just $ divided "srem" "hazy_prim_int_rem" left right
+  _ -> Nothing
+  where
+    compared condition left right = do
+      test <- temporary state
+      value <- localWord state
+      pure
+        ( line [test, fromString " = icmp ", fromString condition, fromString " i64 ", left, fromString ", ", right]
+            <> line [value, fromString " = select i1 ", test, fromString ", i64 ", nullaryOf 1, fromString ", i64 ", nullaryOf 0],
+          value
+        )
+    divided operation runtime left right = do
+      zero <- temporary state
+      stop <- label state
+      go <- label state
+      dividend <- temporary state
+      divisor <- temporary state
+      result <- temporary state
+      shifted <- temporary state
+      value <- localWord state
+      pure
+        ( mconcat
+            [ line [zero, fromString " = icmp eq i64 ", right, fromString ", 1"],
+              line [fromString "br i1 ", zero, fromString ", label %", stop, fromString ", label %", go],
+              stop <> fromString ":\n",
+              line [fromString "call i64 @", fromString runtime, fromString "(i64 ", left, fromString ", i64 ", right, fromString ")"],
+              line [fromString "unreachable"],
+              go <> fromString ":\n",
+              line [dividend, fromString " = ashr i64 ", left, fromString ", 1"],
+              line [divisor, fromString " = ashr i64 ", right, fromString ", 1"],
+              line [result, fromString " = ", fromString operation, fromString " i64 ", dividend, fromString ", ", divisor],
+              line [shifted, fromString " = shl i64 ", result, fromString ", 1"],
+              line [value, fromString " = or i64 ", shifted, fromString ", 1"]
+            ],
+          value
+        )
+    nullaryOf :: Int -> Builder
+    nullaryOf tag =
+      fromString "ptrtoint (ptr getelementptr ([8192 x i64], ptr @hazy_nullary, i64 0, i64 "
+        <> fromString (show tag)
+        <> fromString ") to i64)"
 
 -- |
 -- What the runtime calls a primitive.
@@ -2358,6 +2464,10 @@ runtime =
   @hazy_check_due = external global i64
   @hazy_reused = external global i64
   @hazy_lent = external global i64
+  @hazy_free_lists = external global [33 x ptr]
+  @hazy_alloc_slow = external global i64
+  @hazy_allocated = external global i64
+  @hazy_freed = external global i64
   @hazy_nullary = external global [8192 x i64]
   declare ptr @hazy_alloc(i64, i64)
   declare void @hazy_free(i64)
@@ -2420,6 +2530,32 @@ runtime =
   declare i64 @hazy_prim_integer_quot(i64, i64)
   declare i64 @hazy_prim_integer_rem(i64, i64)
 
+  ; A new block of a small size, with one reference: the first of the free
+  ; blocks of its size, unless there are none or the runtime has more to do.
+  define linkonce_odr ptr @hazy_take(i64 %size, i64 %head) alwaysinline {
+    %slow = load i64, ptr @hazy_alloc_slow
+    %quick = icmp eq i64 %slow, 0
+    br i1 %quick, label %look, label %call
+  look:
+    %slot = getelementptr [33 x ptr], ptr @hazy_free_lists, i64 0, i64 %size
+    %block = load ptr, ptr %slot
+    %empty = icmp eq ptr %block, null
+    br i1 %empty, label %call, label %pop
+  pop:
+    %link = getelementptr i64, ptr %block, i64 1
+    %next = load ptr, ptr %link
+    store ptr %next, ptr %slot
+    %counted = or i64 %head, 4294967296
+    store i64 %counted, ptr %block
+    %before = load i64, ptr @hazy_allocated
+    %after = add i64 %before, 1
+    store i64 %after, ptr @hazy_allocated
+    ret ptr %block
+  call:
+    %made = call ptr @hazy_alloc(i64 %size, i64 %head)
+    ret ptr %made
+  }
+
   ; There is one more reference to a value. A number is not counted, and
   ; neither is a block whose header is negative.
   define linkonce_odr void @hazy_share(i64 %value) alwaysinline {
@@ -2479,7 +2615,33 @@ runtime =
     %held = lshr i64 %header, 32
     %only = icmp eq i64 %held, 1
     br i1 %only, label %give, label %split
+  ; A constructed value, a function or a thunk of a small size goes back on
+  ; the list of free blocks of its size here. Anything else goes back
+  ; through the runtime.
   give:
+    %kind = and i64 %header, 15
+    %plain = icmp ule i64 %kind, 2
+    br i1 %plain, label %sized, label %runtime
+  sized:
+    %fields = lshr i64 %header, 19
+    %entries = and i64 %fields, 8191
+    %constructed = icmp eq i64 %kind, 0
+    %before = select i1 %constructed, i64 1, i64 2
+    %words = add i64 %entries, %before
+    %small = icmp ule i64 %words, 32
+    br i1 %small, label %push, label %runtime
+  push:
+    %slot = getelementptr [33 x ptr], ptr @hazy_free_lists, i64 0, i64 %words
+    %first = load ptr, ptr %slot
+    store i64 15, ptr %pointer
+    %link = getelementptr i64, ptr %pointer, i64 1
+    store ptr %first, ptr %link
+    store ptr %pointer, ptr %slot
+    %given = load i64, ptr @hazy_freed
+    %more = add i64 %given, 1
+    store i64 %more, ptr @hazy_freed
+    br label %out
+  runtime:
     call void @hazy_give(i64 %value)
     br label %out
   split:

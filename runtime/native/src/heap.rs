@@ -40,9 +40,19 @@
 //!
 //! The compiled program owns every reference it holds. It adds to a count and
 //! takes from it in its own code, and calls here only when a count reaches
-//! zero (`hazy_free`). The block is not taken apart at once: it goes on a
-//! list, and a few blocks of the list are taken apart at each allocation. So
-//! giving up the head of a long list does not stop the program.
+//! zero (`hazy_free`). The block is taken apart then, and what it held that
+//! is no longer held goes on a list, of which a few blocks are taken apart
+//! then and at each allocation. So giving up the head of a long list does
+//! not stop the program.
+//!
+//! # Allocating
+//!
+//! A small block is taken from a list of free blocks of its size, and the
+//! compiled program does that itself (`hazy_take`, in
+//! `compiler/LLVM/FromAxCut.hs`), from the lists here
+//! (`hazy_free_lists`). It calls here when a list is empty, or when there is
+//! more to do at an allocation (`hazy_alloc_slow`): blocks to take apart,
+//! allocations to sample, or counts to check.
 //!
 //! A definition at the top of a program is not counted.
 //!
@@ -189,10 +199,33 @@ const SMALL: usize = 32;
 const CHUNK: usize = 1 << 13;
 
 struct Class {
-    /// The first free slot. Each free slot holds the next in its second word.
-    free: *mut u64,
     /// The slots there are: where each run starts and how many it has.
     chunks: Vec<(*mut u64, usize)>,
+}
+
+/// The first free slot of each size, from zero words to `SMALL`. Each free
+/// slot holds the next in its second word. The compiled program takes from
+/// these itself.
+#[no_mangle]
+pub static mut hazy_free_lists: [*mut u64; SMALL + 1] = [std::ptr::null_mut(); SMALL + 1];
+
+/// Whether an allocation has more to do than take a free block, and so has
+/// to be done here.
+#[no_mangle]
+pub static mut hazy_alloc_slow: u64 = 0;
+
+/// How many blocks have been allocated. The compiled program counts these
+/// itself.
+#[no_mangle]
+pub static mut hazy_allocated: u64 = 0;
+
+/// How many blocks have been given back. The compiled program counts the
+/// ones it gives back itself.
+#[no_mangle]
+pub static mut hazy_freed: u64 = 0;
+
+fn free_list(size: usize) -> &'static mut *mut u64 {
+    unsafe { &mut (*std::ptr::addr_of_mut!(hazy_free_lists))[size] }
 }
 
 struct Heap {
@@ -213,8 +246,9 @@ struct Heap {
     /// The functions of C that wrappers made, each by its address, with the
     /// place of the two values it calls, which the program holds there.
     wrapped: HashMap<u64, *mut Value>,
-    /// How many bytes are in blocks.
-    live: usize,
+    /// Whether every allocation is to be done here, to be sampled or
+    /// counted for a check.
+    always: u64,
     /// After how many allocations every count is checked, if they are.
     check: Option<u64>,
     /// How many allocations there have been since the last check.
@@ -224,8 +258,6 @@ struct Heap {
     /// if that is asked for, and how many times each was.
     sample: Option<u64>,
     sampled: HashMap<String, u64>,
-    allocated: u64,
-    counted: u64,
 }
 
 /// How many times a block was built in the place of one just taken apart.
@@ -252,25 +284,18 @@ fn heap() -> &'static mut Heap {
         heap.get_or_insert_with(|| {
             let setting = |name: &str| std::env::var(name).ok().filter(|value| !value.is_empty());
             Heap {
-                classes: (0..=SMALL)
-                    .map(|_| Class {
-                        free: std::ptr::null_mut(),
-                        chunks: Vec::new(),
-                    })
-                    .collect(),
+                classes: (0..=SMALL).map(|_| Class { chunks: Vec::new() }).collect(),
                 large: HashMap::new(),
                 pending: Vec::new(),
                 roots: Vec::new(),
                 catching: Vec::new(),
                 wrapped: HashMap::new(),
-                live: 0,
+                always: (setting("HAZY_CHECK").is_some() || setting("HAZY_PROFILE").is_some()) as u64,
                 check: setting("HAZY_CHECK").map(|value| value.parse().unwrap_or(1).max(1)),
                 since: 0,
                 report: setting("HAZY_STATS").is_some(),
                 sample: setting("HAZY_PROFILE").map(|value| value.parse().unwrap_or(1 << 20).max(1)),
                 sampled: HashMap::new(),
-                allocated: 0,
-                counted: 0,
             }
         })
     }
@@ -283,20 +308,20 @@ impl Heap {
             self.large.insert(block, size);
             return block;
         }
-        let class = &mut self.classes[size];
-        if class.free.is_null() {
+        let free = free_list(size);
+        if free.is_null() {
             let slots = (CHUNK / size).max(1);
             let chunk = Vec::<u64>::with_capacity(slots * size).leak().as_mut_ptr();
             for index in (0..slots).rev() {
                 let slot = chunk.add(index * size);
                 *slot = FREE;
-                *slot.add(1) = class.free as u64;
-                class.free = slot;
+                *slot.add(1) = *free as u64;
+                *free = slot;
             }
-            class.chunks.push((chunk, slots));
+            self.classes[size].chunks.push((chunk, slots));
         }
-        let block = class.free;
-        class.free = *block.add(1) as *mut u64;
+        let block = *free;
+        *free = *block.add(1) as *mut u64;
         block
     }
 
@@ -306,15 +331,14 @@ impl Heap {
         if (*block & KIND) == INTEGER && tag(*block) != SMALL_INTEGER {
             drop(Box::from_raw(*block.add(1) as *mut num_bigint::BigInt));
         }
-        self.live -= size * 8;
         if size > SMALL {
             let size = self.large.remove(&block).expect("a large block that is not known");
             drop(Vec::from_raw_parts(block, 0, size));
         } else {
-            let class = &mut self.classes[size];
+            let free = free_list(size);
             *block = FREE;
-            *block.add(1) = class.free as u64;
-            class.free = block;
+            *block.add(1) = *free as u64;
+            *free = block;
         }
     }
 
@@ -323,13 +347,21 @@ impl Heap {
         while budget > 0 {
             let Some(block) = self.pending.pop() else { break };
             *block &= !PENDING;
-            for &child in children(block) {
-                self.erase(child);
-            }
-            self.give(block);
-            self.counted += 1;
+            self.take_apart(block);
             budget -= 1;
         }
+        if self.pending.is_empty() {
+            hazy_alloc_slow = self.always;
+        }
+    }
+
+    /// Give up what a block holds, and then its words.
+    unsafe fn take_apart(&mut self, block: *mut u64) {
+        for &child in children(block) {
+            self.erase(child);
+        }
+        self.give(block);
+        hazy_freed += 1;
     }
 
     unsafe fn erase(&mut self, value: Value) {
@@ -345,6 +377,7 @@ impl Heap {
     unsafe fn free(&mut self, block: *mut u64) {
         *block |= PENDING;
         self.pending.push(block);
+        hazy_alloc_slow = 1;
     }
 
     /// Every block there is, whether it can be reached or not.
@@ -525,10 +558,9 @@ pub extern "C" fn hazy_alloc(size: u64, head: u64) -> *mut u64 {
         heap.settle(8);
         let block = heap.take(size);
         *block = head | ONE;
-        heap.allocated += 1;
-        heap.live += size * 8;
+        hazy_allocated += 1;
         if let Some(every) = heap.sample {
-            if heap.allocated % every == 0 {
+            if hazy_allocated % every == 0 {
                 let caller = caller();
                 *heap.sampled.entry(caller).or_insert(0) += 1;
             }
@@ -543,10 +575,15 @@ pub extern "C" fn hazy_alloc(size: u64, head: u64) -> *mut u64 {
     }
 }
 
-/// The last reference to a block has been given up.
+/// The last reference to a block has been given up. It is taken apart now,
+/// and so are a few of what it held that are no longer held either.
 #[no_mangle]
 pub extern "C" fn hazy_free(value: Value) {
-    unsafe { heap().free(value as *mut u64) }
+    let heap = heap();
+    unsafe {
+        heap.take_apart(value as *mut u64);
+        heap.settle(8);
+    }
 }
 
 /// The last reference to a block has been given up by someone who has read
@@ -555,7 +592,7 @@ pub extern "C" fn hazy_free(value: Value) {
 pub extern "C" fn hazy_give(value: Value) {
     let heap = heap();
     unsafe { heap.give(value as *mut u64) };
-    heap.counted += 1;
+    unsafe { hazy_freed += 1 };
 }
 
 /// A reference to a block is given up by someone who has read what it holds
@@ -640,10 +677,10 @@ pub fn finish() {
     if heap.report {
         eprintln!(
             "allocated: {}, reused: {}, lent: {}, freed: {}",
-            heap.allocated,
+            unsafe { hazy_allocated },
             unsafe { hazy_reused },
             unsafe { hazy_lent },
-            heap.counted
+            unsafe { hazy_freed }
         );
     }
 }
