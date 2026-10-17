@@ -132,9 +132,8 @@ where
 import qualified Data.Set as Set (fromDistinctAscList, member, notMember, toAscList)
 import Prelude hiding (drop, filter, foldl, foldr, lookup, map, null, splitAt, take)
 import qualified Prelude
-import Data.Semigroup (Arg)
+import Data.Semigroup (Arg (..))
 import Data.Set (Set)
-import Hazy.Prelude (placeholder)
 
 -- A map is a tree balanced by weight: neither side of a node has more than
 -- three times the other's entries. A value is not evaluated by being put in.
@@ -179,7 +178,7 @@ fromSet :: (k -> a) -> Set k -> Map k a
 fromSet f set = fromDistinctAscList [(k, f k) | k <- Set.toAscList set]
 
 fromArgSet :: Set (Arg k a) -> Map k a
-fromArgSet = placeholder
+fromArgSet set = fromDistinctAscList [(k, a) | Arg k a <- Set.toAscList set]
 
 fromList :: (Ord k) => [(k, a)] -> Map k a
 fromList = Prelude.foldl (\m (k, x) -> insert k x m) Tip
@@ -419,7 +418,7 @@ disjoint :: (Ord k) => Map k a -> Map k b -> Bool
 disjoint a b = Prelude.all (\k -> notMember k b) (keys a)
 
 compose :: (Ord b) => Map b c -> Map a b -> Map a c
-compose = placeholder
+compose bc ab = mapMaybe (`lookup` bc) ab
 
 mergeWithKey ::
   (Ord k) =>
@@ -429,7 +428,21 @@ mergeWithKey ::
   Map k a ->
   Map k b ->
   Map k c
-mergeWithKey = placeholder
+mergeWithKey f only1 only2 = go
+  where
+    go Tip t2 = only2 t2
+    go t1 Tip = only1 t1
+    go (Bin _ kx x l1 r1) t2 = case splitLookup kx t2 of
+      (l2, found, r2) ->
+        let l' = go l1 l2
+            r' = go r1 r2
+         in case found of
+              Nothing -> case only1 (singleton kx x) of
+                Tip -> link2 l' r'
+                Bin _ _ x' _ _ -> link kx x' l' r'
+              Just x2 -> case f kx x x2 of
+                Nothing -> link2 l' r'
+                Just x' -> link kx x' l' r'
 
 map :: (a -> b) -> Map k a -> Map k b
 map f = mapWithKey (\_ x -> f x)
@@ -446,7 +459,14 @@ traverseWithKey f = \case
     (\l' x' r' -> Bin count k x' l' r') <$> traverseWithKey f l <*> f k x <*> traverseWithKey f r
 
 traverseMaybeWithKey :: (Applicative f) => (k -> a -> f (Maybe b)) -> Map k a -> f (Map k b)
-traverseMaybeWithKey = placeholder
+traverseMaybeWithKey f = go
+  where
+    go Tip = pure Tip
+    go (Bin _ kx x l r) = combine <$> go l <*> f kx x <*> go r
+      where
+        combine l' found r' = case found of
+          Nothing -> link2 l' r'
+          Just x' -> link kx x' l' r'
 
 mapAccum :: (a -> b -> (a, c)) -> a -> Map k b -> (a, Map k c)
 mapAccum f = mapAccumWithKey (\state _ x -> f state x)
@@ -530,7 +550,7 @@ keysSet :: Map k a -> Set k
 keysSet m = Set.fromDistinctAscList (keys m)
 
 argSet :: Map k a -> Set (Arg k a)
-argSet = placeholder
+argSet m = Set.fromDistinctAscList [Arg k a | (k, a) <- toAscList m]
 
 toList :: Map k a -> [(k, a)]
 toList = toAscList
@@ -564,13 +584,19 @@ partitionWithKey :: (k -> a -> Bool) -> Map k a -> (Map k a, Map k a)
 partitionWithKey p m = (filterWithKey p m, filterWithKey (\k x -> not (p k x)) m)
 
 takeWhileAntitone :: (k -> Bool) -> Map k a -> Map k a
-takeWhileAntitone = placeholder
+takeWhileAntitone _ Tip = Tip
+takeWhileAntitone p (Bin _ kx x l r)
+  | p kx = link kx x l (takeWhileAntitone p r)
+  | otherwise = takeWhileAntitone p l
 
 dropWhileAntitone :: (k -> Bool) -> Map k a -> Map k a
-dropWhileAntitone = placeholder
+dropWhileAntitone _ Tip = Tip
+dropWhileAntitone p (Bin _ kx x l r)
+  | p kx = dropWhileAntitone p r
+  | otherwise = link kx x (dropWhileAntitone p l) r
 
 spanAntitone :: (k -> Bool) -> Map k a -> (Map k a, Map k a)
-spanAntitone = placeholder
+spanAntitone p m = (takeWhileAntitone p m, dropWhileAntitone p m)
 
 mapMaybe :: (a -> Maybe b) -> Map k a -> Map k b
 mapMaybe f = mapMaybeWithKey (\_ x -> f x)
@@ -610,7 +636,8 @@ splitLookup k = \case
     EQ -> (l, Just y, r)
 
 splitRoot :: Map k b -> [Map k b]
-splitRoot = placeholder
+splitRoot Tip = []
+splitRoot (Bin _ k v l r) = [l, singleton k v, r]
 
 isSubmapOf :: (Ord k, Eq a) => Map k a -> Map k a -> Bool
 isSubmapOf = isSubmapOfBy (==)
@@ -623,10 +650,10 @@ isSubmapOfBy same a b = size a <= size b && Prelude.all inside (toAscList a)
       Nothing -> False
 
 isProperSubmapOf :: (Ord k, Eq a) => Map k a -> Map k a -> Bool
-isProperSubmapOf = placeholder
+isProperSubmapOf m1 m2 = size m1 < size m2 && isSubmapOf m1 m2
 
 isProperSubmapOfBy :: (Ord k) => (a -> b -> Bool) -> Map k a -> Map k b -> Bool
-isProperSubmapOfBy = placeholder
+isProperSubmapOfBy f m1 m2 = size m1 < size m2 && isSubmapOfBy f m1 m2
 
 lookupIndex :: (Ord k) => k -> Map k a -> Maybe Int
 lookupIndex k = go 0
@@ -651,7 +678,13 @@ elemAt index = \case
     EQ -> (k, x)
 
 updateAt :: (k -> a -> Maybe a) -> Int -> Map k a -> Map k a
-updateAt = placeholder
+updateAt _ _ Tip = errorWithoutStackTrace "Map.updateAt: index out of range"
+updateAt f i (Bin count kx x l r) = case compare i (size l) of
+  LT -> balance kx x (updateAt f i l) r
+  GT -> balance kx x l (updateAt f (i - size l - 1) r)
+  EQ -> case f kx x of
+    Just x' -> Bin count kx x' l r
+    Nothing -> glue l r
 
 deleteAt :: Int -> Map k a -> Map k a
 deleteAt index = \case
@@ -713,16 +746,24 @@ deleteFindMax m = case maxViewWithKey m of
   Nothing -> error "Map.deleteFindMax: can not return the maximal element of an empty map"
 
 updateMin :: (a -> Maybe a) -> Map k a -> Map k a
-updateMin = placeholder
+updateMin f = updateMinWithKey (\_ x -> f x)
 
 updateMax :: (a -> Maybe a) -> Map k a -> Map k a
-updateMax = placeholder
+updateMax f = updateMaxWithKey (\_ x -> f x)
 
 updateMinWithKey :: (k -> a -> Maybe a) -> Map k a -> Map k a
-updateMinWithKey = placeholder
+updateMinWithKey _ Tip = Tip
+updateMinWithKey f (Bin count kx x Tip r) = case f kx x of
+  Nothing -> r
+  Just x' -> Bin count kx x' Tip r
+updateMinWithKey f (Bin _ kx x l r) = balance kx x (updateMinWithKey f l) r
 
 updateMaxWithKey :: (k -> a -> Maybe a) -> Map k a -> Map k a
-updateMaxWithKey = placeholder
+updateMaxWithKey _ Tip = Tip
+updateMaxWithKey f (Bin count kx x l Tip) = case f kx x of
+  Nothing -> l
+  Just x' -> Bin count kx x' l Tip
+updateMaxWithKey f (Bin _ kx x l r) = balance kx x l (updateMaxWithKey f r)
 
 minView :: Map k a -> Maybe (a, Map k a)
 minView m = case minViewWithKey m of
@@ -751,7 +792,18 @@ maxViewWithKey = \case
     Nothing -> Nothing
 
 valid :: (Ord k) => Map k a -> Bool
-valid = placeholder
+-- | Whether the tree is as a map's must be: in order, of the sizes it says,
+-- and balanced.
+valid m = ordered (keys m) && sized m && balanced m
+  where
+    ordered ks = and (Prelude.zipWith (<) ks (Prelude.drop 1 ks))
+    sized Tip = True
+    sized (Bin count _ _ l r) = count == size l + size r + 1 && sized l && sized r
+    balanced Tip = True
+    balanced (Bin _ _ _ l r) =
+      (size l + size r <= 1 || (size l <= 3 * size r && size r <= 3 * size l))
+        && balanced l
+        && balanced r
 
 -- One entry of each run of entries next to each other with equal keys,
 -- its value the run's values combined.
