@@ -1417,8 +1417,55 @@ wanted state token environment = \case
                 Just (token, size)
               )
           else pure (open scrutinee, Nothing)
-      body <- statement state token (kept ++ zip names (map snd fields)) body
-      pure (tag, target, foldMap fst fields <> dropped <> given <> body)
+      -- A clause that gives up some of the fields at once, as one that only
+      -- reads a size does, does not count them when the value is shared:
+      -- only the fields it keeps get a reference more, and the value one
+      -- fewer. When the value was the only reference, it is given back and
+      -- the fields it gives up are given up.
+      let read' = zip names (map snd fields)
+          used = case body of
+            Substitute pairs _ -> Set.fromList (map snd pairs)
+            _ -> Set.fromList names
+          wanted' = [(name, field) | (name, field) <- read', Set.member name used]
+          unwanted = [field | (name, field) <- read', Set.notMember name used]
+          fresh' = case incoming of
+            Nothing -> True
+            Just _ -> False
+          partial =
+            counted scrutinee
+              && fresh'
+              && not (reusing && size > 0 && wants size body)
+              && not (null unwanted)
+      (given', environment') <-
+        if partial
+          then do
+            held <- local state
+            only <- local state
+            alone <- label state
+            shared <- label state
+            joined <- label state
+            fewer <- local state
+            pure
+              ( mconcat
+                  [ line [held, fromString " = lshr i64 ", head', fromString ", 32"],
+                    line [only, fromString " = icmp eq i64 ", held, fromString ", 1"],
+                    line [fromString "br i1 ", only, fromString ", label %", alone, fromString ", label %", shared],
+                    alone <> fromString ":\n",
+                    open scrutinee,
+                    foldMap erase unwanted,
+                    line [fromString "br label %", joined],
+                    shared <> fromString ":\n",
+                    foldMap (share . snd) wanted',
+                    line [fewer, fromString " = sub i64 ", head', fromString ", 4294967296"],
+                    line [fromString "store i64 ", fewer, fromString ", ptr ", pointer],
+                    line [fromString "br label %", joined],
+                    joined <> fromString ":\n"
+                  ],
+                kept ++ wanted'
+              )
+          else pure (given, kept ++ read')
+      body <- statement state token environment' body
+      pure (tag, target, foldMap fst fields <> dropped <> given' <> body)
     fallback <- case fallback of
       Just body -> do
         body <- statement state token kept body
