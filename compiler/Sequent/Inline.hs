@@ -20,7 +20,7 @@
 -- The bodies that are put in are those of the definitions as they were
 -- before this was done to them. So this can be done over again, each time
 -- reaching one call further, and it always ends.
-module Sequent.Inline (inline) where
+module Sequent.Inline (inline, specialize) where
 
 import Control.Monad.ST (ST, runST)
 import Data.Map (Map)
@@ -31,6 +31,7 @@ import Data.Text (Text)
 import qualified Data.Text as Text
 import Data.Traversable (for)
 import qualified Generate.Global as Global (Global)
+import Sequent.Primitive (Primitive (Field, IntegerCastToInt, IntegerTruncateToInt))
 import qualified Sequent.Tree as Literal (Literal (..))
 import Sequent.Tree
   ( Alternative (..),
@@ -39,13 +40,20 @@ import Sequent.Tree
     Producer (..),
     Statement (..),
     Strategy (..),
+    free,
     globals,
+    int63,
+    intMaxBound,
+    intMinBound,
   )
 
 -- |
 -- The most a function can be made of and still be put where it is called.
-limit :: Int
+-- A function that is given evidence that is known can be bigger: what it
+-- does with the evidence is then known too, and much of it is gone.
+limit, evidenced :: Int
 limit = 30
+evidenced = 100
 
 -- |
 -- A definition with the small functions it calls put in. It is given which
@@ -78,8 +86,10 @@ inline' time find self producer = do
           | global /= self,
             Just (Function parameters covariable body) <- find global,
             length parameters == length arguments,
-            and [strategy == ByNeed | Binder {strategy} <- parameters],
-            size body <= limit,
+            -- A parameter that is a value is given one, which is only
+            -- written where it was when it is a name or a number.
+            and [strategy == ByNeed || atom argument | (Binder {strategy}, argument) <- zip parameters arguments],
+            size body <= (if or [strategy == ByValue | Binder {strategy} <- parameters] then evidenced else limit),
             Set.notMember global (globals body) -> do
               arguments <- traverse producerx arguments
               result <- consumer result
@@ -111,6 +121,112 @@ inline' time find self producer = do
         Abort -> pure Abort
         Halt -> pure Halt
   producerx producer
+
+-- |
+-- What forcing an instance that needs nothing gives: its fields, each a
+-- definition, or another such instance forced.
+data Field
+  = Forced Global.Global
+  | Atom Producer
+
+-- |
+-- The fields of an instance that needs nothing, if a definition is one: a
+-- thunk that forces some definitions and constructs a value of them and of
+-- other definitions.
+dictionary :: (Global.Global -> Maybe Producer) -> Global.Global -> Maybe [Field]
+dictionary find global = case find global of
+  Just (Thunk covariable body) -> go Map.empty body
+    where
+      go forced = \case
+        Cut (Global other) (Force (MuTilde Binder {name} rest)) -> go (Map.insert name other forced) rest
+        Cut (Constructor _ fields) (Covariable given)
+          | given == covariable -> traverse (field forced) fields
+        _ -> Nothing
+      field forced = \case
+        Variable name -> Forced <$> Map.lookup name forced
+        value | atom value -> Just (Atom value)
+        _ -> Nothing
+  _ -> Nothing
+
+-- |
+-- A field of an instance that is known, read where it is read as what it is.
+-- An instance that needs nothing is a definition, which is forced where it
+-- is used and then taken apart: a superclass, then a method. Once the
+-- instance is known each of those is known, and a method that is known can
+-- be called by its name, and put where it is called. An instance that is
+-- forced and then not used is not forced: it is only a value.
+--
+-- An @Integer@ written in the program and made an @Int@ is the @Int@, as
+-- a number written for an @Int@ is once the instance of 'Num' is known.
+specialize :: (Global.Global -> Maybe Producer) -> Producer -> Producer
+specialize find = producer Known {instances = Map.empty, integers = Map.empty}
+  where
+    producer known = \case
+      Constructor tag fields -> Constructor tag (map (producer known) fields)
+      Mu covariable body -> Mu covariable (statement known body)
+      Function parameters covariable body -> Function parameters covariable (statement known body)
+      Thunk covariable body -> Thunk covariable (statement known body)
+      other -> other
+    consumer known = \case
+      MuTilde binder body -> MuTilde binder (statement known body)
+      Case alternatives otherwise ->
+        Case
+          [Alternative tag binders (statement known body) | Alternative tag binders body <- alternatives]
+          (statement known <$> otherwise)
+      Apply arguments result -> Apply (map (producer known) arguments) (consumer known result)
+      Force result -> Force (consumer known result)
+      other -> other
+    statement known = \case
+      Cut (Global global) (Force (MuTilde binder@Binder {name} body))
+        | Just fields <- dictionary find global ->
+            let body' = statement known {instances = Map.insert name fields (instances known)} body
+             in if Set.member name (free body')
+                  then Cut (Global global) (Force (MuTilde binder body'))
+                  else body'
+      Primitive (Field index) [Variable name] result
+        | Just fields <- Map.lookup name (instances known),
+          (found : _) <- drop index fields ->
+            statement known $ case found of
+              Forced other -> Cut (Global other) (Force result)
+              Atom value -> Cut value result
+      -- Forcing an Integer that was written gives it.
+      Cut (Variable given) (Force (MuTilde binder@Binder {name} body))
+        | Just integer <- Map.lookup given (integers known) ->
+            let body' = statement known {integers = Map.insert name integer (integers known)} body
+             in if Set.member name (free body')
+                  then Cut (Variable given) (Force (MuTilde binder body'))
+                  else body'
+      Cut (Literal (Literal.Integer integer)) (MuTilde binder@Binder {name} body) ->
+        let body' = statement known {integers = Map.insert name integer (integers known)} body
+         in if Set.member name (free body')
+              then Cut (Literal (Literal.Integer integer)) (MuTilde binder body')
+              else body'
+      Primitive IntegerTruncateToInt [argument] result
+        | Just integer <- written argument ->
+            Cut (Literal (Literal.Int (int63 integer))) (consumer known result)
+      Primitive IntegerCastToInt [argument] result
+        | Just integer <- written argument,
+          integer >= toInteger intMinBound && integer <= toInteger intMaxBound ->
+            Cut (Literal (Literal.Int (fromInteger integer))) (consumer known result)
+      Cut left right -> Cut (producer known left) (consumer known right)
+      Primitive primitive arguments result ->
+        Primitive primitive (map (producer known) arguments) (consumer known result)
+      LetRec bindings body ->
+        LetRec [(local, producer known value) | (local, value) <- bindings] (statement known body)
+      other -> other
+      where
+        written = \case
+          Literal (Literal.Integer integer) -> Just integer
+          Variable name -> Map.lookup name (integers known)
+          _ -> Nothing
+
+-- |
+-- What is known where something is: the names that are instances that
+-- are known, and the names that are @Integer@s written in the program.
+data Known = Known
+  { instances :: Map Text [Field],
+    integers :: Map Text Integer
+  }
 
 constant :: Producer -> Bool
 constant = \case

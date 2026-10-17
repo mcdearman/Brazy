@@ -22,6 +22,7 @@ mod heap;
 use heap::{hazy_alloc, header, nullary, Value, ARRAY, DATA, FLOAT, INTEGER, SLICE, TEXT};
 use num_bigint::{BigInt, Sign};
 use num_traits::{FromPrimitive, One, Signed, ToPrimitive, Zero};
+use std::borrow::Cow;
 use std::io::Write;
 use unicode_properties::{GeneralCategory, UnicodeGeneralCategory};
 
@@ -349,21 +350,52 @@ pub extern "C" fn hazy_prim_int_rem(left: Value, right: Value) -> Value {
 // An Integer is a number of any size. The number itself is kept by Rust and
 // the block holds its address. The number is freed with the block.
 
-fn integer(value: Value) -> &'static BigInt {
+/// An `Integer` that fits in 64 bits is kept in its block, whose tag says
+/// so. A bigger one is kept apart, and its block points at it. Most are
+/// small, and are worked out without ever being made big.
+fn small(value: Value) -> Option<i64> {
     debug_assert!(kind(value) == INTEGER, "not an Integer");
-    unsafe { &*(*(value as *const u64).add(1) as *const BigInt) }
+    unsafe {
+        let block = value as *const u64;
+        if heap::tag(*block) == heap::SMALL_INTEGER {
+            Some(*block.add(1) as i64)
+        } else {
+            None
+        }
+    }
+}
+
+fn integer(value: Value) -> Cow<'static, BigInt> {
+    match small(value) {
+        Some(number) => Cow::Owned(BigInt::from(number)),
+        None => unsafe { Cow::Borrowed(&*(*(value as *const u64).add(1) as *const BigInt)) },
+    }
+}
+
+fn from_small(number: i64) -> Value {
+    let block = hazy_alloc(2, header(INTEGER, heap::SMALL_INTEGER, 0));
+    unsafe { *block.add(1) = number as u64 };
+    block as Value
 }
 
 fn from_integer(number: BigInt) -> Value {
+    if let Some(number) = number.to_i64() {
+        return from_small(number);
+    }
     let block = hazy_alloc(2, header(INTEGER, 0, 0));
     unsafe { *block.add(1) = Box::into_raw(Box::new(number)) as u64 };
     block as Value
 }
 
+/// Two small `Integer`s, if they are.
+fn smalls(left: Value, right: Value) -> Option<(i64, i64)> {
+    Some((small(left)?, small(right)?))
+}
+
 /// An `Integer` written in the program.
 #[no_mangle]
 pub extern "C" fn hazy_integer(number: i64) -> Value {
-    from_integer(BigInt::from(number))
+    from_small(number)
 }
 
 /// An `Integer` written in the program that does not fit in 64 bits, as its
@@ -379,12 +411,12 @@ pub extern "C" fn hazy_integer_big(digits: *const u8, length: u64) -> Value {
 
 #[no_mangle]
 pub extern "C" fn hazy_prim_int_to_integer(value: Value) -> Value {
-    from_integer(BigInt::from(int(value)))
+    from_small(int(value))
 }
 
 #[no_mangle]
 pub extern "C" fn hazy_prim_integer_cast_to_int(value: Value) -> Value {
-    match integer(value).to_i64().filter(|number| (INT_MIN..=INT_MAX).contains(number)) {
+    match small(value).or_else(|| integer(value).to_i64()).filter(|number| (INT_MIN..=INT_MAX).contains(number)) {
         Some(number) => from_int(number),
         None => fail("Enum Integer Overflow"),
     }
@@ -393,6 +425,9 @@ pub extern "C" fn hazy_prim_integer_cast_to_int(value: Value) -> Value {
 /// The low 32 bits of an `Integer`, as two's complement.
 #[no_mangle]
 pub extern "C" fn hazy_prim_integer_truncate_to_int(value: Value) -> Value {
+    if let Some(number) = small(value) {
+        return from_int(number);
+    }
     let number = integer(value);
     let low = number.iter_u64_digits().next().unwrap_or(0);
     let low = if number.is_negative() { low.wrapping_neg() } else { low };
@@ -401,42 +436,66 @@ pub extern "C" fn hazy_prim_integer_truncate_to_int(value: Value) -> Value {
 
 #[no_mangle]
 pub extern "C" fn hazy_prim_integer_equal(left: Value, right: Value) -> Value {
-    boolean(integer(left) == integer(right))
+    match smalls(left, right) {
+        Some((left, right)) => boolean(left == right),
+        None => boolean(integer(left) == integer(right)),
+    }
 }
 
 #[no_mangle]
 pub extern "C" fn hazy_prim_integer_less_then_equal(left: Value, right: Value) -> Value {
-    boolean(integer(left) <= integer(right))
+    match smalls(left, right) {
+        Some((left, right)) => boolean(left <= right),
+        None => boolean(integer(left) <= integer(right)),
+    }
 }
 
 #[no_mangle]
 pub extern "C" fn hazy_prim_integer_add(left: Value, right: Value) -> Value {
-    from_integer(integer(left) + integer(right))
+    match smalls(left, right).and_then(|(left, right)| left.checked_add(right)) {
+        Some(number) => from_small(number),
+        None => from_integer(&*integer(left) + &*integer(right)),
+    }
 }
 
 #[no_mangle]
 pub extern "C" fn hazy_prim_integer_minus(left: Value, right: Value) -> Value {
-    from_integer(integer(left) - integer(right))
+    match smalls(left, right).and_then(|(left, right)| left.checked_sub(right)) {
+        Some(number) => from_small(number),
+        None => from_integer(&*integer(left) - &*integer(right)),
+    }
 }
 
 #[no_mangle]
 pub extern "C" fn hazy_prim_integer_multiply(left: Value, right: Value) -> Value {
-    from_integer(integer(left) * integer(right))
+    match smalls(left, right).and_then(|(left, right)| left.checked_mul(right)) {
+        Some(number) => from_small(number),
+        None => from_integer(&*integer(left) * &*integer(right)),
+    }
 }
 
 #[no_mangle]
 pub extern "C" fn hazy_prim_integer_negate(value: Value) -> Value {
-    from_integer(-integer(value))
+    match small(value).and_then(i64::checked_neg) {
+        Some(number) => from_small(number),
+        None => from_integer(-&*integer(value)),
+    }
 }
 
 #[no_mangle]
 pub extern "C" fn hazy_prim_integer_abs(value: Value) -> Value {
-    from_integer(integer(value).abs())
+    match small(value).and_then(i64::checked_abs) {
+        Some(number) => from_small(number),
+        None => from_integer(integer(value).abs()),
+    }
 }
 
 #[no_mangle]
 pub extern "C" fn hazy_prim_integer_signum(value: Value) -> Value {
-    from_integer(integer(value).signum())
+    match small(value) {
+        Some(number) => from_small(number.signum()),
+        None => from_integer(integer(value).signum()),
+    }
 }
 
 /// Division that rounds toward zero.
@@ -445,7 +504,10 @@ pub extern "C" fn hazy_prim_integer_quot(left: Value, right: Value) -> Value {
     if integer(right).is_zero() {
         fail("divide by zero")
     }
-    from_integer(integer(left) / integer(right))
+    match smalls(left, right).and_then(|(left, right)| left.checked_div(right)) {
+        Some(number) => from_small(number),
+        None => from_integer(&*integer(left) / &*integer(right)),
+    }
 }
 
 /// The remainder of division that rounds toward zero.
@@ -454,7 +516,10 @@ pub extern "C" fn hazy_prim_integer_rem(left: Value, right: Value) -> Value {
     if integer(right).is_zero() {
         fail("divide by zero")
     }
-    from_integer(integer(left) % integer(right))
+    match smalls(left, right).and_then(|(left, right)| left.checked_rem(right)) {
+        Some(number) => from_small(number),
+        None => from_integer(&*integer(left) % &*integer(right)),
+    }
 }
 
 /// The bits of two numbers put together: both, either or one, as the
@@ -463,9 +528,9 @@ pub extern "C" fn hazy_prim_integer_rem(left: Value, right: Value) -> Value {
 pub extern "C" fn hazy_prim_integer_bits(operation: Value, left: Value, right: Value) -> Value {
     let (left, right) = (integer(left), integer(right));
     from_integer(match int(operation) {
-        0 => left & right,
-        1 => left | right,
-        _ => left ^ right,
+        0 => &*left & &*right,
+        1 => &*left | &*right,
+        _ => &*left ^ &*right,
     })
 }
 
@@ -476,10 +541,10 @@ pub extern "C" fn hazy_prim_integer_shift(number: Value, places: Value) -> Value
     let places = int(places);
     let number = integer(number);
     from_integer(if places >= 0 {
-        number << places as u32
+        &*number << places as u32
     } else {
         // Toward negative infinity, as an arithmetic shift is.
-        number >> places.unsigned_abs()
+        &*number >> places.unsigned_abs()
     })
 }
 
@@ -641,6 +706,9 @@ pub extern "C" fn hazy_ffi_from_bool(truth: i32) -> Value {
 /// width: what it is modulo 2^64.
 #[no_mangle]
 pub extern "C" fn hazy_ffi_integer(value: Value) -> i64 {
+    if let Some(number) = small(value) {
+        return number;
+    }
     let number = integer(value);
     let low = number.iter_u64_digits().next().unwrap_or(0) as i64;
     if number.sign() == Sign::Minus {

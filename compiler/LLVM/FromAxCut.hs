@@ -357,11 +357,17 @@ generate' shape target defined shared start = do
 
 -- Block layouts -------------------------------------------------------------
 
-dataKind, closureKind, thunkKind, huskKind :: Integer
+dataKind, closureKind, thunkKind, integerKind, huskKind :: Integer
 dataKind = 0
 closureKind = 1
 thunkKind = 2
+integerKind = 5
 huskKind = 7
+
+-- |
+-- The tag of an @Integer@ that is kept in its block, as the runtime has it.
+smallIntegerTag :: Int
+smallIntegerTag = 1
 
 kindOf :: Kind -> Integer
 kindOf = \case
@@ -1575,8 +1581,8 @@ wanted state token environment = \case
       Literal.Int int -> pure (mempty, number (immediate (toInteger int)))
       Literal.Integer integer
         | integer >= -(2 ^ (63 :: Int)) && integer < 2 ^ (63 :: Int) -> do
-            value <- local state
-            pure (line [value, fromString " = call i64 @hazy_integer(i64 ", number integer, fromString ")"], value)
+            value <- smallInteger state integer
+            pure (mempty, value)
         | otherwise -> do
             (constant, size) <- bytes state (show integer)
             value <- local state
@@ -1673,6 +1679,28 @@ wanted state token environment = \case
   Abort -> pure $ line [fromString "call void @hazy_abort()"] <> line [fromString "unreachable"]
   -- The program is over: whatever is still held is given up.
   Halt -> pure $ foldMap (erase . snd) environment <> line [fromString "ret void"]
+
+-- |
+-- An @Integer@ written in the program that fits in 64 bits, as a constant
+-- of the program: a block that is never counted, which holds the number, as
+-- the runtime keeps a small one.
+smallInteger :: State s -> Integer -> ST s Builder
+smallInteger State {extra, unique} integer = do
+  next <- readSTRef unique
+  writeSTRef unique $! next + 1
+  let name = fromString "@integer." <> fromString (show next)
+      head = header integerKind smallIntegerTag 0 + immortal
+  modifySTRef' extra $ \known ->
+    mconcat
+      [ known,
+        name,
+        fromString " = private unnamed_addr constant [2 x i64] [i64 ",
+        number head,
+        fromString ", i64 ",
+        number integer,
+        fromString "], align 8\n"
+      ]
+  pure $ fromString "ptrtoint (ptr " <> name <> fromString " to i64)"
 
 -- |
 -- Some text as a constant of the program, and how many bytes it is.

@@ -111,7 +111,10 @@ pub const fn header(kind: u64, tag: u64, count: u64) -> u64 {
     kind | tag << 6 | count << 19
 }
 
-fn tag(header: u64) -> u64 {
+/// The tag of an `Integer` that is kept in its block.
+pub const SMALL_INTEGER: u64 = 1;
+
+pub fn tag(header: u64) -> u64 {
     (header >> 6) & (LIMIT as u64 - 1)
 }
 
@@ -300,7 +303,7 @@ impl Heap {
     /// Give a block's words back. What it refers to is not looked at.
     unsafe fn give(&mut self, block: *mut u64) {
         let size = words(block);
-        if (*block & KIND) == INTEGER {
+        if (*block & KIND) == INTEGER && tag(*block) != SMALL_INTEGER {
             drop(Box::from_raw(*block.add(1) as *mut num_bigint::BigInt));
         }
         self.live -= size * 8;

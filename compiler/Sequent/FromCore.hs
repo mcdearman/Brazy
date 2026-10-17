@@ -74,7 +74,7 @@ import qualified Semantic.Scope as Scope
 import Sequent.Primitive (Primitive (Export, Field))
 import Sequent.Borrow (Lending, lending)
 import Sequent.Hoist (Unshared (..), hoist)
-import Sequent.Inline (inline)
+import Sequent.Inline (inline, specialize)
 import qualified Sequent.Uncurry as Uncurry (rewrite, shape, split, whole)
 import qualified Sequent.Runtime as Runtime
 import Sequent.Simplify (simplify)
@@ -231,8 +231,14 @@ tables modules = Tables {members = family, borrowed = lends, lost = unshared, ta
     memberIn table global = familyIn table (top global) >>= Map.lookup global
     -- With the small functions each calls put where they are called, which
     -- is done a few times over: each time reaches one call further.
+    -- The fields of the instances that are known are read as what they
+    -- are, before and after, and the calls that then give every argument
+    -- to a definition that is known are sent to the entry for them.
     improve before time =
-      let improved global found = simplify (inline time (memberIn before) global found)
+      let look = memberIn before
+          improved global found =
+            simplify . Uncurry.rewrite known . specialize look . simplify $
+              inline time look global (specialize look found)
        in Map.map (Map.map (Map.mapWithKey improved)) before
     inlined = foldl improve finished [1 .. 3]
     -- Whether calling a definition with every argument runs an action,
