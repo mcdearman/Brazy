@@ -1211,9 +1211,41 @@ pub extern "C" fn hazy_prim_file_state(descriptor: Value) -> Value {
 
 #[no_mangle]
 pub extern "C" fn hazy_prim_write(descriptor: Value, value: Value) -> Value {
+    write_bytes(int(descriptor), text(value).as_bytes());
+    unit()
+}
+
+/// Bytes from memory written to a file, as the library's hPutBuf has it.
+#[no_mangle]
+pub unsafe extern "C" fn hazy_put_buf(descriptor: i64, bytes: *const u8, count: i64) {
+    write_bytes(descriptor, std::slice::from_raw_parts(bytes, count.max(0) as usize));
+}
+
+/// Bytes read from a file into memory: as many as are asked for, or fewer
+/// at its end; or, if the last is not 0, as many as can be had at once.
+/// How many were read.
+#[no_mangle]
+pub unsafe extern "C" fn hazy_get_buf(descriptor: i64, bytes: *mut u8, count: i64, some: i64) -> i64 {
+    let buffer = std::slice::from_raw_parts_mut(bytes, count.max(0) as usize);
+    reading(descriptor, |reader| {
+        let mut filled = 0;
+        while filled < buffer.len() {
+            let read = reader.read(&mut buffer[filled..])?;
+            if read == 0 {
+                break;
+            }
+            filled += read;
+            if some != 0 {
+                break;
+            }
+        }
+        Ok(filled as i64)
+    })
+}
+
+fn write_bytes(descriptor: i64, bytes: &[u8]) {
     use std::io::Seek;
-    let bytes = text(value).as_bytes();
-    let result = match int(descriptor) {
+    let result = match descriptor {
         1 => std::io::stdout().lock().write_all(bytes),
         2 => {
             // What was written before a complaint is seen before it.
@@ -1235,7 +1267,6 @@ pub extern "C" fn hazy_prim_write(descriptor: Value, value: Value) -> Value {
     if let Err(error) = result {
         fail(&format!("could not write: {error}"));
     }
-    unit()
 }
 
 #[no_mangle]

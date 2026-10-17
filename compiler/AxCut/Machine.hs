@@ -25,6 +25,9 @@ import qualified Core.Foreign as Foreign
 import Data.Char (chr, generalCategory, isAlpha, isDigit, isSpace, ord, toLower, toUpper)
 import Data.IORef (IORef, modifyIORef, newIORef, readIORef, writeIORef)
 import Data.Foldable (for_)
+import Foreign.Marshal.Alloc (allocaBytes)
+import Foreign.Marshal.Array (peekArray, pokeArray)
+import Foreign.Ptr (Ptr)
 import qualified System.Directory as Directory
 import Data.Word (Word8)
 import GHC.Float (castDoubleToWord64, castFloatToWord32, castWord32ToFloat, castWord64ToDouble)
@@ -54,24 +57,27 @@ import System.IO
     hClose,
     hFileSize,
     hFlush,
+    hGetBuf,
+    hGetBufSome,
     hGetChar,
     hIsEOF,
     hIsReadable,
     hIsTerminalDevice,
     hIsWritable,
     hLookAhead,
+    hPutBuf,
     hPutStrLn,
     hSeek,
     hSetEncoding,
-    hSetNewlineMode,
     hSetFileSize,
+    hSetNewlineMode,
     hTell,
     noNewlineTranslation,
     openFile,
     stderr,
     stdin,
     stdout,
-    utf8,
+    utf8
   )
 import System.IO.Error (alreadyExistsErrorType, ioeSetErrorString, isAlreadyExistsError, isDoesNotExistError, isPermissionError, mkIOError, tryIOError)
 import System.Info (os)
@@ -435,7 +441,7 @@ callC world@World {symbols} call@Foreign.Call {target = Foreign.Dynamic} (Int ad
     [] -> do
       hPutStrLn stderr "the machine cannot call a function of C at an address it did not give out"
       exitFailure
-callC World {memory, blocks, errno} Foreign.Call {symbol, result} given = case (unpack symbol, given) of
+callC World {memory, blocks, errno, files} Foreign.Call {symbol, result} given = case (unpack symbol, given) of
   -- Memory, as C's library gives it out. A block is put after the last,
   -- on a boundary of 16 bytes, and none is used again.
   ("malloc", [Int size]) -> Int <$> allocate size
@@ -453,6 +459,22 @@ callC World {memory, blocks, errno} Foreign.Call {symbol, result} given = case (
   ("hazy_cast_u64_f64", [Integer bits]) -> pure $ Floating $ castWord64ToDouble (fromInteger bits)
   ("hazy_cast_f64_u64", [Floating x]) -> pure $ Integer $ toInteger $ castDoubleToWord64 x
   ("strlen", [Int address]) -> Integer . toInteger . length <$> string address
+  -- Bytes written from memory to a file, and read from one into memory,
+  -- through the handles the machine has.
+  ("hazy_put_buf", [Int descriptor, Int address, Int count]) -> do
+    handle <- handleOf descriptor
+    bytes <- for [0 .. count - 1] (\offset -> readBytes (address + offset) 1)
+    allocaBytes (fromIntegral count) $ \buffer -> do
+      pokeArray buffer (map fromInteger bytes :: [Word8])
+      hPutBuf handle buffer (fromIntegral count)
+    pure unit
+  ("hazy_get_buf", [Int descriptor, Int address, Int count, Int some]) -> do
+    handle <- handleOf descriptor
+    bytes <- allocaBytes (fromIntegral count) $ \buffer -> do
+      read' <- (if some /= 0 then hGetBufSome else hGetBuf) handle buffer (fromIntegral count)
+      peekArray read' (buffer :: Ptr Word8)
+    for_ (zip [0 ..] bytes) (\(offset, byte) -> write (address + offset) 1 (toInteger byte))
+    pure (Int (fromIntegral (length bytes)))
   -- C's words for a number are not known.
   ("hazy_errno", []) -> Int . fromIntegral <$> readIORef errno
   ("hazy_set_errno", [Int number]) -> unit <$ writeIORef errno (fromIntegral number)
@@ -596,6 +618,16 @@ callC World {memory, blocks, errno} Foreign.Call {symbol, result} given = case (
         Left problem -> Int 0 <$ failed problem
     -- A path given as a string of C in UTF-8.
     pathOf address = decodeUtf8' . map fromInteger <$> string address
+    -- The handle of a file the program has open.
+    handleOf descriptor = case descriptor of
+      0 -> pure stdin
+      1 -> pure stdout
+      2 -> pure stderr
+      _ -> do
+        open <- readIORef files
+        case Map.lookup (fromIntegral descriptor) open of
+          Just (_, handle) -> pure handle
+          Nothing -> bug "a file that is not open"
     -- The bytes from an address up to the first 0.
     string address = do
       byte <- readBytes address 1

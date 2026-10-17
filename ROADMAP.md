@@ -1409,7 +1409,11 @@ Found while comparing the two backends:
     the names that end in a prime, `foldl'` and the rest, but each of them
     twice without it (tests `vector-rest` and `vector-strict-rest`, which
     agree with GHC given vector)
-  - Left: what reads and writes through a `Ptr`
+  - `System.IO`'s `hPutBuf`, `hGetBuf`, `hGetBufSome` and their kin write
+    and read bytes as they are, between memory and a file the runtime has
+    open (`hazy_put_buf`, `hazy_get_buf`; test `buffers`, which agrees with
+    GHC)
+  - Left: only `Viewer`, which is a placeholder (see below)
   - The report's modules that were not there at all are: `Data.Ix`, with
     instances for the numbers, characters, `Bool`, `Ordering`, `()` and
     tuples to five; `Data.Array`, kept as one of the runtime's arrays;
