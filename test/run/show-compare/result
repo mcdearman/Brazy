@@ -1,0 +1,9 @@
+[0,7,-7,10,-10,123456789,-987654321,4611686018427387903,-4611686018427387903]
+(Just (-5),[Left (-1),Right 2],(-3,4))
+(-12) -12 42
+["99","100","101","999999","1000000"]
+(["","Banana","app","apple","apples","b","banana"],"banana","")
+[(True,True,False,False,LT,False,True),(False,False,True,True,GT,False,True),(False,True,False,True,EQ,True,False),(False,True,False,True,EQ,True,False)]
+(False,True,GT)
+[('a',True,True,LT),('M',False,True,LT),('z',False,False,GT),(' ',False,True,LT),('\n',False,True,LT)]
+[(2,'a'),(1,'h'),(4,'y'),(3,'z')]
