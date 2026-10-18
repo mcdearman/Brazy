@@ -513,12 +513,43 @@ objectOf = \case
 -- one function of all of their parameters: the parameters, the consumer of
 -- the last result, and the last body. The function that is given back is
 -- made where it is given back, under a name of its own, once focused.
+--
+-- The last body is written twice, once for each way in. So a function whose
+-- last body has such a function inside it, anywhere, is not given the
+-- entry: each would be written twice inside the other's two, and so on
+-- down, which made one derived instance of 'Read' a million functions.
 flatten :: Producer -> Maybe ([Text], Text, Statement)
-flatten = \case
-  Function [Binder {name}] result (Cut inner@(Function [Binder {name = next}] innerResult innerBody) (MuTilde Binder {name = made} (Cut (Variable given) (Covariable back))))
-    | made == given,
-      back == result ->
-        Just $ case flatten inner of
-          Just (names, final, innermost) -> (name : names, final, innermost)
-          Nothing -> ([name, next], innerResult, innerBody)
+flatten producer = case chain producer of
+  Just found@(_, _, innermost) | not (nested innermost) -> Just found
   _ -> Nothing
+  where
+    chain = \case
+      Function [Binder {name}] result (Cut inner@(Function [Binder {name = next}] innerResult innerBody) (MuTilde Binder {name = made} (Cut (Variable given) (Covariable back))))
+        | made == given,
+          back == result ->
+            Just $ case chain inner of
+              Just (names, final, innermost) -> (name : names, final, innermost)
+              Nothing -> ([name, next], innerResult, innerBody)
+      _ -> Nothing
+    -- Whether a function inside a statement is one that would be given the
+    -- entry.
+    nested = statement
+      where
+        statement = \case
+          Cut left right -> producer' left || consumer right
+          Primitive _ arguments result -> any producer' arguments || consumer result
+          LetRec bindings body -> any (producer' . snd) bindings || statement body
+          Abort -> False
+          Halt -> False
+        producer' = \case
+          made@(Function _ _ body) -> maybe False (const True) (chain made) || statement body
+          Thunk _ body -> statement body
+          Mu _ body -> statement body
+          Constructor _ fields -> any producer' fields
+          _ -> False
+        consumer = \case
+          MuTilde _ body -> statement body
+          Case alternatives otherwise -> or [statement body | Alternative _ _ body <- alternatives] || any statement otherwise
+          Apply arguments result -> any producer' arguments || consumer result
+          Force result -> consumer result
+          Covariable _ -> False
