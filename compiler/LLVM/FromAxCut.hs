@@ -991,7 +991,9 @@ function outer@State {target = Target {registers}, extra} name comment husk lent
   captures <- for (zip [capturesAt ..] captured) $ \(index, _) -> load state pointer index
   let taken = case kind of
         Closure -> open self
-        Thunk -> mempty
+        -- A thunk that is forced and kept is given back by what keeps its
+        -- value; one that nothing else refers to is given back here.
+        Thunk -> line [fromString "call void @hazy_thunk_taken(i64 ", self, fromString ")"]
         Join -> mempty
   (carrying, carried, token) <- case husk of
     Nothing -> pure (mempty, [], Nothing)
@@ -2847,6 +2849,22 @@ runtime =
     ret ptr %made
   }
 
+  ; A thunk's body has taken what the thunk captured. If the thunk is still
+  ; one that has not been forced, nothing else refers to it, and it was
+  ; forced without anything to keep its value: it is given back.
+  define linkonce_odr void @hazy_thunk_taken(i64 %value) alwaysinline {
+    %pointer = inttoptr i64 %value to ptr
+    %header = load i64, ptr %pointer
+    %kind = and i64 %header, 15
+    %alone = icmp eq i64 %kind, 2
+    br i1 %alone, label %give, label %out
+  give:
+    call void @hazy_give(i64 %value)
+    br label %out
+  out:
+    ret void
+  }
+
   ; There is one more reference to a value. A number is not counted, and
   ; neither is a block whose header is negative.
   define linkonce_odr void @hazy_share(i64 %value) alwaysinline {
@@ -3021,6 +3039,18 @@ forcing linkage =
          musttail call tailcc void @hazy_return(i64 %consumer, i64 %value)
          ret void
        delayed:
+         ; A thunk that nothing else refers to will not be asked for its
+         ; value again: its body is given the consumer that asked, and gives
+         ; the thunk back once it has taken what the thunk captured.
+         %held = lshr i64 %header, 32
+         %only = icmp eq i64 %held, 1
+         br i1 %only, label %alone, label %shared
+       alone:
+         %place.alone = getelementptr i64, ptr %pointer, i64 1
+         %code.alone = load ptr, ptr %place.alone
+         musttail call tailcc void %code.alone(i64 %value, i64 %consumer)
+         ret void
+       shared:
          ; The thunk is being forced. Its body takes what it captured, and is
          ; given a consumer that holds the thunk and the consumer that asked.
          %cleared = and i64 %header, -16
