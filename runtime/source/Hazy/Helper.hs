@@ -160,10 +160,10 @@ instance Monad (HelperArrow a) where
 newtype HelperBool = Bool Bool
 
 instance Eq HelperBool where
-  (==) = enumEqual
+  x == y = enumEqual x y
 
 instance Ord HelperBool where
-  compare = enumCompare
+  compare x y = enumCompare x y
 
 instance Enum HelperBool where
   toEnum = \case
@@ -195,10 +195,10 @@ instance Read HelperBool where
 newtype HelperChar = Char Char
 
 instance Eq HelperChar where
-  (==) = enumEqual
+  x == y = enumEqual x y
 
 instance Ord HelperChar where
-  compare = enumCompare
+  compare x y = enumCompare x y
 
 instance Enum HelperChar where
   toEnum x = Char (primIntToChar x)
@@ -332,8 +332,28 @@ instance Integral HelperInt where
   divMod x y = (x `div` y, x `mod` y)
   toInteger (Int x) = primIntToInteger x
 
+-- An Int is shown with Ints: going by way of an Integer, each digit was a
+-- division of Integers and a comparison through the class. Only the most
+-- negative, whose negative is no Int, goes that way still.
 instance Show HelperInt where
-  showsPrec n (Int int) = showsPrec n (toInteger int)
+  showsPrec n (Int int)
+    | primLessThenEqualInt 0 int = intDigits int
+    | primLessThenEqualInt (primIntNegate maxIntDigits) int =
+        showParen (n > 6) (\rest -> '-' : intDigits (primIntNegate int) rest)
+    | otherwise = showsPrec n (toInteger int)
+
+-- The largest Int that is certainly not the most negative's negative.
+maxIntDigits :: Int
+maxIntDigits = 999999999999999999
+
+-- The digits of an Int that is not negative, before what follows them.
+intDigits :: Int -> String -> String
+intDigits = go
+  where
+    go x rest =
+      let digit = primIntToChar (primIntAdd 48 (primIntRem x 10))
+          next = primIntQuot x 10
+       in if primEqualInt next 0 then digit : rest else go next (digit : rest)
 
 instance Read HelperInt where
   readsPrec p r = [(Int (fromInteger i), t) | (i, t) <- readsPrec p r]
@@ -403,10 +423,10 @@ instance Read HelperInteger where
 newtype HelperOrdering = Ordering Ordering
 
 instance Eq HelperOrdering where
-  (==) = enumEqual
+  x == y = enumEqual x y
 
 instance Ord HelperOrdering where
-  compare = enumCompare
+  compare x y = enumCompare x y
 
 instance Enum HelperOrdering where
   toEnum = \case
@@ -448,16 +468,39 @@ instance Read HelperOrdering where
 
 newtype HelperList a = List {list :: [a]}
 
+-- Lists are compared by functions of their own, which go on down the lists
+-- with the instance for what is in them. Comparing the rest of two lists
+-- through the instance for lists made that instance again at each element.
 instance (Eq a) => Eq (HelperList a) where
-  List [] == List [] = True
-  List (x : xs) == List (x' : xs') = x == x' && xs == xs'
-  _ == _ = False
+  List xs == List ys = listEqual xs ys
+
+listEqual :: (Eq a) => [a] -> [a] -> Bool
+listEqual (x : xs) (y : ys) = if x == y then listEqual xs ys else False
+listEqual [] [] = True
+listEqual _ _ = False
 
 instance (Ord a) => Ord (HelperList a) where
-  List [] `compare` List [] = EQ
-  List [] `compare` List (_ : _) = LT
-  List (_ : _) `compare` List [] = GT
-  List (x : xs) `compare` List (x' : xs') = compare x x' <> compare xs xs'
+  List xs `compare` List ys = listCompare xs ys
+  List xs < List ys = case listCompare xs ys of
+    LT -> True
+    _ -> False
+  List xs <= List ys = case listCompare xs ys of
+    GT -> False
+    _ -> True
+  List xs > List ys = case listCompare xs ys of
+    GT -> True
+    _ -> False
+  List xs >= List ys = case listCompare xs ys of
+    LT -> False
+    _ -> True
+
+listCompare :: (Ord a) => [a] -> [a] -> Ordering
+listCompare (x : xs) (y : ys) = case compare x y of
+  EQ -> listCompare xs ys
+  other -> other
+listCompare [] [] = EQ
+listCompare [] _ = LT
+listCompare _ [] = GT
 
 instance (Show a) => Show (HelperList a) where
   showsPrec p (List xs) = showList xs
