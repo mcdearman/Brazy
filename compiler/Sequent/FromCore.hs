@@ -36,6 +36,7 @@ import qualified Core.Tree.Statements as Statements (Statements (..))
 import Core.Tree.TypeLambda (TypeLambda, TypeLambdaOver (..))
 import Data.Char (ord)
 import Data.Foldable (toList)
+import Data.Ratio ((%))
 import Data.List (nub)
 import Data.Map (Map)
 import qualified Data.Map as Map
@@ -537,10 +538,28 @@ number = \case
           -- As the instance has it, an Int keeps the low 63 bits.
           Type2.Int -> Just (Int (int63 integer))
           Type2.Integer -> Just (Integer integer)
+          Type2.Double -> Just (Double (fromInteger integer))
+          Type2.Float -> Just (Double (realToFrac (fromInteger integer :: Float)))
+          _ -> Nothing
+  -- A number written with a point, at Double or Float, is the number.
+  Core.Call
+    { function =
+        Core.Method
+          { method = Method.Index {typeIndex = Type2.Fractional, methodIndex},
+            evidence = Evidence.Variable {variable = Direct Type2.Fractional target, instanciation = Instanciation.Mono}
+          },
+      argument = Core.Constructor {arguments}
+    }
+      | methodIndex == fromRational',
+        [Core.Integer {integer = top}, Core.Integer {integer = bottom}] <- toList arguments,
+        bottom /= 0 -> case target of
+          Type2.Double -> Just (Double (fromRational (top % bottom)))
+          Type2.Float -> Just (Double (realToFrac (fromRational (top % bottom) :: Float)))
           _ -> Nothing
   _ -> Nothing
   where
     Method.Index {methodIndex = fromInteger'} = Method.fromInteger
+    Method.Index {methodIndex = fromRational'} = Method.fromRational
 
 -- |
 -- Evaluate evidence. What the continuation is given is a value.

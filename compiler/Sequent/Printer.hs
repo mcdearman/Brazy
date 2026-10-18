@@ -63,6 +63,7 @@ literal = \case
   Int int -> fromString (show int)
   Integer integer -> fromString (show integer) <> fromString "n"
   Text text -> fromString (show text)
+  Double double -> fromString (show double) <> fromString "d"
 
 commas :: [Builder] -> Builder
 commas = mconcat . intersperse (fromText $ pack ", ")

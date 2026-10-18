@@ -1222,10 +1222,10 @@ instance Num HelperFloat where
   x + y = primFloatBinary 32 0 x y
   x - y = primFloatBinary 32 1 x y
   x * y = primFloatBinary 32 2 x y
-  negate = primFloatUnary 32 0
-  abs = primFloatUnary 32 1
-  signum = primFloatUnary 32 2
-  fromInteger = primFloatFromInteger 32
+  negate x = primFloatUnary 32 0 x
+  abs x = primFloatUnary 32 1 x
+  signum x = primFloatUnary 32 2 x
+  fromInteger x = primFloatFromInteger 32 x
 
 instance Real HelperFloat where
   toRational x = (m % 1) * (2 % 1) ^^ e
@@ -1238,21 +1238,21 @@ instance Fractional HelperFloat where
 
 instance Floating HelperFloat where
   pi = 3.141592653589793238
-  exp = primFloatUnary 32 3
-  log = primFloatUnary 32 4
-  sqrt = primFloatUnary 32 5
-  sin = primFloatUnary 32 6
-  cos = primFloatUnary 32 7
-  tan = primFloatUnary 32 8
-  asin = primFloatUnary 32 9
-  acos = primFloatUnary 32 10
-  atan = primFloatUnary 32 11
-  sinh = primFloatUnary 32 12
-  cosh = primFloatUnary 32 13
-  tanh = primFloatUnary 32 14
-  asinh = primFloatUnary 32 15
-  acosh = primFloatUnary 32 16
-  atanh = primFloatUnary 32 17
+  exp x = primFloatUnary 32 3 x
+  log x = primFloatUnary 32 4 x
+  sqrt x = primFloatUnary 32 5 x
+  sin x = primFloatUnary 32 6 x
+  cos x = primFloatUnary 32 7 x
+  tan x = primFloatUnary 32 8 x
+  asin x = primFloatUnary 32 9 x
+  acos x = primFloatUnary 32 10 x
+  atan x = primFloatUnary 32 11 x
+  sinh x = primFloatUnary 32 12 x
+  cosh x = primFloatUnary 32 13 x
+  tanh x = primFloatUnary 32 14 x
+  asinh x = primFloatUnary 32 15 x
+  acosh x = primFloatUnary 32 16 x
+  atanh x = primFloatUnary 32 17 x
   x ** y = primFloatBinary 32 4 x y
 
 instance RealFrac HelperFloat where
@@ -1266,11 +1266,11 @@ instance RealFloat HelperFloat where
   floatDigits _ = 24
   floatRange _ = (-125, 128)
   decodeFloat x = (primFloatMantissa 32 x, primFloatExponent 32 x)
-  encodeFloat = primFloatEncode 32
-  isNaN = primFloatTest 32 0
-  isInfinite = primFloatTest 32 1
-  isDenormalized = primFloatTest 32 2
-  isNegativeZero = primFloatTest 32 3
+  encodeFloat m e = primFloatEncode 32 m e
+  isNaN x = primFloatTest 32 0 x
+  isInfinite x = primFloatTest 32 1 x
+  isDenormalized x = primFloatTest 32 2 x
+  isNegativeZero x = primFloatTest 32 3 x
   isIEEE _ = True
 
 -- A number below nothing is shown with its sign, in brackets if it is
@@ -1307,10 +1307,10 @@ instance Num HelperDouble where
   x + y = primFloatBinary 64 0 x y
   x - y = primFloatBinary 64 1 x y
   x * y = primFloatBinary 64 2 x y
-  negate = primFloatUnary 64 0
-  abs = primFloatUnary 64 1
-  signum = primFloatUnary 64 2
-  fromInteger = primFloatFromInteger 64
+  negate x = primFloatUnary 64 0 x
+  abs x = primFloatUnary 64 1 x
+  signum x = primFloatUnary 64 2 x
+  fromInteger x = primFloatFromInteger 64 x
 
 instance Real HelperDouble where
   toRational x = (m % 1) * (2 % 1) ^^ e
@@ -1323,21 +1323,21 @@ instance Fractional HelperDouble where
 
 instance Floating HelperDouble where
   pi = 3.141592653589793238
-  exp = primFloatUnary 64 3
-  log = primFloatUnary 64 4
-  sqrt = primFloatUnary 64 5
-  sin = primFloatUnary 64 6
-  cos = primFloatUnary 64 7
-  tan = primFloatUnary 64 8
-  asin = primFloatUnary 64 9
-  acos = primFloatUnary 64 10
-  atan = primFloatUnary 64 11
-  sinh = primFloatUnary 64 12
-  cosh = primFloatUnary 64 13
-  tanh = primFloatUnary 64 14
-  asinh = primFloatUnary 64 15
-  acosh = primFloatUnary 64 16
-  atanh = primFloatUnary 64 17
+  exp x = primFloatUnary 64 3 x
+  log x = primFloatUnary 64 4 x
+  sqrt x = primFloatUnary 64 5 x
+  sin x = primFloatUnary 64 6 x
+  cos x = primFloatUnary 64 7 x
+  tan x = primFloatUnary 64 8 x
+  asin x = primFloatUnary 64 9 x
+  acos x = primFloatUnary 64 10 x
+  atan x = primFloatUnary 64 11 x
+  sinh x = primFloatUnary 64 12 x
+  cosh x = primFloatUnary 64 13 x
+  tanh x = primFloatUnary 64 14 x
+  asinh x = primFloatUnary 64 15 x
+  acosh x = primFloatUnary 64 16 x
+  atanh x = primFloatUnary 64 17 x
   x ** y = primFloatBinary 64 4 x y
 
 instance RealFrac HelperDouble where
@@ -1351,11 +1351,11 @@ instance RealFloat HelperDouble where
   floatDigits _ = 53
   floatRange _ = (-1021, 1024)
   decodeFloat x = (primFloatMantissa 64 x, primFloatExponent 64 x)
-  encodeFloat = primFloatEncode 64
-  isNaN = primFloatTest 64 0
-  isInfinite = primFloatTest 64 1
-  isDenormalized = primFloatTest 64 2
-  isNegativeZero = primFloatTest 64 3
+  encodeFloat m e = primFloatEncode 64 m e
+  isNaN x = primFloatTest 64 0 x
+  isInfinite x = primFloatTest 64 1 x
+  isDenormalized x = primFloatTest 64 2 x
+  isNegativeZero x = primFloatTest 64 3 x
   isIEEE _ = True
 
 instance Enum HelperFloat where

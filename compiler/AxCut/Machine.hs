@@ -301,6 +301,7 @@ execute world globals = go
               Literal.Int int -> Int int
               Literal.Integer integer -> Integer integer
               Literal.Text text -> Text text
+              Literal.Double double -> Floating double
          in go rest (environment ++ [(name, value)])
       Global name global _ rest -> case Map.lookup global globals of
         Just cell -> go rest (environment ++ [(name, Reference cell)])
@@ -816,6 +817,7 @@ outside World {catching, files, failure, building, arguments, programName, retur
     unit <$ modifyIORef array (Vector.// [(fromIntegral index, value)])
   ("array_length", [Array array]) -> Int . fromIntegral . Vector.length <$> readIORef array
   ("float_from_integer", [Int precision, Integer number]) -> pure $ precise precision (fromInteger number) (fromInteger number)
+  ("float_from_int", [Int precision, Int number]) -> pure $ precise precision (fromIntegral number) (fromIntegral number)
   ("float_unary", [Int precision, Int operation, Floating x]) -> pure $ case operation of
     0 -> Floating (negate x)
     1 -> Floating (abs x)

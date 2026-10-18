@@ -42,6 +42,8 @@ data Literal
     Int !Int
   | Integer !Integer
   | Text !Text
+  | -- | A @Double@, or a @Float@ as the @Double@ it is exactly.
+    Double !Double
   deriving (Eq, Show)
 
 data Producer

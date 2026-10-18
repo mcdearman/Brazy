@@ -84,6 +84,7 @@ outside =
     ("array_write", 3),
     ("array_length", 1),
     ("float_from_integer", 2),
+    ("float_from_int", 2),
     ("float_unary", 3),
     ("float_binary", 4),
     ("float_compare", 2),

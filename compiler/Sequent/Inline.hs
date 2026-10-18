@@ -31,7 +31,7 @@ import Data.Text (Text)
 import qualified Data.Text as Text
 import Data.Traversable (for)
 import qualified Generate.Global as Global (Global)
-import Sequent.Primitive (Primitive (Field, IntegerCastToInt, IntegerTruncateToInt))
+import Sequent.Primitive (Primitive (Field, Foreign, IntToInteger, IntegerCastToInt, IntegerTruncateToInt))
 import qualified Sequent.Tree as Literal (Literal (..))
 import Sequent.Tree
   ( Alternative (..),
@@ -159,7 +159,7 @@ dictionary find global = case find global of
 -- An @Integer@ written in the program and made an @Int@ is the @Int@, as
 -- a number written for an @Int@ is once the instance of 'Num' is known.
 specialize :: (Global.Global -> Maybe Producer) -> Producer -> Producer
-specialize find = producer Known {instances = Map.empty, integers = Map.empty}
+specialize find = producer Known {instances = Map.empty, integers = Map.empty, widened = Map.empty}
   where
     producer known = \case
       Constructor tag fields -> Constructor tag (map (producer known) fields)
@@ -201,6 +201,17 @@ specialize find = producer Known {instances = Map.empty, integers = Map.empty}
          in if Set.member name (free body')
               then Cut (Literal (Literal.Integer integer)) (MuTilde binder body')
               else body'
+      -- An Int made an Integer and then a floating-point number is made
+      -- one at once. The Integer is not made if nothing else wants it.
+      Primitive IntToInteger [argument@(Variable _)] (MuTilde binder@Binder {name} body) ->
+        let body' = statement known {widened = Map.insert name argument (widened known)} body
+         in if Set.member name (free body')
+              then Primitive IntToInteger [argument] (MuTilde binder body')
+              else body'
+      Primitive (Foreign outside 2) [precision, Variable given] result
+        | outside == Text.pack "float_from_integer",
+          Just int <- Map.lookup given (widened known) ->
+            Primitive (Foreign (Text.pack "float_from_int") 2) [precision, int] (consumer known result)
       Primitive IntegerTruncateToInt [argument] result
         | Just integer <- written argument ->
             Cut (Literal (Literal.Int (int63 integer))) (consumer known result)
@@ -225,7 +236,9 @@ specialize find = producer Known {instances = Map.empty, integers = Map.empty}
 -- are known, and the names that are @Integer@s written in the program.
 data Known = Known
   { instances :: Map Text [Field],
-    integers :: Map Text Integer
+    integers :: Map Text Integer,
+    -- | The names that are Ints made Integers, and the Ints.
+    widened :: Map Text Producer
   }
 
 constant :: Producer -> Bool
