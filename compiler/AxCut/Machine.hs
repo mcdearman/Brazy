@@ -283,6 +283,15 @@ execute world globals = go
                     go body (zip parameters values ++ environment)
                 | otherwise -> bug "a function was given the wrong number of arguments"
               _ -> bug "apply of something that is not a function"
+          -- A function given its arguments in turn: given the first, and
+          -- a consumer that gives the rest to what it gives.
+          (Spread, first : rest@(_ : _), [(_, function)]) -> do
+            let names = [Text.pack ("spread" ++ show index) | index <- [1 .. length rest]]
+                given = Text.pack "given"
+                onward = if length rest == 2 then Apply else Spread
+                body = Substitute [(name, name) | name <- names ++ [given]] (Invoke onward)
+            cell <- newIORef (Closure Return [given] body (zip names rest))
+            go (Invoke Apply) [(Text.pack "first", first), (Text.pack "consumer", Reference cell), (Text.pack "function", function)]
           _ -> bug $ "bad invoke " ++ show method
       Force -> case environment of
         [(_, consumer), (_, value)] -> force value consumer

@@ -39,6 +39,7 @@ import AxCut.Tree
     Program (..),
     Recursive (..),
     Statement (..),
+    Wholly (..),
   )
 import Control.Monad.ST (ST, runST)
 import Data.Char (isAlphaNum, isAscii, ord)
@@ -240,7 +241,13 @@ generate' shape target defined shared start = do
   mentioned <- newSTRef Set.empty
   -- A definition's own name is not free for the code of an object inside
   -- another, which is called by the path to it and may come to the same.
-  taken <- newSTRef $ Set.fromList [toLazyText (symbol name) | name <- Map.keys defined ++ Map.keys shared]
+  taken <-
+    newSTRef $
+      Set.fromList $
+        [toLazyText (symbol name) | name <- Map.keys defined ++ Map.keys shared]
+          ++ [ toLazyText (symbol name <> fromString ".whole")
+               | (name, Object {whole = Just _}) <- Map.toList defined ++ Map.toList shared
+             ]
   holders <- newSTRef Set.empty
   captures <- newSTRef Map.empty
   standing <- newSTRef Map.empty
@@ -278,17 +285,45 @@ generate' shape target defined shared start = do
           object
         -- A package cannot tell who calls the second entry.
         if shape == Package then entry linkage (name, object) else pure ()
-        pure $
-          mconcat
-            [ quoted (symbol name),
-              fromString " = ",
-              fromString linkage,
-              fromString "global { i64, ptr } { i64 ",
-              number (kindOf kind + immortal),
-              fromString ", ptr ",
-              quoted (symbol name <> fromString ".code"),
-              fromString " }, align 8\n"
-            ]
+        -- A function that gives back a function, and so on, has an entry
+        -- that takes all of their arguments at once, for a call of it
+        -- where it is not known. It is the word after the code, odd, and
+        -- the header says how many arguments it takes.
+        case object of
+          Object {whole = Just Wholly {wholeParameters, wholeBody}} -> do
+            function
+              state {scope = scopeOf name}
+              (symbol name <> fromString ".whole")
+              (comment name)
+              Nothing
+              []
+              "internal "
+              object {parameters = wholeParameters, body = wholeBody, method = Apply, whole = Nothing}
+            pure $
+              mconcat
+                [ quoted (symbol name),
+                  fromString " = ",
+                  fromString linkage,
+                  fromString "global { i64, ptr, i64 } { i64 ",
+                  number (header (kindOf kind) (length wholeParameters - 1) 1 + immortal),
+                  fromString ", ptr ",
+                  quoted (symbol name <> fromString ".code"),
+                  fromString ", i64 ptrtoint (ptr getelementptr (i8, ptr ",
+                  quoted (symbol name <> fromString ".whole"),
+                  fromString ", i64 1) to i64) }, align 8\n"
+                ]
+          _ ->
+            pure $
+              mconcat
+                [ quoted (symbol name),
+                  fromString " = ",
+                  fromString linkage,
+                  fromString "global { i64, ptr } { i64 ",
+                  number (kindOf kind + immortal),
+                  fromString ", ptr ",
+                  quoted (symbol name <> fromString ".code"),
+                  fromString " }, align 8\n"
+                ]
       -- The entry that takes lent what the function only reads. It is
       -- seen from wherever the definition is.
       entry linkage (name, object@Object {parameters}) = case lends target name of
@@ -365,9 +400,116 @@ generate' shape target defined shared start = do
                   fromString ")\n"
                 ]
             ]
-  pure $ mconcat [mconcat elsewhere, mconcat entries, mconcat codes, mconcat (Map.elems cFunctions), mconcat globals, mconcat common, body, extra]
+  pure $ mconcat [mconcat elsewhere, mconcat entries, mconcat codes, mconcat (Map.elems cFunctions), mconcat globals, mconcat common, body, extra, spreading target]
   where
     comment global = fromString "; " <> Sequent.global global <> fromString "\n"
+
+-- Functions that are not known ---------------------------------------------
+
+-- |
+-- The most arguments a function that is not known is given together. The
+-- lowering to AxCut has the same.
+spreadMost :: Int
+spreadMost = 6
+
+-- |
+-- What a function that is not known is given its arguments in turn
+-- through. There is a function for each number of them. If the function
+-- takes that many at once, which its header says, it is gone to by the
+-- entry that takes them all. Otherwise it is given the first, with a
+-- consumer that gives the rest to what it gives; that consumer's code is a
+-- function for each number of them left. Each unit has these.
+spreading :: Target -> Builder
+spreading Target {registers, common} =
+  foldMap apply [2 .. spreadMost] <> foldMap rest [1 .. spreadMost - 1]
+  where
+    define name parameters body =
+      let (passed, spilled) = splitAt registers parameters
+       in mconcat
+            [ fromString ("\ndefine " ++ common ++ "tailcc void "),
+              name,
+              fromString "(",
+              commas [fromString "i64 " <> parameter | parameter <- passed],
+              fromString ") {\n",
+              mconcat [line [parameter, fromString " = load i64, ptr ", spill index] | (index, parameter) <- zip [0 ..] spilled],
+              body,
+              fromString "}\n"
+            ]
+    go code arguments =
+      let (passed, spilled) = splitAt registers arguments
+       in mconcat
+            [ mconcat [line [fromString "store i64 ", argument, fromString ", ptr ", spill index] | (index, argument) <- zip [0 ..] spilled],
+              line [fromString "musttail call tailcc void ", code, fromString "(", commas [fromString "i64 " <> argument | argument <- passed], fromString ")"],
+              line [fromString "ret void"]
+            ]
+    named prefix count = [fromString ("%" ++ prefix ++ show index) | index <- [1 .. count]]
+    applyName count = fromString ("@hazy_apply_" ++ show count)
+    restName count = fromString ("@hazy_apply_rest_" ++ show count)
+    apply count =
+      let arguments = named "a" count
+          function = fromString "%f"
+          consumer = fromString "%k"
+       in define (applyName count) (function : arguments ++ [consumer]) $
+            mconcat
+              [ line [fromString "%pointer = inttoptr i64 %f to ptr"],
+                line [fromString "%header = load i64, ptr %pointer"],
+                line [fromString "%kind = and i64 %header, 15"],
+                line [fromString "%shifted = lshr i64 %header, 6"],
+                line [fromString "%tag = and i64 %shifted, 8191"],
+                line [fromString "%closure = icmp eq i64 %kind, ", number closureKind],
+                line [fromString "%fits = icmp eq i64 %tag, ", fromString (show count)],
+                line [fromString "%whole = and i1 %closure, %fits"],
+                line [fromString "br i1 %whole, label %all, label %one"],
+                fromString "all:\n",
+                line [fromString "%fields = lshr i64 %header, 19"],
+                line [fromString "%count = and i64 %fields, 8191"],
+                line [fromString "%index = add i64 %count, ", fromString (show (capturesAt - 1))],
+                line [fromString "%place = getelementptr i64, ptr %pointer, i64 %index"],
+                line [fromString "%marked = load i64, ptr %place"],
+                line [fromString "%address = and i64 %marked, -2"],
+                line [fromString "%entry = inttoptr i64 %address to ptr"],
+                go (fromString "%entry") (function : arguments ++ [consumer]),
+                fromString "one:\n",
+                line
+                  [ fromString "%block = call ptr @hazy_take(i64 ",
+                    fromString (show (capturesAt + count)),
+                    fromString ", i64 ",
+                    number (header closureKind 0 count),
+                    fromString ")"
+                  ],
+                line [fromString "%codeplace = getelementptr i64, ptr %block, i64 ", fromString (show codeAt)],
+                line [fromString "store ptr ", restName (count - 1), fromString ", ptr %codeplace"],
+                mconcat
+                  [ line [fromString "%slot", fromString (show index), fromString " = getelementptr i64, ptr %block, i64 ", fromString (show (capturesAt + index))]
+                      <> line [fromString "store i64 ", value, fromString ", ptr %slot", fromString (show index)]
+                    | (index, value) <- zip [0 :: Int ..] (drop 1 arguments ++ [consumer])
+                  ],
+                line [fromString "%made = ptrtoint ptr %block to i64"],
+                line [fromString "%codefrom = getelementptr i64, ptr %pointer, i64 ", fromString (show codeAt)],
+                line [fromString "%code = load ptr, ptr %codefrom"],
+                go (fromString "%code") (function : take 1 arguments ++ [fromString "%made"])
+              ]
+    rest count =
+      let arguments = named "a" count
+       in define (restName count) [fromString "%self", fromString "%given"] $
+            mconcat
+              [ line [fromString "%pointer = inttoptr i64 %self to ptr"],
+                mconcat
+                  [ line [fromString "%slot", fromString (show index), fromString " = getelementptr i64, ptr %pointer, i64 ", fromString (show (capturesAt + index))]
+                      <> line [value, fromString " = load i64, ptr %slot", fromString (show index)]
+                    | (index, value) <- zip [0 :: Int ..] (arguments ++ [fromString "%k"])
+                  ],
+                line [fromString "call void @hazy_open(i64 %self)"],
+                if count == 1
+                  then
+                    mconcat
+                      [ line [fromString "%function = inttoptr i64 %given to ptr"],
+                        line [fromString "%codefrom = getelementptr i64, ptr %function, i64 ", fromString (show codeAt)],
+                        line [fromString "%code = load ptr, ptr %codefrom"],
+                        go (fromString "%code") (fromString "%given" : arguments ++ [fromString "%k"])
+                      ]
+                  else go (applyName count) (fromString "%given" : arguments ++ [fromString "%k"])
+              ]
 
 -- Block layouts -------------------------------------------------------------
 
@@ -896,17 +1038,49 @@ anonymous state hint husk object = do
 object' :: State s -> Text -> Maybe Int -> Object -> ST s (Builder, Builder)
 object' state hint husk object@Object {kind, captured} = do
   name <- anonymous state hint husk object
-  let held = length captured + length husk
-  (code, block) <- allocate state (capturesAt + held) (header (kindOf kind) 0 held)
+  let (tag, held) = shapeOf husk object
+  (code, block) <- allocate state (capturesAt + held) (header (kindOf kind) tag held)
   (code', place) <- slot state block codeAt
+  entry <- case (husk, object) of
+    (Nothing, Object {whole = Just Wholly {wholeParameters, wholeBody}}) -> do
+      (wholeName, scope) <- named state (Text.pack "whole")
+      function
+        state {scope}
+        wholeName
+        mempty
+        Nothing
+        []
+        "internal "
+        object {parameters = wholeParameters, body = wholeBody, method = Apply, whole = Nothing}
+      (code'', place') <- slot state block (capturesAt + length captured)
+      pure $
+        code''
+          <> line
+            [ fromString "store i64 ptrtoint (ptr getelementptr (i8, ptr ",
+              quoted wholeName,
+              fromString ", i64 1) to i64), ptr ",
+              place'
+            ]
+    _ -> pure mempty
   pure
     ( mconcat
         [ code,
           code',
-          line [fromString "store ptr ", quoted name, fromString ", ptr ", place]
+          line [fromString "store ptr ", quoted name, fromString ", ptr ", place],
+          entry
         ],
       block
     )
+
+-- |
+-- An object's tag and how many words it holds after its code: what it
+-- captured, a block that goes with it if one does, and the entry that takes
+-- every argument at once, last, if it has one. Its tag is then how many
+-- arguments that entry takes.
+shapeOf :: Maybe Int -> Object -> (Int, Int)
+shapeOf husk Object {captured, whole} = case (husk, whole) of
+  (Nothing, Just Wholly {wholeParameters}) -> (length wholeParameters - 1, length captured + 1)
+  _ -> (0, length captured + length husk)
 
 -- |
 -- Make the environment again. This is where values are shared and erased: a
@@ -1687,6 +1861,16 @@ wanted state token environment = \case
             code <- invoke state consumer [value]
             pure $ own value <> first <> code
       (Apply, values@(_ : _ : _)) -> call state first (last values) (init values)
+      -- A function that is not known, given its arguments in turn: what
+      -- the runtime's part of the program does looks at how many it takes.
+      (Spread, values@(_ : _ : _ : _)) -> do
+        let function = last values
+            arguments = init values
+            count = length arguments - 1
+        pure $
+          foldMap own (function : init arguments)
+            <> first
+            <> enter state (fromString "@hazy_apply_" <> fromString (show count)) (function : arguments)
       _ -> error $ "bad invoke " ++ show method
   Force -> do
     let (late, named') = waiting environment
@@ -1774,8 +1958,9 @@ wanted state token environment = \case
         references name = 1 + length [() | Recursive {others} <- objects, other <- others, other == name]
     made <- for objects $ \Recursive {name, object} -> do
       (code, block) <- object' state name Nothing object
-      let Object {kind, captured} = object
-          counted' = header (kindOf kind) 0 (length captured) + toInteger (references name) * one
+      let Object {kind} = object
+          (tag, held) = shapeOf Nothing object
+          counted' = header (kindOf kind) tag held + toInteger (references name) * one
       count <- store state block 0 (number counted')
       (code', value) <- word state block
       pure (code <> count <> code', (name, block, value))

@@ -75,6 +75,11 @@ data Method
     Return
   | -- | Of a function: take the arguments and the consumer of the result.
     Apply
+  | -- | Of a function that is not known: take each of the arguments in
+    -- turn, giving each to what the one before gave, and then the consumer
+    -- of the last result. A function that takes that many at once takes
+    -- them at once.
+    Spread
   | -- | Of a thunk: take the consumer of its value.
     Forced
   deriving (Eq, Show)
@@ -87,7 +92,17 @@ data Object = Object
     captured :: [Text],
     method :: !Method,
     parameters :: [Text],
-    body :: Statement
+    body :: Statement,
+    -- | Of a function that gives back a function, and so on, each of one
+    -- parameter: a second method that takes all of their parameters at
+    -- once, and then the consumer of the last result. It runs with those
+    -- and then what was captured.
+    whole :: Maybe Wholly
+  }
+
+data Wholly = Wholly
+  { wholeParameters :: [Text],
+    wholeBody :: Statement
   }
 
 -- |
