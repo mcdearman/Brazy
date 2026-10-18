@@ -414,6 +414,14 @@ apply world primitive arguments = case (primitive, arguments) of
     | right == 0 -> divideByZero
     | right == -1 -> pure $ Int 0
     | otherwise -> pure $ Int $ left `rem` right
+  (IntDiv, [Int left, Int right])
+    | right == 0 -> divideByZero
+    | right == -1 -> pure $ Int $ wrapped $ negate left
+    | otherwise -> pure $ Int $ left `div` right
+  (IntMod, [Int left, Int right])
+    | right == 0 -> divideByZero
+    | right == -1 -> pure $ Int 0
+    | otherwise -> pure $ Int $ left `mod` right
   (IntToInteger, [Int value]) -> pure $ Integer $ fromIntegral value
   (IntegerCastToInt, [Integer value])
     | value > toInteger Tree.intMaxBound || value < toInteger Tree.intMinBound -> do

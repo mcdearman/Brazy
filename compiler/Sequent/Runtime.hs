@@ -254,6 +254,8 @@ definitions =
             ("primLessThenEqualInteger", wrap IntegerLessThenEqual),
             ("primIntToInteger", wrap IntToInteger),
             ("primIntQuot", wrap IntQuot),
+            ("primIntDiv", wrap IntDiv),
+            ("primIntMod", wrap IntMod),
             ("primIntRem", wrap IntRem),
             ("primIntegerCastToInt", wrap IntegerCastToInt),
             ("primIntegerTruncateToInt", wrap IntegerTruncateToInt),
