@@ -1,5 +1,6 @@
 module Hazy.PreludeList where
 
+import Hazy.Helper (augment, build, listFoldr)
 import Hazy.Prelude
 
 infixl 9 !!
@@ -8,25 +9,24 @@ infixr 5 ++
 
 infix 4 `notElem`
 
+-- The functions that make lists are written with 'build' and 'augment', and
+-- go through lists with 'listFoldr': what one makes and another goes
+-- through at once is never made (see "Hazy.Helper").
+
 map :: (a -> b) -> [a] -> [b]
-map f [] = []
-map f (x : xs) = f x : map f xs
+map f xs = build (\c n -> listFoldr (\x rest -> c (f x) rest) n xs)
 
 (++) :: [a] -> [a] -> [a]
-[] ++ ys = ys
-(x : xs) ++ ys = x : (xs ++ ys)
+xs ++ ys = augment (\c n -> listFoldr c n xs) ys
 
 filter :: (a -> Bool) -> [a] -> [a]
-filter p [] = []
-filter p (x : xs)
-  | p x = x : filter p xs
-  | otherwise = filter p xs
+filter p xs = build (\c n -> listFoldr (\x rest -> if p x then c x rest else rest) n xs)
 
 concat :: (Foldable t) => t [a] -> [a]
-concat xss = foldr (++) [] xss
+concat xss = build (\c n -> foldr (\xs rest -> listFoldr c rest xs) n xss)
 
 concatMap :: (Foldable t) => (a -> [b]) -> t a -> [b]
-concatMap f = concat . map f . toList
+concatMap f xs = build (\c n -> foldr (\x rest -> listFoldr c rest (f x)) n xs)
 
 head :: [a] -> a
 head (x : _) = x

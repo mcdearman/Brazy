@@ -9,6 +9,32 @@ module Hazy.Helper where
 import Hazy
 import Hazy.Prelude
 
+-- |
+-- A list made by a function given what puts an element before the rest and
+-- what comes after the last. A list that is made so and gone through by
+-- 'listFoldr' as soon as it is made is never made: the compiler gives the
+-- function what 'listFoldr' was given instead ("Sequent.Inline"). The
+-- functions of lists that make lists are written so, and the compiler puts
+-- 'build' where it is called last of all, so that it can first see this.
+build :: ((a -> [a] -> [a]) -> [a] -> [a]) -> [a]
+build g = g (:) []
+
+-- |
+-- The same, with a list to come after the last instead of nothing: what
+-- '(++)' makes. Gone through by 'listFoldr', the list after is gone through
+-- in turn.
+augment :: ((a -> [a] -> [a]) -> [a] -> [a]) -> [a] -> [a]
+augment g xs = g (:) xs
+
+-- |
+-- Go through a list from the right, as 'foldr' does. A list made by 'build'
+-- that this is given is not made.
+listFoldr :: (a -> b -> b) -> b -> [a] -> b
+listFoldr k z xs = go xs
+  where
+    go [] = z
+    go (y : ys) = k y (go ys)
+
 minilex :: ReadS Char
 minilex (c : s) = case c of
   ' ' -> minilex s
@@ -266,42 +292,52 @@ instance Ord HelperInt where
     | primLessThenEqualInt x y = LT
     | otherwise = GT
 
+-- The Ints from one to another, given what puts one before the rest and
+-- what comes after the last.
+enumIntFromTo :: (HelperInt -> b -> b) -> b -> Int -> Int -> b
+enumIntFromTo c n x y = go x
+  where
+    go x
+      | x > y = n
+      | x == y = c (Int x) n
+      | otherwise = c (Int x) (go (x + 1))
+
+-- The Ints from one, by the step to a second, to a third, given what puts
+-- one before the rest and what comes after the last.
+enumIntFromThenTo :: (HelperInt -> b -> b) -> b -> Int -> Int -> Int -> b
+enumIntFromThenTo c n x1 x2 y
+  | x2 >= x1 =
+      if y < x2
+        then (if y < x1 then n else c (Int x1) n)
+        else
+          let delta = x2 - x1
+              y' = y - delta
+              up x
+                | x > y' = c (Int x) n
+                | otherwise = c (Int x) (up (x + delta))
+           in c (Int x1) (up x2)
+  | otherwise =
+      if y > x2
+        then (if y > x1 then n else c (Int x1) n)
+        else
+          let delta = x2 - x1
+              y' = y - delta
+              down x
+                | x < y' = c (Int x) n
+                | otherwise = c (Int x) (down (x + delta))
+           in c (Int x1) (down x2)
+
 instance Enum HelperInt where
   succ (Int x) = Int (x + 1)
   pred (Int x) = Int (x - 1)
   toEnum = Int
   fromEnum (Int x) = x
   enumFrom (Int x) = enumFromTo (Int x) maxBound
-  enumFromTo (Int x) (Int y) = go x
-    where
-      go x
-        | x > y = []
-        | x == y = [Int x]
-        | otherwise = Int x : go (x + 1)
+  enumFromTo (Int x) (Int y) = build (\c n -> enumIntFromTo c n x y)
   enumFromThen (Int x) (Int y) = enumFromThenTo (Int x) (Int y) (if y >= x then maxBound else minBound)
   -- As GHC has it: up or down as the second is, and never past the bounds
   -- of an Int, where adding the step would come round to the other end.
-  enumFromThenTo (Int x1) (Int x2) (Int y)
-    | x2 >= x1 =
-        if y < x2
-          then (if y < x1 then [] else [Int x1])
-          else
-            let delta = x2 - x1
-                y' = y - delta
-                up x
-                  | x > y' = [Int x]
-                  | otherwise = Int x : up (x + delta)
-             in Int x1 : up x2
-    | otherwise =
-        if y > x2
-          then (if y > x1 then [] else [Int x1])
-          else
-            let delta = x2 - x1
-                y' = y - delta
-                down x
-                  | x < y' = [Int x]
-                  | otherwise = Int x : down (x + delta)
-             in Int x1 : down x2
+  enumFromThenTo (Int x1) (Int x2) (Int y) = build (\c n -> enumIntFromThenTo c n x1 x2 y)
 
 instance Bounded HelperInt where
   minBound = Int primIntMinBound
@@ -512,11 +548,11 @@ instance Functor HelperList where
   fmap f (List xs) = List (map f xs)
 
 instance Applicative HelperList where
-  pure x = List [x]
+  pure x = List (build (\c n -> c x n))
   (<*>) = ap
 
 instance Monad HelperList where
-  List m >>= k = List $ concat $ map (list . k) m
+  List m >>= k = List (build (\c n -> listFoldr (\x rest -> listFoldr c rest (list (k x))) n m))
 
 instance MonadFail HelperList where
   fail _ = List []
@@ -530,10 +566,7 @@ instance Monoid (HelperList a) where
 -- What a list holds is gone through as it is, without the class's way
 -- round through a list.
 instance Foldable HelperList where
-  foldr f z (List xs) = go xs
-    where
-      go [] = z
-      go (y : ys) = f y (go ys)
+  foldr f z (List xs) = listFoldr f z xs
   toList (List xs) = xs
   null (List []) = True
   null (List _) = False

@@ -31,6 +31,8 @@ import Data.Text (Text)
 import qualified Data.Text as Text
 import Data.Traversable (for)
 import qualified Generate.Global as Global (Global)
+import qualified Sequent.Runtime as Runtime (helperGlobal)
+import qualified Sequent.Uncurry as Uncurry (direct)
 import Sequent.Primitive (Primitive (Field, Foreign, IntToInteger, IntegerCastToInt, IntegerTruncateToInt))
 import qualified Sequent.Tree as Literal (Literal (..))
 import Sequent.Tree
@@ -46,6 +48,40 @@ import Sequent.Tree
     intMaxBound,
     intMinBound,
   )
+
+-- |
+-- The time over that what lists are made and gone through with is put where
+-- it is called. Before it, a list that is made by 'build' and gone through
+-- by 'listFoldr' at once can be seen as that.
+lastly :: Int
+lastly = 4
+
+-- |
+-- What lists are made and gone through with, in "Hazy.Helper", as fusion
+-- looks for them: a list made by @build g@ or @augment g rest@, gone through
+-- by @listFoldr k z@.
+build, augment, listFoldr :: Global.Global
+build = Runtime.helperGlobal "build"
+augment = Uncurry.direct (Runtime.helperGlobal "augment")
+listFoldr = Uncurry.direct (Runtime.helperGlobal "listFoldr")
+
+-- |
+-- Whether a function makes a list by 'build' or 'augment'. Such a function
+-- is put where it is called though it is bigger, so that what goes through
+-- the list there can be seen to.
+making :: Statement -> Bool
+making body = any (`Set.member` globals body) [build, augment]
+
+fusing :: [Global.Global]
+fusing = [build, augment, listFoldr, Runtime.helperGlobal "augment", Runtime.helperGlobal "listFoldr"]
+
+-- |
+-- A list as it is made: by a function given what puts an element before
+-- the rest and what comes after the last, and what comes after if there is
+-- more.
+data Made
+  = Built Producer
+  | Augmented Producer Producer
 
 -- |
 -- The most a function can be made of and still be put where it is called.
@@ -84,12 +120,13 @@ inline' time find self producer = do
       statement = \case
         Cut (Global global) (Apply arguments result)
           | global /= self,
+            time >= lastly || global `notElem` fusing,
             Just (Function parameters covariable body) <- find global,
             length parameters == length arguments,
             -- A parameter that is a value is given one, which is only
             -- written where it was when it is a name or a number.
             and [strategy == ByNeed || atom argument | (Binder {strategy}, argument) <- zip parameters arguments],
-            size body <= (if or [strategy == ByValue | Binder {strategy} <- parameters] then evidenced else limit),
+            size body <= (if or [strategy == ByValue | Binder {strategy} <- parameters] || making body then evidenced else limit),
             Set.notMember global (globals body) -> do
               arguments <- traverse producerx arguments
               result <- consumer result
@@ -159,7 +196,7 @@ dictionary find global = case find global of
 -- An @Integer@ written in the program and made an @Int@ is the @Int@, as
 -- a number written for an @Int@ is once the instance of 'Num' is known.
 specialize :: (Global.Global -> Maybe Producer) -> Producer -> Producer
-specialize find = producer Known {instances = Map.empty, integers = Map.empty, widened = Map.empty}
+specialize find = producer Known {instances = Map.empty, integers = Map.empty, widened = Map.empty, lists = Map.empty}
   where
     producer known = \case
       Constructor tag fields -> Constructor tag (map (producer known) fields)
@@ -177,6 +214,65 @@ specialize find = producer Known {instances = Map.empty, integers = Map.empty, w
       Force result -> Force (consumer known result)
       other -> other
     statement known = \case
+      -- A list that is to be made by 'build' or 'augment'. If all that is
+      -- done with it is go through it by 'listFoldr', it is never made;
+      -- if more is done with it, it is made as it was.
+      Cut made@(Thunk covariable inner) (MuTilde binder@Binder {name} body)
+        | Just list <- madeIn covariable inner ->
+            let fused = statement known {lists = Map.insert name list (lists known)} body
+             in if Set.member name (free fused)
+                  then Cut (producer known made) (MuTilde binder (statement known body))
+                  else fused
+      -- The same, made at once rather than when it is first wanted.
+      Cut (Global maker) (Apply arguments (MuTilde binder@Binder {name} body))
+        | Just list <- madeBy maker arguments ->
+            let fused = statement known {lists = Map.insert name list (lists known)} body
+             in if Set.member name (free fused)
+                  then Cut (Global maker) (Apply (map (producer known) arguments) (MuTilde binder (statement known body)))
+                  else fused
+      -- Going through a list as it is made is giving what goes through it
+      -- to what makes it.
+      Cut (Global folder) (Apply [step, start, Variable name] result)
+        | folder == listFoldr,
+          Just list <- Map.lookup name (lists known) ->
+            statement known $ case list of
+              Built make -> Cut make (Apply [step] (Apply [start] result))
+              Augmented make rest ->
+                let stepName = name <> Text.pack "^step"
+                    restName = name <> Text.pack "^rest"
+                    restResult = name <> Text.pack "^after"
+                    after =
+                      Thunk restResult $
+                        Cut (Global listFoldr) (Apply [Variable stepName, start, rest] (Covariable restResult))
+                 in Cut step $
+                      MuTilde Binder {name = stepName, strategy = ByNeed} $
+                        Cut after $
+                          MuTilde Binder {name = restName, strategy = ByNeed} $
+                            Cut make (Apply [Variable stepName] (Apply [Variable restName] result))
+      -- Going through no list at all is what comes after the last.
+      Cut (Global folder) (Apply [_, start, Constructor 0 []] result)
+        | folder == listFoldr ->
+            Cut (producer known start) (Force (consumer known result))
+      -- Going through a list whose first element is there is giving that
+      -- element to what goes through, with going through the rest: a list
+      -- of one, as a comprehension makes of each element, is never made.
+      Cut (Global folder) (Apply [step, start, Constructor 1 [first@(Variable element), rest]] result)
+        | folder == listFoldr ->
+            let name = case step of
+                  Variable named -> named <> Text.pack "^" <> element
+                  _ -> element
+                stepName = name <> Text.pack "^first"
+                restName = name <> Text.pack "^more"
+                restResult = name <> Text.pack "^ahead"
+                after =
+                  Thunk restResult $
+                    Cut (Global listFoldr) (Apply [Variable stepName, start, rest] (Covariable restResult))
+             in statement known $
+                  Cut step $
+                    MuTilde Binder {name = stepName, strategy = ByNeed} $
+                      Cut after $
+                        MuTilde Binder {name = restName, strategy = ByNeed} $
+                          Cut (Variable stepName) (Force (Apply [first] (Apply [Variable restName] result)))
       Cut (Global global) (Force (MuTilde binder@Binder {name} body))
         | Just fields <- dictionary find global ->
             let body' = statement known {instances = Map.insert name fields (instances known)} body
@@ -238,8 +334,41 @@ data Known = Known
   { instances :: Map Text [Field],
     integers :: Map Text Integer,
     -- | The names that are Ints made Integers, and the Ints.
-    widened :: Map Text Producer
+    widened :: Map Text Producer,
+    -- | The names of lists that are to be made by 'build' or 'augment'.
+    lists :: Map Text Made
   }
+
+-- |
+-- How the list a thunk gives is made, if all it does is make it by 'build'
+-- or 'augment'. What it is given may be named first, as putting a function
+-- where it is called does: each such name is what it names, if it is used
+-- once and nowhere but there.
+madeIn :: Text -> Statement -> Maybe Made
+madeIn covariable = go []
+  where
+    go bound = \case
+      Cut value (MuTilde Binder {name} rest)
+        | not (atom value),
+          all (\(_, earlier) -> Set.notMember name (free earlier)) bound ->
+            go ((name, value) : bound) rest
+      Cut (Global maker) (Apply arguments (Covariable given))
+        | given == covariable,
+          and [length [() | Variable used <- arguments, used == name] == 1 | (name, _) <- bound],
+          and [Set.null (Set.fromList (map fst bound) `Set.intersection` free value) | (_, value) <- bound] ->
+            madeBy maker (map (resolve bound) arguments)
+      _ -> Nothing
+    resolve bound = \case
+      Variable name | Just value <- lookup name bound -> value
+      other -> other
+
+-- |
+-- How a list is made, if it is made by 'build' or 'augment'.
+madeBy :: Global.Global -> [Producer] -> Maybe Made
+madeBy maker arguments
+  | maker == build, [make] <- arguments = Just (Built make)
+  | maker == augment, [make, rest] <- arguments = Just (Augmented make rest)
+  | otherwise = Nothing
 
 constant :: Producer -> Bool
 constant = \case

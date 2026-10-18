@@ -237,6 +237,18 @@ cut producer consumer = case (producer, consumer) of
   (Thunk _ _, MuTilde _ _)
     | Just (named, made) <- floated producer ->
         foldr (\(binder, given) rest -> Cut given (MuTilde binder rest)) (cut made consumer) named
+  -- A function that is named and called once, and used for nothing else,
+  -- is written where it is called, where it is its body. That it may be
+  -- inside a function that runs many times does not matter: nothing is
+  -- made of it there either.
+  (Function {}, MuTilde Binder {name} rest)
+    | count name rest == 1,
+      calls name rest == 1 ->
+        simplify (replace name producer rest)
+  -- A thunk that only gives a definition at the top is the definition:
+  -- forcing either works out the definition.
+  (Thunk result (Cut definition@(Global _) (Covariable given)), _)
+    | given == result -> cut definition consumer
   -- A value that is constructed and taken apart.
   (Constructor tag fields, Case alternatives otherwise) -> case choice tag alternatives of
     Just index
@@ -368,6 +380,40 @@ constructed name = statement
 -- |
 -- How many times a variable is forced where 'unfold' would reach it: as the
 -- whole of a statement, and outside any function.
+-- |
+-- How many times a variable is called: given arguments, forced first or
+-- not.
+calls :: Text -> Statement -> Int
+calls name = statement
+  where
+    statement = \case
+      Cut (Variable other) consumer
+        | other == name,
+          called consumer ->
+            1 + inConsumer consumer
+      Cut producer consumer -> inProducer producer + inConsumer consumer
+      Primitive _ arguments consumer -> sum (map inProducer arguments) + inConsumer consumer
+      LetRec bindings body -> sum (map (inProducer . snd) bindings) + statement body
+      Abort -> 0
+      Halt -> 0
+    called = \case
+      Apply _ _ -> True
+      Force (Apply _ _) -> True
+      _ -> False
+    inProducer = \case
+      Constructor _ fields -> sum (map inProducer fields)
+      Mu _ body -> statement body
+      Thunk _ body -> statement body
+      Function _ _ body -> statement body
+      _ -> 0
+    inConsumer = \case
+      Covariable _ -> 0
+      MuTilde _ body -> statement body
+      Case alternatives otherwise ->
+        sum [statement body | Alternative _ _ body <- alternatives] + maybe 0 statement otherwise
+      Apply arguments consumer -> sum (map inProducer arguments) + inConsumer consumer
+      Force consumer -> inConsumer consumer
+
 forces :: Text -> Statement -> Int
 forces name = statement
   where
