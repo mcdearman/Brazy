@@ -1329,10 +1329,30 @@ Blocks allocated, and seconds:
 | `Data.Set.fromList` of 50,000 | 6,337,215 / 0.08 | 6,337,114 / 0.08 | 3,402,210 / 0.05 |
 | The compiler made by Hazy, checking itself | 5,668,269,403 / 76 | 5,309,759,508 / 70 | 5,172,541,506 / 68 |
 
-- [ ] A function that is not known is called one argument at a time, so a
-      function given to `foldr` or `map` makes a closure for each argument
-      but the last. A closure that says how many arguments it takes, and an
-      entry that takes them all, as GHC's eval and apply have it
+Then, with allocation, giving back and the primitives of `Int` done where
+they happen, a shared value taken apart counting only the fields that are
+kept, and eval and apply:
+
+| Workload | Before those | After those | Eval and apply |
+| - | - | - | - |
+| Collatz up to 30,000 | 0.15 | 0.05 | 15,692,156 / 0.06 |
+| 100,000 insertions into a `Data.Map` | 0.19 | 0.07 | 5,843,087 / 0.06 |
+| `foldr` and `foldl'` over a million numbers | 16,001,402 / 0.16 | 16,001,402 / 0.07 | 12,001,062 / 0.07 |
+| The compiler made by Hazy, checking itself | 68 | 42 | 4,501,559,243 / 43 |
+
+- [x] A function that is not known, given one argument after another, is
+      given them together (`AxCut.Spread`), as GHC's eval and apply have
+      it. A function that gives back a function, and so on, each of one
+      parameter, has a second entry that takes all of their arguments at
+      once (`AxCut.Wholly`): its tag says how many, and the entry is the
+      last word of the object, odd, so that nothing counts it. Up to six
+      arguments go through what the runtime's part of each unit has for
+      that many (`hazy_apply_2` to `hazy_apply_6`), which goes to that
+      entry if the function takes that many, and otherwise gives them one
+      at a time. A function at the top has it too, and goes to its `direct`
+      entry. A function given to `foldr` or `map` makes nothing more to be
+      called (test `eval-apply`). A function that is not at the top has its
+      body twice, which makes the compiler's own LLVM a tenth longer
 - [ ] A recursive function given evidence that is known is not put where it
       is called, so `Data.Map.insert` still compares through `Ord`. A copy
       of it for the instance

@@ -81,8 +81,15 @@ among definitions outside global = case Map.lookup global definitions of
 -- This is done last, when the row of values is in order: nothing before it
 -- has a use for it.
 annotate :: (Global -> Maybe Int) -> AxCut.Object -> AxCut.Object
-annotate known AxCut.Object {kind, captured, method, parameters, body} =
-  AxCut.Object {kind, captured, method, parameters, body = annotated known body}
+annotate known AxCut.Object {kind, captured, method, parameters, body, whole} =
+  AxCut.Object
+    { kind,
+      captured,
+      method,
+      parameters,
+      body = annotated known body,
+      whole = (\AxCut.Wholly {wholeParameters, wholeBody} -> AxCut.Wholly {wholeParameters, wholeBody = annotated known wholeBody}) <$> whole
+    }
 
 annotated :: (Global -> Maybe Int) -> AxCut.Statement -> AxCut.Statement
 annotated known = go
@@ -164,6 +171,11 @@ focus supply = \case
       alternatives <- traverse alternative alternatives
       otherwise <- traverse (focus supply) otherwise
       pure $ Cut producer (Case alternatives otherwise)
+    (Variable _, Apply [argument] result)
+      | (more@(_ : _), final) <- spreading (spreadLimit - 1) result ->
+          naming supply (argument : more) $ \arguments ->
+            passing supply final $ \final ->
+              pure $ Cut producer (foldr (\given rest -> Apply [given] rest) final arguments)
     (Variable _, Apply arguments result) ->
       naming supply arguments $ \arguments ->
         passing supply result $ \result ->
@@ -179,6 +191,22 @@ focus supply = \case
       focus supply $ Cut producer (MuTilde (byNeed name) (Cut (Variable name) consumer))
   where
     alternative (Alternative tag binders body) = Alternative tag binders <$> focus supply body
+
+-- |
+-- The most arguments a function that is not known is given together.
+spreadLimit :: Int
+spreadLimit = 6
+
+-- |
+-- The arguments of a consumer that gives a function one argument after
+-- another, up to some number of them, and what is given the last result.
+spreading :: Int -> Consumer -> ([Producer], Consumer)
+spreading limit = \case
+  Apply [argument] rest
+    | limit > 0 ->
+        let (arguments, final) = spreading (limit - 1) rest
+         in (argument : arguments, final)
+  consumer -> ([], consumer)
 
 -- |
 -- Focus what is inside a function or a thunk.
@@ -320,6 +348,8 @@ joined consumer = go
       Cut (Variable _) (Case alternatives otherwise) ->
         and [go body | Alternative _ _ body <- alternatives] && all go otherwise
       Cut (Variable _) (Apply _ (Covariable result)) -> result /= consumer
+      Cut (Variable _) spread@(Apply [_] (Apply [_] _))
+        | (_, Covariable result) <- spreading spreadLimit spread -> result /= consumer
       Cut (Variable _) (Force (Covariable result)) -> result /= consumer
       Cut (Literal _) (MuTilde _ body) -> go body
       Cut (Global _) (MuTilde _ body) -> go body
@@ -373,6 +403,11 @@ linearly = \case
     leaving (map named arguments ++ [result, function]) (AxCut.Invoke AxCut.Apply)
   Cut (Variable value) (Force (Covariable result)) ->
     leaving [result, value] AxCut.Force
+  Cut (Variable function) consumer@(Apply [_] (Apply [_] _)) ->
+    case spreading spreadLimit consumer of
+      (arguments, Covariable result) ->
+        leaving (map named arguments ++ [result, function]) (AxCut.Invoke AxCut.Spread)
+      _ -> error "a function given arguments in turn was not focused"
   Cut (Literal literal) (MuTilde Binder {name} body) ->
     binding [] name (AxCut.Literal name literal) (linearly body)
   Cut (Global global) (MuTilde Binder {name} body) ->
@@ -396,7 +431,8 @@ linearly = \case
                         captured,
                         method = AxCut.Return,
                         parameters = [name],
-                        body = outerBuild (name : captured)
+                        body = outerBuild (name : captured),
+                        whole = Nothing
                       }
                in arrange environment (same (kept ++ captured)) $
                     AxCut.New covariable object (innerBuild (kept ++ [covariable]))
@@ -447,13 +483,17 @@ linearly = \case
 -- object given those names in the order they are captured in.
 objectOf :: Producer -> (Set Text, [Text] -> AxCut.Object)
 objectOf = \case
-  Function parameters result body ->
-    closure AxCut.Closure AxCut.Apply ([name | Binder {name} <- parameters] ++ [result]) body
-  Thunk result body -> closure AxCut.Thunk AxCut.Forced [result] body
+  made@(Function parameters result body) ->
+    closure (flatten made) AxCut.Closure AxCut.Apply ([name | Binder {name} <- parameters] ++ [result]) body
+  Thunk result body -> closure Nothing AxCut.Thunk AxCut.Forced [result] body
   _ -> error "only a function or a thunk can be made into an object"
   where
-    closure kind method parameters body =
+    closure flat kind method parameters body =
       let Linear {free, build} = linearly body
+          wholly = do
+            (names, final, innermost) <- flat
+            let Linear {build = wholeBuild} = linearly innermost
+            pure (names ++ [final], wholeBuild)
        in ( free Set.\\ Set.fromList parameters,
             \captured ->
               AxCut.Object
@@ -461,6 +501,24 @@ objectOf = \case
                   captured,
                   method,
                   parameters,
-                  body = build (parameters ++ captured)
+                  body = build (parameters ++ captured),
+                  whole =
+                    (\(wholeParameters, wholeBuild) -> AxCut.Wholly {wholeParameters, wholeBody = wholeBuild (wholeParameters ++ captured)})
+                      <$> wholly
                 }
           )
+
+-- |
+-- A function of one parameter that only gives back another, and so on, as
+-- one function of all of their parameters: the parameters, the consumer of
+-- the last result, and the last body. The function that is given back is
+-- made where it is given back, under a name of its own, once focused.
+flatten :: Producer -> Maybe ([Text], Text, Statement)
+flatten = \case
+  Function [Binder {name}] result (Cut inner@(Function [Binder {name = next}] innerResult innerBody) (MuTilde Binder {name = made} (Cut (Variable given) (Covariable back))))
+    | made == given,
+      back == result ->
+        Just $ case flatten inner of
+          Just (names, final, innermost) -> (name : names, final, innermost)
+          Nothing -> ([name, next], innerResult, innerBody)
+  _ -> Nothing
