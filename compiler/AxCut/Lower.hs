@@ -357,9 +357,12 @@ joined consumer = go
       Cut made@Function {} (MuTilde _ body) -> Set.notMember consumer (Tree.free made) && go body
       Cut made@Thunk {} (MuTilde _ body) -> Set.notMember consumer (Tree.free made) && go body
       -- A consumer made inside is one more place to go to, if it is not
-      -- made either; otherwise it would hold this one.
+      -- made either; otherwise it would hold this one. If it goes to this
+      -- one, nothing else inside goes to this one: it would be held twice.
       Cut (Mu inner first) (MuTilde _ outer) ->
-        go first && (Set.notMember consumer (Tree.free outer) || (joined inner first && go outer))
+        if Set.member consumer (Tree.free outer)
+          then Set.notMember consumer (Tree.free first) && joined inner first && go outer
+          else go first
       Cut (Mu new body) (Covariable old)
         | old == consumer -> joined new body && Set.notMember consumer (Tree.free body)
         | otherwise -> go body
