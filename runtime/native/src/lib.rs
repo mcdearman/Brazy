@@ -329,6 +329,26 @@ pub extern "C" fn hazy_prim_int_signum(value: Value) -> Value {
     from_int(int(value).signum())
 }
 
+/// Division that rounds down.
+#[no_mangle]
+pub extern "C" fn hazy_prim_int_div(left: Value, right: Value) -> Value {
+    if int(right) == 0 {
+        fail("divide by zero")
+    }
+    let (quotient, remainder) = (int(left).wrapping_div(int(right)), int(left).wrapping_rem(int(right)));
+    from_int(if remainder != 0 && (remainder < 0) != (int(right) < 0) { quotient - 1 } else { quotient })
+}
+
+/// What is left over from division that rounds down, of the divisor's sign.
+#[no_mangle]
+pub extern "C" fn hazy_prim_int_mod(left: Value, right: Value) -> Value {
+    if int(right) == 0 {
+        fail("divide by zero")
+    }
+    let remainder = int(left).wrapping_rem(int(right));
+    from_int(if remainder != 0 && (remainder < 0) != (int(right) < 0) { remainder + int(right) } else { remainder })
+}
+
 #[no_mangle]
 pub extern "C" fn hazy_prim_int_quot(left: Value, right: Value) -> Value {
     if int(right) == 0 {

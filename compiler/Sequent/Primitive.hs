@@ -37,6 +37,9 @@ data Primitive
   | IntSignum
   | IntQuot
   | IntRem
+  | -- | Division that rounds down, and what is left over from it.
+    IntDiv
+  | IntMod
   | IntToInteger
   | IntegerCastToInt
   | IntegerTruncateToInt
@@ -175,6 +178,8 @@ arity = \case
   IntSignum -> 1
   IntQuot -> 2
   IntRem -> 2
+  IntDiv -> 2
+  IntMod -> 2
   IntToInteger -> 1
   IntegerCastToInt -> 1
   IntegerTruncateToInt -> 1

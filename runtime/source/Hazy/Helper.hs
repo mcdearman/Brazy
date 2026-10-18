@@ -319,43 +319,18 @@ instance Num HelperInt where
 instance Real HelperInt where
   toRational (Int x) = primIntToInteger x :% 1
 
--- Division that rounds down is written out too. The defaults of the class
+-- Division that rounds down is a primitive too. The defaults of the class
 -- go by way of a pair and of the class's own methods for the signs, and a
 -- compiler made by Hazy divided that way millions of times: a vector is a
 -- tree, and every step down it halves a number.
 instance Integral HelperInt where
   Int x `quot` Int y = Int (primIntQuot x y)
   Int x `rem` Int y = Int (primIntRem x y)
-  Int x `div` Int y = Int (intDiv x y)
-  Int x `mod` Int y = Int (intMod x y)
+  Int x `div` Int y = Int (primIntDiv x y)
+  Int x `mod` Int y = Int (primIntMod x y)
   quotRem x y = (x `quot` y, x `rem` y)
   divMod x y = (x `div` y, x `mod` y)
   toInteger (Int x) = primIntToInteger x
-
--- Whether a number is below nothing.
-intNegative :: Int -> Bool
-intNegative x = not (primLessThenEqualInt 0 x)
-
--- What is left over and what the divisor is have different signs: the
--- quotient rounded toward nothing is one more than rounded down.
-intDiv :: Int -> Int -> Int
-intDiv x y =
-  let q = primIntQuot x y
-      r = primIntRem x y
-   in if primEqualInt r 0
-        then q
-        else case intNegative r of
-          True -> if intNegative y then q else primIntMinus q 1
-          False -> if intNegative y then primIntMinus q 1 else q
-
-intMod :: Int -> Int -> Int
-intMod x y =
-  let r = primIntRem x y
-   in if primEqualInt r 0
-        then r
-        else case intNegative r of
-          True -> if intNegative y then r else primIntAdd r y
-          False -> if intNegative y then primIntAdd r y else r
 
 instance Show HelperInt where
   showsPrec n (Int int) = showsPrec n (toInteger int)

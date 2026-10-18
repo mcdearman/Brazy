@@ -2047,6 +2047,8 @@ primitiveWord = \case
   IntAbs -> True
   IntSignum -> True
   IntQuot -> True
+  IntDiv -> True
+  IntMod -> True
   IntRem -> True
   IntegerCastToInt -> True
   IntegerTruncateToInt -> True
@@ -2110,6 +2112,8 @@ intInline state primitive arguments = case (primitive, arguments) of
   (IntLessThenEqual, [left, right]) -> Just $ compared "sle" left right
   (IntQuot, [left, right]) -> Just $ divided "sdiv" "hazy_prim_int_quot" left right
   (IntRem, [left, right]) -> Just $ divided "srem" "hazy_prim_int_rem" left right
+  (IntDiv, [left, right]) -> Just $ floored False left right
+  (IntMod, [left, right]) -> Just $ floored True left right
   _ -> Nothing
   where
     compared condition left right = do
@@ -2140,6 +2144,57 @@ intInline state primitive arguments = case (primitive, arguments) of
               line [dividend, fromString " = ashr i64 ", left, fromString ", 1"],
               line [divisor, fromString " = ashr i64 ", right, fromString ", 1"],
               line [result, fromString " = ", fromString operation, fromString " i64 ", dividend, fromString ", ", divisor],
+              line [shifted, fromString " = shl i64 ", result, fromString ", 1"],
+              line [value, fromString " = or i64 ", shifted, fromString ", 1"]
+            ],
+          value
+        )
+    -- Division that rounds down is division toward nothing, less one when
+    -- something is left over whose sign is not the divisor's; and what is
+    -- left over is then the divisor more.
+    floored leftOver left right = do
+      zero <- temporary state
+      stop <- label state
+      go <- label state
+      dividend <- temporary state
+      divisor <- temporary state
+      quotient <- temporary state
+      remainder <- temporary state
+      some <- temporary state
+      signs <- temporary state
+      differ <- temporary state
+      adjust <- temporary state
+      result <- temporary state
+      shifted <- temporary state
+      value <- localWord state
+      let runtime = if leftOver then "hazy_prim_int_mod" else "hazy_prim_int_div"
+      pure
+        ( mconcat
+            [ line [zero, fromString " = icmp eq i64 ", right, fromString ", 1"],
+              line [fromString "br i1 ", zero, fromString ", label %", stop, fromString ", label %", go],
+              stop <> fromString ":\n",
+              line [fromString "call i64 @", fromString runtime, fromString "(i64 ", left, fromString ", i64 ", right, fromString ")"],
+              line [fromString "unreachable"],
+              go <> fromString ":\n",
+              line [dividend, fromString " = ashr i64 ", left, fromString ", 1"],
+              line [divisor, fromString " = ashr i64 ", right, fromString ", 1"],
+              line [quotient, fromString " = sdiv i64 ", dividend, fromString ", ", divisor],
+              line [remainder, fromString " = srem i64 ", dividend, fromString ", ", divisor],
+              line [some, fromString " = icmp ne i64 ", remainder, fromString ", 0"],
+              line [signs, fromString " = xor i64 ", remainder, fromString ", ", divisor],
+              line [differ, fromString " = icmp slt i64 ", signs, fromString ", 0"],
+              line [adjust, fromString " = and i1 ", some, fromString ", ", differ],
+              if leftOver
+                then
+                  mconcat
+                    [ line [result <> fromString ".more", fromString " = add i64 ", remainder, fromString ", ", divisor],
+                      line [result, fromString " = select i1 ", adjust, fromString ", i64 ", result <> fromString ".more", fromString ", i64 ", remainder]
+                    ]
+                else
+                  mconcat
+                    [ line [result <> fromString ".less", fromString " = sub i64 ", quotient, fromString ", 1"],
+                      line [result, fromString " = select i1 ", adjust, fromString ", i64 ", result <> fromString ".less", fromString ", i64 ", quotient]
+                    ],
               line [shifted, fromString " = shl i64 ", result, fromString ", 1"],
               line [value, fromString " = or i64 ", shifted, fromString ", 1"]
             ],
@@ -2179,6 +2234,8 @@ primitiveName = \case
   IntAbs -> "hazy_prim_int_abs"
   IntSignum -> "hazy_prim_int_signum"
   IntQuot -> "hazy_prim_int_quot"
+  IntDiv -> "hazy_prim_int_div"
+  IntMod -> "hazy_prim_int_mod"
   IntRem -> "hazy_prim_int_rem"
   IntToInteger -> "hazy_prim_int_to_integer"
   IntegerCastToInt -> "hazy_prim_integer_cast_to_int"
@@ -2747,6 +2804,8 @@ runtime =
   declare i64 @hazy_prim_int_abs(i64)
   declare i64 @hazy_prim_int_signum(i64)
   declare i64 @hazy_prim_int_quot(i64, i64)
+  declare i64 @hazy_prim_int_div(i64, i64)
+  declare i64 @hazy_prim_int_mod(i64, i64)
   declare i64 @hazy_prim_int_rem(i64, i64)
   declare i64 @hazy_prim_int_to_integer(i64)
   declare i64 @hazy_prim_integer_cast_to_int(i64)
@@ -2967,7 +3026,7 @@ forcing linkage =
          %cleared = and i64 %header, -16
          %busy = or i64 %cleared, 3
          store i64 %busy, ptr %pointer
-         %update = call ptr @hazy_alloc(i64 4, i64 1048577)
+         %update = call ptr @hazy_take(i64 4, i64 1048577)
          %update.code = getelementptr i64, ptr %update, i64 1
          store ptr @hazy_update, ptr %update.code
          %update.thunk = getelementptr i64, ptr %update, i64 2

@@ -377,7 +377,6 @@ impl Heap {
     unsafe fn free(&mut self, block: *mut u64) {
         *block |= PENDING;
         self.pending.push(block);
-        hazy_alloc_slow = 1;
     }
 
     /// Every block there is, whether it can be reached or not.

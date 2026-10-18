@@ -23,6 +23,7 @@ primIntAbs, primIntSignum :: Int -> Int
 primEqualInteger, primLessThenEqualInteger :: Integer -> Integer -> Bool
 primIntToInteger :: Int -> Integer
 primIntQuot, primIntRem :: Int -> Int -> Int
+primIntDiv, primIntMod :: Int -> Int -> Int
 primIntegerCastToInt, primIntegerTruncateToInt :: Integer -> Int
 primIntegerEqual, primIntegerLessThenEqual :: Integer -> Integer -> Bool
 primIntegerAdd, primIntegerMinus, primIntegerMultiply :: Integer -> Integer -> Integer
