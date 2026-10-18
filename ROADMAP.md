@@ -1353,9 +1353,30 @@ kept, and eval and apply:
       entry. A function given to `foldr` or `map` makes nothing more to be
       called (test `eval-apply`). A function that is not at the top has its
       body twice, which makes the compiler's own LLVM a tenth longer
-- [ ] A recursive function given evidence that is known is not put where it
-      is called, so `Data.Map.insert` still compares through `Ord`. A copy
-      of it for the instance
+- [x] A list that is made and gone through at once is not made, as GHC's
+      fusion of `foldr` and `build` has it. The functions that make lists
+      (`map`, `filter`, `++`, `concat`, `concatMap`, the monad of lists that
+      a comprehension is, and the ranges of `Int`) are written with `build`
+      and `augment`, and go through lists with `listFoldr`, all in
+      `Hazy.Helper`. Where a list that `build` makes is given to
+      `listFoldr`, what makes it is given what goes through it instead
+      (`Sequent.Inline.specialize`); `build` and `listFoldr` are put where
+      they are called only the last time over, so that this can be seen
+      first. A function that is named and called once is written where it
+      is called ("Sequent.Simplify"), so the function given to what makes a
+      list is gone into. A list that is used more than once is made as it
+      was (test `fusion`)
+- [ ] What fusion does not do yet: go through a list from the left. `sum`,
+      `length` and `foldl'` are written going through it themselves, and a
+      list they are given is made. Written with `listFoldr`, each would make
+      a function at each element, unless a function that gives back a
+      function each time round were made to take one more argument instead,
+      as GHC does
+- [ ] A recursive function given evidence or a function that is known is not
+      copied where it is called, so `Data.Map.insert` still compares through
+      `Ord`, and what is made by `build` and then gone through calls the
+      function it was given each time round. A copy for what it is given,
+      as a definition of its own
 - [ ] Making and giving back a block is a call into the runtime each time.
       Most of it could be done where it happens, as counting is
 
