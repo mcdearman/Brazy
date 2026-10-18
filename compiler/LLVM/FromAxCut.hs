@@ -44,6 +44,8 @@ import AxCut.Tree
 import Control.Monad.ST (ST, runST)
 import Data.Char (isAlphaNum, isAscii, ord)
 import Data.Foldable (for_, toList)
+import Data.Int (Int64)
+import GHC.Float (castDoubleToWord64)
 import Data.List (intercalate, intersperse, nub)
 import Data.Map (Map)
 import qualified Data.Map as Map
@@ -513,12 +515,14 @@ spreading Target {registers, common} =
 
 -- Block layouts -------------------------------------------------------------
 
-dataKind, closureKind, thunkKind, integerKind, huskKind :: Integer
+dataKind, closureKind, thunkKind, integerKind, huskKind, floatKind :: Integer
 dataKind = 0
 closureKind = 1
 thunkKind = 2
 integerKind = 5
 huskKind = 7
+-- A floating-point number, as the runtime has it.
+floatKind = 10
 
 -- |
 -- The tag of an @Integer@ that is kept in its block, as the runtime has it.
@@ -1901,6 +1905,9 @@ wanted state token environment = \case
                   ],
                 value
               )
+      Literal.Double double -> do
+        value <- constantDouble state double
+        pure (mempty, value)
       Literal.Text text -> do
         (constant, size) <- bytes state (Text.unpack text)
         value <- local state
@@ -1929,6 +1936,7 @@ wanted state token environment = \case
     (code, value) <- case (primitive, arguments) of
       (Call call, _) -> foreignCall state call arguments
       _ | Just made <- intInline state primitive arguments -> made
+      _ | Just made <- floatInline state primitive arguments -> made
       (Export call exported, _) -> do
         exportStub state call exported
         pure (mempty, fromString "ptrtoint (ptr @hazy_nullary to i64)")
@@ -2009,6 +2017,26 @@ smallInteger State {extra, unique} integer = do
         number head,
         fromString ", i64 ",
         number integer,
+        fromString "], align 8\n"
+      ]
+  pure $ fromString "ptrtoint (ptr " <> name <> fromString " to i64)"
+
+-- |
+-- A @Double@ written in the program, as a constant of the program: a block
+-- that is never counted, which holds the bits of the number.
+constantDouble :: State s -> Double -> ST s Builder
+constantDouble State {extra, unique} double = do
+  next <- readSTRef unique
+  writeSTRef unique $! next + 1
+  let name = fromString "@double." <> fromString (show next)
+  modifySTRef' extra $ \known ->
+    mconcat
+      [ known,
+        name,
+        fromString " = private unnamed_addr constant [2 x i64] [i64 ",
+        number (header floatKind 0 0 + immortal),
+        fromString ", i64 ",
+        fromString (show (fromIntegral (castDoubleToWord64 double) :: Int64)),
         fromString "], align 8\n"
       ]
   pure $ fromString "ptrtoint (ptr " <> name <> fromString " to i64)"
@@ -2207,6 +2235,124 @@ intInline state primitive arguments = case (primitive, arguments) of
       fromString "ptrtoint (ptr getelementptr ([8192 x i64], ptr @hazy_nullary, i64 0, i64 "
         <> fromString (show tag)
         <> fromString ") to i64)"
+
+-- |
+-- A primitive of floating-point numbers done where it is used, when what it
+-- does and how precisely are written where it is used: the sum,
+-- difference, product and quotient, the negative, the magnitude and the
+-- square root, each in a block of its own, and the comparison, as the
+-- runtime does them. A @Float@ is worked out as a @Float@ and kept as the
+-- @Double@ it is.
+floatInline :: State s -> Primitive -> [Builder] -> Maybe (ST s (Builder, Builder))
+floatInline state primitive arguments = case (primitive, map toLazyText arguments) of
+  (Foreign name _, [precision, operation, _, _])
+    | name == Text.pack "float_binary",
+      Just single <- precisionOf precision,
+      Just instruction <- lookup operation [(word 0, "fadd"), (word 1, "fsub"), (word 2, "fmul"), (word 3, "fdiv")],
+      [_, _, left, right] <- arguments -> Just $ do
+        (loading, x) <- unboxed single left
+        (loading', y) <- unboxed single right
+        result <- temporary state
+        (boxing, value) <- boxed single result
+        pure (loading <> loading' <> line [result, fromString " = ", fromString instruction, fromString " ", kind single, fromString " ", x, fromString ", ", y] <> boxing, value)
+  (Foreign name _, [precision, operation, _])
+    | name == Text.pack "float_unary",
+      Just single <- precisionOf precision,
+      Just apply <- lookup operation [(word 0, negative), (word 1, intrinsic "fabs"), (word 5, intrinsic "sqrt")],
+      [_, _, given] <- arguments -> Just $ do
+        (loading, x) <- unboxed single given
+        result <- temporary state
+        (boxing, value) <- boxed single result
+        pure (loading <> line [result, fromString " = ", apply single x] <> boxing, value)
+  (Foreign name _, [precision, _])
+    | name == Text.pack "float_from_int",
+      Just single <- precisionOf precision,
+      [_, given] <- arguments -> Just $ do
+        number <- temporary state
+        result <- temporary state
+        (boxing, value) <- boxed single result
+        pure
+          ( line [number, fromString " = ashr i64 ", given, fromString ", 1"]
+              <> line [result, fromString " = sitofp i64 ", number, fromString " to ", kind single]
+              <> boxing,
+            value
+          )
+  (Foreign name _, [_, _])
+    | name == Text.pack "float_compare",
+      [left, right] <- arguments -> Just $ do
+        (loading, x) <- unboxed False left
+        (loading', y) <- unboxed False right
+        below <- temporary state
+        same <- temporary state
+        above <- temporary state
+        first <- temporary state
+        second <- temporary state
+        value <- localWord state
+        pure
+          ( loading
+              <> loading'
+              <> line [below, fromString " = fcmp olt double ", x, fromString ", ", y]
+              <> line [same, fromString " = fcmp oeq double ", x, fromString ", ", y]
+              <> line [above, fromString " = fcmp ogt double ", x, fromString ", ", y]
+              <> line [first, fromString " = select i1 ", above, fromString ", i64 5, i64 7"]
+              <> line [second, fromString " = select i1 ", same, fromString ", i64 3, i64 ", first]
+              <> line [value, fromString " = select i1 ", below, fromString ", i64 1, i64 ", second],
+            value
+          )
+  _ -> Nothing
+  where
+    word :: Integer -> Lazy.Text.Text
+    word = toLazyText . number . immediate
+    precisionOf given
+      | given == word 64 = Just False
+      | given == word 32 = Just True
+      | otherwise = Nothing
+    kind single = fromString (if single then "float" else "double")
+    negative single x = fromString "fneg " <> kind single <> fromString " " <> x
+    intrinsic function single x =
+      fromString "call "
+        <> kind single
+        <> fromString (" @llvm." ++ function ++ (if single then ".f32" else ".f64") ++ "(")
+        <> kind single
+        <> fromString " "
+        <> x
+        <> fromString ")"
+    -- The number a block holds, as LLVM has it.
+    unboxed single value = do
+      pointer <- temporary state
+      place <- temporary state
+      double <- temporary state
+      if single
+        then do
+          narrow <- temporary state
+          pure
+            ( line [pointer, fromString " = inttoptr i64 ", value, fromString " to ptr"]
+                <> line [place, fromString " = getelementptr i64, ptr ", pointer, fromString ", i64 1"]
+                <> line [double, fromString " = load double, ptr ", place]
+                <> line [narrow, fromString " = fptrunc double ", double, fromString " to float"],
+              narrow
+            )
+        else
+          pure
+            ( line [pointer, fromString " = inttoptr i64 ", value, fromString " to ptr"]
+                <> line [place, fromString " = getelementptr i64, ptr ", pointer, fromString ", i64 1"]
+                <> line [double, fromString " = load double, ptr ", place],
+              double
+            )
+    -- A number in a block of its own.
+    boxed single result = do
+      widened <- if single then temporary state else pure result
+      block <- temporary state
+      place <- temporary state
+      value <- local state
+      pure
+        ( (if single then line [widened, fromString " = fpext float ", result, fromString " to double"] else mempty)
+            <> line [block, fromString " = call ptr @hazy_take(i64 2, i64 ", number (header floatKind 0 0), fromString ")"]
+            <> line [place, fromString " = getelementptr i64, ptr ", block, fromString ", i64 1"]
+            <> line [fromString "store double ", widened, fromString ", ptr ", place]
+            <> line [value, fromString " = ptrtoint ptr ", block, fromString " to i64"],
+          value
+        )
 
 -- |
 -- What the runtime calls a primitive.
@@ -2761,6 +2907,10 @@ runtime =
   @hazy_freed = external global i64
   @hazy_nullary = external global [8192 x i64]
   declare ptr @hazy_alloc(i64, i64)
+  declare double @llvm.fabs.f64(double)
+  declare float @llvm.fabs.f32(float)
+  declare double @llvm.sqrt.f64(double)
+  declare float @llvm.sqrt.f32(float)
   declare void @hazy_free(i64)
   declare void @hazy_give(i64)
   declare void @hazy_split(i64)

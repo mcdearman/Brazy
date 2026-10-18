@@ -160,10 +160,10 @@ instance Monad (HelperArrow a) where
 newtype HelperBool = Bool Bool
 
 instance Eq HelperBool where
-  (==) = enumEqual
+  x == y = enumEqual x y
 
 instance Ord HelperBool where
-  compare = enumCompare
+  compare x y = enumCompare x y
 
 instance Enum HelperBool where
   toEnum = \case
@@ -195,10 +195,10 @@ instance Read HelperBool where
 newtype HelperChar = Char Char
 
 instance Eq HelperChar where
-  (==) = enumEqual
+  x == y = enumEqual x y
 
 instance Ord HelperChar where
-  compare = enumCompare
+  compare x y = enumCompare x y
 
 instance Enum HelperChar where
   toEnum x = Char (primIntToChar x)
@@ -332,8 +332,28 @@ instance Integral HelperInt where
   divMod x y = (x `div` y, x `mod` y)
   toInteger (Int x) = primIntToInteger x
 
+-- An Int is shown with Ints: going by way of an Integer, each digit was a
+-- division of Integers and a comparison through the class. Only the most
+-- negative, whose negative is no Int, goes that way still.
 instance Show HelperInt where
-  showsPrec n (Int int) = showsPrec n (toInteger int)
+  showsPrec n (Int int)
+    | primLessThenEqualInt 0 int = intDigits int
+    | primLessThenEqualInt (primIntNegate maxIntDigits) int =
+        showParen (n > 6) (\rest -> '-' : intDigits (primIntNegate int) rest)
+    | otherwise = showsPrec n (toInteger int)
+
+-- The largest Int that is certainly not the most negative's negative.
+maxIntDigits :: Int
+maxIntDigits = 999999999999999999
+
+-- The digits of an Int that is not negative, before what follows them.
+intDigits :: Int -> String -> String
+intDigits = go
+  where
+    go x rest =
+      let digit = primIntToChar (primIntAdd 48 (primIntRem x 10))
+          next = primIntQuot x 10
+       in if primEqualInt next 0 then digit : rest else go next (digit : rest)
 
 instance Read HelperInt where
   readsPrec p r = [(Int (fromInteger i), t) | (i, t) <- readsPrec p r]
@@ -403,10 +423,10 @@ instance Read HelperInteger where
 newtype HelperOrdering = Ordering Ordering
 
 instance Eq HelperOrdering where
-  (==) = enumEqual
+  x == y = enumEqual x y
 
 instance Ord HelperOrdering where
-  compare = enumCompare
+  compare x y = enumCompare x y
 
 instance Enum HelperOrdering where
   toEnum = \case
@@ -448,16 +468,39 @@ instance Read HelperOrdering where
 
 newtype HelperList a = List {list :: [a]}
 
+-- Lists are compared by functions of their own, which go on down the lists
+-- with the instance for what is in them. Comparing the rest of two lists
+-- through the instance for lists made that instance again at each element.
 instance (Eq a) => Eq (HelperList a) where
-  List [] == List [] = True
-  List (x : xs) == List (x' : xs') = x == x' && xs == xs'
-  _ == _ = False
+  List xs == List ys = listEqual xs ys
+
+listEqual :: (Eq a) => [a] -> [a] -> Bool
+listEqual (x : xs) (y : ys) = if x == y then listEqual xs ys else False
+listEqual [] [] = True
+listEqual _ _ = False
 
 instance (Ord a) => Ord (HelperList a) where
-  List [] `compare` List [] = EQ
-  List [] `compare` List (_ : _) = LT
-  List (_ : _) `compare` List [] = GT
-  List (x : xs) `compare` List (x' : xs') = compare x x' <> compare xs xs'
+  List xs `compare` List ys = listCompare xs ys
+  List xs < List ys = case listCompare xs ys of
+    LT -> True
+    _ -> False
+  List xs <= List ys = case listCompare xs ys of
+    GT -> False
+    _ -> True
+  List xs > List ys = case listCompare xs ys of
+    GT -> True
+    _ -> False
+  List xs >= List ys = case listCompare xs ys of
+    LT -> False
+    _ -> True
+
+listCompare :: (Ord a) => [a] -> [a] -> Ordering
+listCompare (x : xs) (y : ys) = case compare x y of
+  EQ -> listCompare xs ys
+  other -> other
+listCompare [] [] = EQ
+listCompare [] _ = LT
+listCompare _ [] = GT
 
 instance (Show a) => Show (HelperList a) where
   showsPrec p (List xs) = showList xs
@@ -1222,10 +1265,10 @@ instance Num HelperFloat where
   x + y = primFloatBinary 32 0 x y
   x - y = primFloatBinary 32 1 x y
   x * y = primFloatBinary 32 2 x y
-  negate = primFloatUnary 32 0
-  abs = primFloatUnary 32 1
-  signum = primFloatUnary 32 2
-  fromInteger = primFloatFromInteger 32
+  negate x = primFloatUnary 32 0 x
+  abs x = primFloatUnary 32 1 x
+  signum x = primFloatUnary 32 2 x
+  fromInteger x = primFloatFromInteger 32 x
 
 instance Real HelperFloat where
   toRational x = (m % 1) * (2 % 1) ^^ e
@@ -1238,21 +1281,21 @@ instance Fractional HelperFloat where
 
 instance Floating HelperFloat where
   pi = 3.141592653589793238
-  exp = primFloatUnary 32 3
-  log = primFloatUnary 32 4
-  sqrt = primFloatUnary 32 5
-  sin = primFloatUnary 32 6
-  cos = primFloatUnary 32 7
-  tan = primFloatUnary 32 8
-  asin = primFloatUnary 32 9
-  acos = primFloatUnary 32 10
-  atan = primFloatUnary 32 11
-  sinh = primFloatUnary 32 12
-  cosh = primFloatUnary 32 13
-  tanh = primFloatUnary 32 14
-  asinh = primFloatUnary 32 15
-  acosh = primFloatUnary 32 16
-  atanh = primFloatUnary 32 17
+  exp x = primFloatUnary 32 3 x
+  log x = primFloatUnary 32 4 x
+  sqrt x = primFloatUnary 32 5 x
+  sin x = primFloatUnary 32 6 x
+  cos x = primFloatUnary 32 7 x
+  tan x = primFloatUnary 32 8 x
+  asin x = primFloatUnary 32 9 x
+  acos x = primFloatUnary 32 10 x
+  atan x = primFloatUnary 32 11 x
+  sinh x = primFloatUnary 32 12 x
+  cosh x = primFloatUnary 32 13 x
+  tanh x = primFloatUnary 32 14 x
+  asinh x = primFloatUnary 32 15 x
+  acosh x = primFloatUnary 32 16 x
+  atanh x = primFloatUnary 32 17 x
   x ** y = primFloatBinary 32 4 x y
 
 instance RealFrac HelperFloat where
@@ -1266,11 +1309,11 @@ instance RealFloat HelperFloat where
   floatDigits _ = 24
   floatRange _ = (-125, 128)
   decodeFloat x = (primFloatMantissa 32 x, primFloatExponent 32 x)
-  encodeFloat = primFloatEncode 32
-  isNaN = primFloatTest 32 0
-  isInfinite = primFloatTest 32 1
-  isDenormalized = primFloatTest 32 2
-  isNegativeZero = primFloatTest 32 3
+  encodeFloat m e = primFloatEncode 32 m e
+  isNaN x = primFloatTest 32 0 x
+  isInfinite x = primFloatTest 32 1 x
+  isDenormalized x = primFloatTest 32 2 x
+  isNegativeZero x = primFloatTest 32 3 x
   isIEEE _ = True
 
 -- A number below nothing is shown with its sign, in brackets if it is
@@ -1307,10 +1350,10 @@ instance Num HelperDouble where
   x + y = primFloatBinary 64 0 x y
   x - y = primFloatBinary 64 1 x y
   x * y = primFloatBinary 64 2 x y
-  negate = primFloatUnary 64 0
-  abs = primFloatUnary 64 1
-  signum = primFloatUnary 64 2
-  fromInteger = primFloatFromInteger 64
+  negate x = primFloatUnary 64 0 x
+  abs x = primFloatUnary 64 1 x
+  signum x = primFloatUnary 64 2 x
+  fromInteger x = primFloatFromInteger 64 x
 
 instance Real HelperDouble where
   toRational x = (m % 1) * (2 % 1) ^^ e
@@ -1323,21 +1366,21 @@ instance Fractional HelperDouble where
 
 instance Floating HelperDouble where
   pi = 3.141592653589793238
-  exp = primFloatUnary 64 3
-  log = primFloatUnary 64 4
-  sqrt = primFloatUnary 64 5
-  sin = primFloatUnary 64 6
-  cos = primFloatUnary 64 7
-  tan = primFloatUnary 64 8
-  asin = primFloatUnary 64 9
-  acos = primFloatUnary 64 10
-  atan = primFloatUnary 64 11
-  sinh = primFloatUnary 64 12
-  cosh = primFloatUnary 64 13
-  tanh = primFloatUnary 64 14
-  asinh = primFloatUnary 64 15
-  acosh = primFloatUnary 64 16
-  atanh = primFloatUnary 64 17
+  exp x = primFloatUnary 64 3 x
+  log x = primFloatUnary 64 4 x
+  sqrt x = primFloatUnary 64 5 x
+  sin x = primFloatUnary 64 6 x
+  cos x = primFloatUnary 64 7 x
+  tan x = primFloatUnary 64 8 x
+  asin x = primFloatUnary 64 9 x
+  acos x = primFloatUnary 64 10 x
+  atan x = primFloatUnary 64 11 x
+  sinh x = primFloatUnary 64 12 x
+  cosh x = primFloatUnary 64 13 x
+  tanh x = primFloatUnary 64 14 x
+  asinh x = primFloatUnary 64 15 x
+  acosh x = primFloatUnary 64 16 x
+  atanh x = primFloatUnary 64 17 x
   x ** y = primFloatBinary 64 4 x y
 
 instance RealFrac HelperDouble where
@@ -1351,11 +1394,11 @@ instance RealFloat HelperDouble where
   floatDigits _ = 53
   floatRange _ = (-1021, 1024)
   decodeFloat x = (primFloatMantissa 64 x, primFloatExponent 64 x)
-  encodeFloat = primFloatEncode 64
-  isNaN = primFloatTest 64 0
-  isInfinite = primFloatTest 64 1
-  isDenormalized = primFloatTest 64 2
-  isNegativeZero = primFloatTest 64 3
+  encodeFloat m e = primFloatEncode 64 m e
+  isNaN x = primFloatTest 64 0 x
+  isInfinite x = primFloatTest 64 1 x
+  isDenormalized x = primFloatTest 64 2 x
+  isNegativeZero x = primFloatTest 64 3 x
   isIEEE _ = True
 
 instance Enum HelperFloat where

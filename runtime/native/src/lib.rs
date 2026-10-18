@@ -830,6 +830,13 @@ fn single(precision: Value) -> bool {
     int(precision) == 32
 }
 
+/// An Int as a floating-point number of a precision.
+#[no_mangle]
+pub extern "C" fn hazy_prim_float_from_int(precision: Value, number: Value) -> Value {
+    let number = int(number);
+    from_floating(if single(precision) { f64::from(number as f32) } else { number as f64 })
+}
+
 #[no_mangle]
 pub extern "C" fn hazy_prim_float_from_integer(precision: Value, number: Value) -> Value {
     let number = integer(number);
