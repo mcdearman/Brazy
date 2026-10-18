@@ -241,7 +241,7 @@ tables modules = Tables {members = family, borrowed = lends, lost = unshared, ta
             simplify . Uncurry.rewrite known . specialize look . simplify $
               inline time look global (specialize look found)
        in Map.map (Map.map (Map.mapWithKey improved)) before
-    inlined = foldl improve finished [1 .. 3]
+    inlined = foldl improve finished [1 .. 4]
     -- Whether calling a definition with every argument runs an action,
     -- which it does when one of the functions it is made of takes none.
     acts global = maybe False (elem 0) (known (Uncurry.whole global))
