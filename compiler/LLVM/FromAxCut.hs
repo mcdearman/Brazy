@@ -2891,10 +2891,10 @@ marshalOut state marshal invocation = case marshal of
 -- call into the program, which only LLVM can make. It is defined once, in
 -- the unit that is the program, and a package only declares it.
 prelude :: Target -> Shape -> String
-prelude Target {inlined} = \case
-  Whole -> runtime inlined ++ foreigns ++ "\n" ++ areas "internal " ++ "\n" ++ forcing "internal " ++ "\n" ++ mainFunction
-  Main -> runtime inlined ++ foreigns ++ "\n" ++ areas "" ++ "\n" ++ forcing "" ++ "\n" ++ mainFunction
-  Package -> runtime inlined ++ foreigns ++ "\n" ++ declared
+prelude target = \case
+  Whole -> runtime target ++ foreigns ++ "\n" ++ areas "internal " ++ "\n" ++ forcing "internal " ++ "\n" ++ mainFunction
+  Main -> runtime target ++ foreigns ++ "\n" ++ areas "" ++ "\n" ++ forcing "" ++ "\n" ++ mainFunction
+  Package -> runtime target ++ foreigns ++ "\n" ++ declared
 
 -- |
 -- The primitives the runtime has under names of their own.
@@ -2906,22 +2906,24 @@ foreigns =
     ]
 
 -- |
--- What the runtime provides, and counting, which every unit has for itself
--- so that it is done in place.
--- |
 -- What every unit is given of the runtime. Its small helpers are put in place
 -- wherever they are used, or else are never put in place and only called.
-runtime :: Bool -> String
-runtime inlined
-  | inlined = helpers
-  | otherwise = called helpers
+-- Each unit has its own of them, made the way the target makes what more
+-- than one unit has: one that is called is seen by the linker.
+runtime :: Target -> String
+runtime Target {inlined, common} = made helpers
   where
-    called text = case stripPrefix " alwaysinline {" text of
-      Just rest -> " noinline {" ++ called rest
-      Nothing -> case text of
-        letter : rest -> letter : called rest
-        [] -> []
+    made text = case stripPrefix "define linkonce_odr " text of
+      Just rest -> "define " ++ common ++ made rest
+      Nothing -> case stripPrefix " alwaysinline {" text of
+        Just rest | not inlined -> " noinline {" ++ made rest
+        _ -> case text of
+          letter : rest -> letter : made rest
+          [] -> []
 
+-- |
+-- What the runtime provides, and counting, which every unit has for itself
+-- so that it is done in place.
 helpers :: String
 helpers =
   """
