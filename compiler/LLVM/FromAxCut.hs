@@ -21,6 +21,7 @@ module LLVM.FromAxCut
     arm64,
     windows,
     withoutReuse,
+    calling,
     lending,
     checking,
     generate,
@@ -46,7 +47,7 @@ import Data.Char (isAlphaNum, isAscii, ord)
 import Data.Foldable (for_, toList)
 import Data.Int (Int64)
 import GHC.Float (castDoubleToWord64)
-import Data.List (intercalate, intersperse, nub)
+import Data.List (intercalate, intersperse, nub, stripPrefix)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Set (Set)
@@ -86,7 +87,12 @@ data Target = Target
     -- | How a definition that is made wherever it is used, such as the
     -- instance of a class for the tuples of a size, meets the same one made
     -- in another unit: what LLVM calls its linkage.
-    common :: String
+    common :: String,
+    -- | Whether the runtime's small helpers, such as the ones that count
+    -- references, are put in place wherever they are used. A program runs
+    -- faster with them in place, and takes clang about twice as long, and
+    -- twice the memory, to compile.
+    inlined :: !Bool
   }
 
 -- |
@@ -100,7 +106,8 @@ arm64 =
       lends = const Nothing,
       checked = False,
       -- The linker keeps one of them.
-      common = "linkonce_odr "
+      common = "linkonce_odr ",
+      inlined = True
     }
 
 -- |
@@ -129,9 +136,15 @@ withoutReuse :: Target -> Target
 withoutReuse target = target {reuse = False}
 
 -- |
+-- A target that calls the runtime's small helpers instead of putting them
+-- in place, for a program that is compiled quickly.
+calling :: Target -> Target
+calling target = target {inlined = False}
+
+-- |
 -- A whole program, ready to be compiled. Nothing in it is seen from outside.
 generate :: Target -> Program -> Builder
-generate target program = fromString (prelude Whole) <> fromString "\n" <> generateBody target program
+generate target program = fromString (prelude target Whole) <> fromString "\n" <> generateBody target program
 
 -- |
 -- A program without what every program starts with, for reading.
@@ -163,7 +176,7 @@ data Unit = Unit
 -- left to the linker.
 generateUnit :: Target -> Unit -> Builder
 generateUnit target Unit {defined, shared, start} =
-  fromString (prelude shape) <> fromString "\n" <> runST (generate' shape target defined shared start)
+  fromString (prelude target shape) <> fromString "\n" <> runST (generate' shape target defined shared start)
   where
     shape = case start of
       Just _ -> Main
@@ -2877,11 +2890,11 @@ marshalOut state marshal invocation = case marshal of
 -- Forcing is written here and not in the runtime because it ends in a tail
 -- call into the program, which only LLVM can make. It is defined once, in
 -- the unit that is the program, and a package only declares it.
-prelude :: Shape -> String
-prelude = \case
-  Whole -> runtime ++ foreigns ++ "\n" ++ areas "internal " ++ "\n" ++ forcing "internal " ++ "\n" ++ mainFunction
-  Main -> runtime ++ foreigns ++ "\n" ++ areas "" ++ "\n" ++ forcing "" ++ "\n" ++ mainFunction
-  Package -> runtime ++ foreigns ++ "\n" ++ declared
+prelude :: Target -> Shape -> String
+prelude Target {inlined} = \case
+  Whole -> runtime inlined ++ foreigns ++ "\n" ++ areas "internal " ++ "\n" ++ forcing "internal " ++ "\n" ++ mainFunction
+  Main -> runtime inlined ++ foreigns ++ "\n" ++ areas "" ++ "\n" ++ forcing "" ++ "\n" ++ mainFunction
+  Package -> runtime inlined ++ foreigns ++ "\n" ++ declared
 
 -- |
 -- The primitives the runtime has under names of their own.
@@ -2895,8 +2908,22 @@ foreigns =
 -- |
 -- What the runtime provides, and counting, which every unit has for itself
 -- so that it is done in place.
-runtime :: String
-runtime =
+-- |
+-- What every unit is given of the runtime. Its small helpers are put in place
+-- wherever they are used, or else are never put in place and only called.
+runtime :: Bool -> String
+runtime inlined
+  | inlined = helpers
+  | otherwise = called helpers
+  where
+    called text = case stripPrefix " alwaysinline {" text of
+      Just rest -> " noinline {" ++ called rest
+      Nothing -> case text of
+        letter : rest -> letter : called rest
+        [] -> []
+
+helpers :: String
+helpers =
   """
   @hazy_check_due = external global i64
   @hazy_reused = external global i64

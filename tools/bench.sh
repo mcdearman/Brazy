@@ -14,8 +14,8 @@ mkdir -p "$OUT"
 
 for bench_dir in bench/*/; do
     bench=$(basename "$bench_dir")
-    $HAZY -q "bench/$bench" --native "$OUT/$bench" --whole
-    $HAZY -q "bench/$bench" --native "$OUT/$bench-no-reuse" --whole --no-reuse
+    $HAZY -q "bench/$bench" --native "$OUT/$bench" --whole -O2
+    $HAZY -q "bench/$bench" --native "$OUT/$bench-no-reuse" --whole --no-reuse -O2
     for variant in "$bench" "$bench-no-reuse"; do
         # Run it once unmeasured: the first run of a new executable is slow
         # on macOS, which checks it over.
