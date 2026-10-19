@@ -30,6 +30,7 @@ import qualified AxCut.Lower as AxCut (lowerUnit)
 import qualified LLVM.FromAxCut as LLVM
   ( Unit (..),
     arm64,
+    calling,
     checking,
     generate,
     generateUnit,
@@ -306,7 +307,8 @@ data Execute = Execute
     failure :: !Failure,
     show :: !Show,
     format :: !Format,
-    bare :: !Bare
+    bare :: !Bare,
+    optimization :: !Int
   }
 
 defaultx :: Execute
@@ -326,7 +328,8 @@ defaultx =
       failure = Attempt,
       show = NoShow,
       format = Full,
-      bare = Standard
+      bare = Standard,
+      optimization = 1
     }
 
 order :: ArgOrder (Execute -> Execute)
@@ -359,6 +362,7 @@ options =
     Option [] ["whole"] (NoArg whole') "Compile packages again with the program, instead of linking them",
     Option [] ["no-reuse"] (NoArg noReuse) "Never build a value in the place of one just taken apart",
     Option [] ["no-lend"] (NoArg noLend) "Never lend a function what it only reads",
+    Option ['O'] [] (OptArg optimize "LEVEL") "Optimize: 0 to compile quickly, 1 (the default, and -O alone) for both, 2 for the fastest program",
     Option [] ["checked"] (NoArg checkedx) "Make a program whose counts of references can be checked as it runs",
     Option [] ["repl"] (NoArg interactive) "Start an interactive session",
     Option [] ["debug-message"] (NoArg debug) "Show debug messages",
@@ -383,6 +387,14 @@ options =
     noReuse execute = execute {reusing = False}
     noLend execute = execute {lending = False}
     checkedx execute = execute {checking = True}
+    optimize level execute = execute {optimization = leveled level}
+      where
+        leveled Nothing = 1
+        leveled (Just text)
+          | text == "0" = 0
+          | text == "1" = 1
+          | text == "2" = 2
+          | otherwise = error ("no optimization level " ++ text ++ ", only 0, 1 and 2")
     generate path execute = execute {mode = Generate path}
     debug execute = execute {debug = Debug}
     fail error execute = execute {failure = Expect error}
@@ -427,7 +439,8 @@ main'' args = case getOpt order options args of
             show,
             format,
             bare,
-            language
+            language,
+            optimization
           } =
             foldl (flip id) defaultx flags
     progress <- Status.start $ case verbose of
@@ -518,7 +531,7 @@ main'' args = case getOpt order options args of
                 (program, lends) <- whole all
                 emit (target ++ ".ll") $ LLVM.generate (machine lends) $ AxCut.lower program
                 finishWith (Status.finished progress (packageName target)) "clang" $
-                  ["-O1", "-Wno-override-module"]
+                  [clangLevel, "-Wno-override-module"]
                     ++ sections
                     ++ [target ++ ".ll", runtime]
                     ++ strip
@@ -538,7 +551,7 @@ main'' args = case getOpt order options args of
                 let objects = [directory </> "native.o" | Package {root = directory} <- packages]
                 Status.status progress "Linking" target
                 finishWith (Status.finished progress (packageName target)) "clang" $
-                  ["-O1", "-Wno-override-module"]
+                  [clangLevel, "-Wno-override-module"]
                     ++ sections
                     ++ [target ++ ".ll"]
                     ++ objects
@@ -561,7 +574,7 @@ main'' args = case getOpt order options args of
                     start = Nothing
                   }
             finishWith (Status.finished progress label) "clang" $
-              ["-O1", "-Wno-override-module"] ++ sections ++ ["-c", source, "-o", target]
+              [clangLevel, "-Wno-override-module"] ++ sections ++ ["-c", source, "-o", target]
           -- A package is the source of its modules, each where its name says,
           -- and what says which they are and how they are read. It is
           -- checked first: what is wrong with it is said here, and not to
@@ -606,8 +619,11 @@ main'' args = case getOpt order options args of
           pure $ Sequent.unit [length system .. length all - 1] all
         -- What native code is generated for.
         -- It is given which parameters each definition only reads.
-        machine lends = examined (lent (reused base))
+        machine lends = inlining (examined (lent (reused base)))
           where
+            inlining
+              | optimization >= 2 = id
+              | otherwise = LLVM.calling
             examined
               | checking = LLVM.checking
               | otherwise = id
@@ -620,6 +636,8 @@ main'' args = case getOpt order options args of
             lent
               | lending = LLVM.lending lends
               | otherwise = id
+        -- How hard clang works on what it is given.
+        clangLevel = "-O" ++ Prelude.show optimization
         -- What has the linker leave out the code that nothing reaches. Apple's
         -- linker can do it to any object. The others do it a section at a
         -- time, so there every function is given a section of its own.

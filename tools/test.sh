@@ -100,6 +100,15 @@ $HAZY -q "test/run/hello/source" --native ".test/native/hello-whole" --whole --c
 HAZY_CHECK=1 ".test/native/hello-whole" > ".test/native/hello-whole.result"
 diff "test/run/hello/result" ".test/native/hello-whole.result"
 
+# Run one test natively at the optimization levels that are not the default
+echo "=== Execution (native, other optimization levels) ==="
+for level in 0 2; do
+    echo "Running eval-apply at -O$level"
+    $HAZY -q "test/run/eval-apply/source" --native ".test/native/eval-apply-O$level" -O$level --checked
+    HAZY_CHECK=1 ".test/native/eval-apply-O$level" > ".test/native/eval-apply-O$level.result"
+    diff "test/run/eval-apply/result" ".test/native/eval-apply-O$level.result"
+done
+
 # Build each test package, and run the program that uses it
 echo "=== Packages ==="
 for package_dir in test/package/*/; do
