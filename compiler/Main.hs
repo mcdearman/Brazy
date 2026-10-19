@@ -86,6 +86,7 @@ import System.FilePath
 import System.IO
   ( IOMode (..),
     hClose,
+    hFlush,
     hSetEncoding,
     hSetNewlineMode,
     noNewlineTranslation,
@@ -96,6 +97,11 @@ import System.IO
   )
 import System.Info (os)
 import System.Process (callProcess)
+import Foreign.C.String (CString, withCString)
+import Foreign.C.Types (CInt (..))
+import Foreign.Marshal.Array (withArray0)
+import Foreign.Marshal.Utils (withMany)
+import Foreign.Ptr (Ptr, nullPtr)
 import System.IO.Unsafe (unsafeInterleaveIO, unsafePerformIO)
 import Status (Status)
 import qualified Status (finished, progress, start, status, warning)
@@ -511,7 +517,7 @@ main'' args = case getOpt order options args of
               Whole -> do
                 (program, lends) <- whole all
                 emit (target ++ ".ll") $ LLVM.generate (machine lends) $ AxCut.lower program
-                callProcess "clang" $
+                finishWith (Status.finished progress (packageName target)) "clang" $
                   ["-O1", "-Wno-override-module"]
                     ++ sections
                     ++ [target ++ ".ll", runtime]
@@ -531,7 +537,7 @@ main'' args = case getOpt order options args of
                       }
                 let objects = [directory </> "native.o" | Package {root = directory} <- packages]
                 Status.status progress "Linking" target
-                callProcess "clang" $
+                finishWith (Status.finished progress (packageName target)) "clang" $
                   ["-O1", "-Wno-override-module"]
                     ++ sections
                     ++ [target ++ ".ll"]
@@ -539,7 +545,6 @@ main'' args = case getOpt order options args of
                     ++ [runtime]
                     ++ strip
                     ++ ["-o", executable target]
-            Status.finished progress (packageName target)
           Object target -> do
             createDirectoryIfMissing True (dropFileName target)
             let label = packageName (takeDirectory target) ++ " to native code"
@@ -555,8 +560,8 @@ main'' args = case getOpt order options args of
                     shared = AxCut.lowerUnit arities shared,
                     start = Nothing
                   }
-            callProcess "clang" $ ["-O1", "-Wno-override-module"] ++ sections ++ ["-c", source, "-o", target]
-            Status.finished progress label
+            finishWith (Status.finished progress label) "clang" $
+              ["-O1", "-Wno-override-module"] ++ sections ++ ["-c", source, "-o", target]
           -- A package is the source of its modules, each where its name says,
           -- and what says which they are and how they are read. It is
           -- checked first: what is wrong with it is said here, and not to
@@ -649,6 +654,21 @@ main'' args = case getOpt order options args of
                 "So that nothing holds itself, it is worked out again each time it refers to itself. ",
                 "Defined at the top of the module it would be worked out once."
               ]
+        -- Run clang as the last thing the compiler does. Where a process
+        -- can become another, it does, and what the compiler held is given
+        -- back before clang starts: every module, which clang would otherwise
+        -- have to make room beside. Windows has no such thing, and there
+        -- clang is called and waited for, and then the compiler is done.
+        finishWith done program arguments
+          | os == "mingw32" = callProcess program arguments >> done
+          | otherwise = do
+              hFlush stdout
+              hFlush stderr
+              withCString program $ \name ->
+                withMany withCString (program : arguments) $ \pointers ->
+                  withArray0 nullPtr pointers $ \array -> do
+                    _ <- execvp name array
+                    ioError (userError ("could not run " ++ program))
         -- Where a program starts, lowered by itself.
         startProgram =
           Sequent.Program {definitions = Map.empty, entry = Sequent.start Runtime.main}
@@ -731,3 +751,9 @@ main'' args = case getOpt order options args of
         | otherwise -> do
             putStrLn $ "Unknown error type: " ++ error
             exitFailure
+
+
+-- |
+-- Become another program, with its name and arguments. It gives back only
+-- if it could not.
+foreign import ccall unsafe "execvp" execvp :: CString -> Ptr CString -> IO CInt
