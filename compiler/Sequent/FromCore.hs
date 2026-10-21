@@ -75,7 +75,7 @@ import qualified Semantic.Scope as Scope
 import Sequent.Primitive (Primitive (Export, Field))
 import Sequent.Borrow (Lending, lending)
 import Sequent.Hoist (Unshared (..), hoist)
-import Sequent.Inline (inline, specialize)
+import Sequent.Inline (copy, inline, isCopy, specialize)
 import qualified Sequent.Uncurry as Uncurry (rewrite, shape, split, whole)
 import qualified Sequent.Runtime as Runtime
 import Sequent.Simplify (simplify)
@@ -234,13 +234,23 @@ tables modules = Tables {members = family, borrowed = lends, lost = unshared, ta
     -- is done a few times over: each time reaches one call further.
     -- The fields of the instances that are known are read as what they
     -- are, before and after, and the calls that then give every argument
-    -- to a definition that is known are sent to the entry for them.
+    -- to a definition that is known are sent to the entry for them. A
+    -- function that calls itself and is given an instance that is known is
+    -- copied for it, but not the last time over, so that what is known in
+    -- the copy can be seen to. A copy is a definition of
+    -- the module it is made in, and of no other family.
     improve before time =
       let look = memberIn before
           improved global found =
             simplify . Uncurry.rewrite known . specialize look . simplify $
               inline time look global (specialize look found)
-       in Map.map (Map.map (Map.mapWithKey improved)) before
+          improving definitions
+            | time < 4 =
+                let made = Map.mapWithKey (\top members -> copy look top (Map.mapWithKey improved members)) definitions
+                    copies = Map.unions (map snd (Map.elems made))
+                 in Map.union (Map.map fst made) (Map.mapWithKey Map.singleton copies)
+            | otherwise = Map.map (Map.mapWithKey improved) definitions
+       in Map.map improving before
     inlined = foldl improve finished [1 .. 4]
     -- Whether calling a definition with every argument runs an action,
     -- which it does when one of the functions it is made of takes none.
@@ -368,7 +378,8 @@ unit indexes modules =
     reach known wanted = case Set.minView (Set.filter (`Map.notMember` known) wanted) of
       Nothing -> known
       Just (global, wanted)
-        | Just _ <- Runtime.generated (top global),
+        -- A copy of a function is made wherever it is used too.
+        | not (null (Runtime.generated (top global))) || isCopy global,
           Just members <- family (top global) ->
             reach (Map.union members known) (wanted <> globals (Map.elems members))
         | otherwise -> reach known wanted
