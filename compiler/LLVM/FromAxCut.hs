@@ -802,6 +802,59 @@ open value
   | otherwise = mempty
 
 -- |
+-- One reference fewer to a block that others still refer to, given where it
+-- is. Its header is read again: a field just shared may have been the block.
+-- A block that lives for as long as the program does is not counted.
+fewerOf :: State s -> Builder -> ST s Builder
+fewerOf state pointer = do
+  header <- local state
+  fixed <- local state
+  less <- local state
+  fewer <- local state
+  pure $
+    mconcat
+      [ line [header, fromString " = load i64, ptr ", pointer],
+        line [fixed, fromString " = icmp slt i64 ", header, fromString ", 0"],
+        line [less, fromString " = sub i64 ", header, fromString ", 4294967296"],
+        line [fewer, fromString " = select i1 ", fixed, fromString ", i64 ", header, fromString ", i64 ", less],
+        line [fromString "store i64 ", fewer, fromString ", ptr ", pointer]
+      ]
+
+-- |
+-- Give up a reference to a block whose contents have been read out and are
+-- now owned, given where it is and what was read. When others still refer
+-- to the block, what was read is shared here, without the runtime going
+-- through the block again. That is a fifth more code, so it is only done
+-- where the runtime's helpers are put in place too.
+opened :: State s -> Builder -> Builder -> [Builder] -> ST s Builder
+opened state value pointer fields
+  | not (counted value) = pure mempty
+  | not (inlined (target state)) || not (any counted fields) = pure (open value)
+  | otherwise = do
+      header <- local state
+      held <- local state
+      only <- local state
+      alone <- label state
+      shared <- label state
+      joined <- label state
+      fewer <- fewerOf state pointer
+      pure $
+        mconcat
+          [ line [header, fromString " = load i64, ptr ", pointer],
+            line [held, fromString " = lshr i64 ", header, fromString ", 32"],
+            line [only, fromString " = icmp eq i64 ", held, fromString ", 1"],
+            line [fromString "br i1 ", only, fromString ", label %", alone, fromString ", label %", shared],
+            alone <> fromString ":\n",
+            open value,
+            line [fromString "br label %", joined],
+            shared <> fromString ":\n",
+            foldMap share fields,
+            fewer,
+            line [fromString "br label %", joined],
+            joined <> fromString ":\n"
+          ]
+
+-- |
 -- A word as an address.
 address :: State s -> Builder -> ST s (Builder, Builder)
 address state value = do
@@ -1006,18 +1059,18 @@ function outer@State {target = Target {registers}, extra} name comment husk lent
         pure $ line [argument, fromString " = load i64, ptr ", spill index]
   (code, pointer) <- address state self
   captures <- for (zip [capturesAt ..] captured) $ \(index, _) -> load state pointer index
-  let taken = case kind of
-        Closure -> open self
-        -- A thunk that is forced and kept is given back by what keeps its
-        -- value; one that nothing else refers to is given back here.
-        Thunk -> line [fromString "call void @hazy_thunk_taken(i64 ", self, fromString ")"]
-        Join -> mempty
   (carrying, carried, token) <- case husk of
     Nothing -> pure (mempty, [], Nothing)
     Just size -> do
       (loading, held) <- load state pointer (capturesAt + length captured)
       (code, block) <- unpacked state held
       pure (loading, [(held, code)], Just (block, size))
+  taken <- case kind of
+    Closure -> opened state self pointer (map snd captures ++ map fst carried)
+    -- A thunk that is forced and kept is given back by what keeps its
+    -- value; one that nothing else refers to is given back here.
+    Thunk -> pure $ line [fromString "call void @hazy_thunk_taken(i64 ", self, fromString ")"]
+    Join -> pure mempty
   -- What was lent is not handed over: it is not the function's, and whoever
   -- lent it is reached through the consumer.
   check <- safepoint state (filter (not . lentValue) arguments ++ map snd captures ++ map fst carried)
@@ -1331,7 +1384,11 @@ continuation outer@State {target = Target {registers}, extra} hint husk forced o
   carried <- for (toList husk) $ \_ -> do
     (loading, held) <- load state pointer (capturesAt + length captured)
     (unpacking, block) <- unpacked state held
-    pure (loading, unpacking, block)
+    pure (loading, unpacking, (held, block))
+  giving <-
+    if null captured && null carried
+      then pure (open self)
+      else opened state self pointer (map snd captures ++ [held | (_, _, (held, _)) <- carried])
   modifySTRef' extra $ \known ->
     mconcat
       [ known,
@@ -1342,9 +1399,9 @@ continuation outer@State {target = Target {registers}, extra} hint husk forced o
         fromString ") {\n",
         if null captured && null carried then mempty else code <> foldMap fst captures,
         mconcat [loading | (loading, _, _) <- carried],
-        open self,
+        giving,
         mconcat [unpacking | (_, unpacking, _) <- carried],
-        enter state (quoted direct) (given ++ map snd captures ++ [block | (_, _, block) <- carried]),
+        enter state (quoted direct) (given ++ map snd captures ++ [block | (_, _, (_, block)) <- carried]),
         fromString "}\n"
       ]
   pure (entry, direct, borrowed)
@@ -1558,6 +1615,7 @@ wanted state token environment = \case
     tag <- local state
     otherwise' <- label state
     let reusing = reuse (target state)
+        inlining = inlined (target state)
     clauses <- for clauses $ \(Clause tag names body) -> do
       target <- label state
       -- What is read out of a value that was lent is lent too, and the
@@ -1575,7 +1633,9 @@ wanted state token environment = \case
           pure (code, Nothing)
         _ -> pure (mempty, token)
       (given, token) <- case incoming of
-        Just _ -> pure (open scrutinee, incoming)
+        Just _ -> do
+          giving <- opened state scrutinee pointer (map snd fields)
+          pure (giving, incoming)
         Nothing -> if reusing && size > 0 && counted scrutinee && wants size body
           then do
             held <- local state
@@ -1584,13 +1644,17 @@ wanted state token environment = \case
             shared <- label state
             joined <- label state
             token <- local state
+            splitting <-
+              if inlining
+                then (foldMap (share . snd) fields <>) <$> fewerOf state pointer
+                else pure $ line [fromString "call void @hazy_split(i64 ", scrutinee, fromString ")"]
             pure
               ( mconcat
                   [ line [held, fromString " = lshr i64 ", head', fromString ", 32"],
                     line [only, fromString " = icmp eq i64 ", held, fromString ", 1"],
                     line [fromString "br i1 ", only, fromString ", label %", last', fromString ", label %", shared],
                     shared <> fromString ":\n",
-                    line [fromString "call void @hazy_split(i64 ", scrutinee, fromString ")"],
+                    splitting,
                     line [fromString "br label %", joined],
                     last' <> fromString ":\n",
                     line [fromString "store i64 ", number (header huskKind 0 size + one), fromString ", ptr ", pointer],
@@ -1609,12 +1673,17 @@ wanted state token environment = \case
                   ],
                 Just (token, size)
               )
-          else pure (open scrutinee, Nothing)
+          else do
+            giving <- opened state scrutinee pointer (map snd fields)
+            pure (giving, Nothing)
       -- A clause that gives up some of the fields at once, as one that only
       -- reads a size does, does not count them when the value is shared:
       -- only the fields it keeps get a reference more, and the value one
       -- fewer. When the value was the only reference, it is given back and
-      -- the fields it gives up are given up.
+      -- the fields it gives up are given up. Where the runtime's helpers
+      -- are put in place, a clause that keeps every field does this too,
+      -- with the fields it has read, and the runtime is not asked to go
+      -- through the value again.
       let read' = zip names (map snd fields)
           used = case body of
             Substitute pairs _ -> Set.fromList (map snd pairs)
@@ -1628,7 +1697,7 @@ wanted state token environment = \case
             counted scrutinee
               && fresh'
               && not (reusing && size > 0 && wants size body)
-              && not (null unwanted)
+              && (if inlining then not (null read') else not (null unwanted))
       (given', environment') <-
         if partial
           then do
@@ -1637,7 +1706,7 @@ wanted state token environment = \case
             alone <- label state
             shared <- label state
             joined <- label state
-            fewer <- local state
+            fewer <- fewerOf state pointer
             pure
               ( mconcat
                   [ line [held, fromString " = lshr i64 ", head', fromString ", 32"],
@@ -1649,8 +1718,7 @@ wanted state token environment = \case
                     line [fromString "br label %", joined],
                     shared <> fromString ":\n",
                     foldMap (share . snd) wanted',
-                    line [fewer, fromString " = sub i64 ", head', fromString ", 4294967296"],
-                    line [fromString "store i64 ", fewer, fromString ", ptr ", pointer],
+                    fewer,
                     line [fromString "br label %", joined],
                     joined <> fromString ":\n"
                   ],
