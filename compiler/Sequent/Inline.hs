@@ -20,7 +20,7 @@
 -- The bodies that are put in are those of the definitions as they were
 -- before this was done to them. So this can be done over again, each time
 -- reaching one call further, and it always ends.
-module Sequent.Inline (inline, specialize) where
+module Sequent.Inline (inline, specialize, copy, isCopy) where
 
 import Control.Monad.ST (ST, runST)
 import Data.Map (Map)
@@ -30,8 +30,8 @@ import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Data.Traversable (for)
-import qualified Generate.Global as Global (Global)
-import qualified Sequent.Runtime as Runtime (helperGlobal)
+import qualified Generate.Global as Global (Global (..))
+import qualified Sequent.Runtime as Runtime (helperGlobal, showGlobal)
 import qualified Sequent.Uncurry as Uncurry (direct)
 import Sequent.Primitive (Primitive (Field, Foreign, IntToInteger, IntegerCastToInt, IntegerTruncateToInt))
 import qualified Sequent.Tree as Literal (Literal (..))
@@ -326,6 +326,187 @@ specialize find = producer Known {instances = Map.empty, integers = Map.empty, w
           Literal (Literal.Integer integer) -> Just integer
           Variable name -> Map.lookup name (integers known)
           _ -> Nothing
+
+-- |
+-- The most a function that calls itself can be made of and still be copied
+-- for what it is given.
+copied :: Int
+copied = 200
+
+-- |
+-- The definitions of one family, with a copy of each function that calls
+-- itself for an instance it is given where the instance is known, one that
+-- needs nothing. The instance has to be passed on as it is wherever the
+-- function calls itself. The copy takes the rest, and calls itself; the
+-- instance is forced where it starts, so that its methods are known there.
+-- A call that gives that instance is sent to the copy.
+--
+-- A function at the top that is given is not copied for. There are a great
+-- many of those, a parser for each thing that is parsed, and with their
+-- copies the compiler checked itself more slowly than without. Nor is a
+-- function that only builds a value, as an instance that needs others is:
+-- copied whole, those made the compiler's LLVM 15% longer and no faster.
+--
+-- A copy is a definition at the top of the module it is called from, named
+-- after the function and what it was given, so a call of the same function
+-- with the same anywhere in the module is sent to the same copy. It is
+-- given back with the family, to be put with the module's definitions; it
+-- is made wherever it is used, as a definition that is generated is.
+copy :: (Global.Global -> Maybe Producer) -> Global.Global -> Map Global.Global Producer -> (Map Global.Global Producer, Map Global.Global Producer)
+copy find top members = runST $ do
+  made <- newSTRef Map.empty
+  let producerx known = \case
+        Constructor tag fields -> Constructor tag <$> traverse (producerx known) fields
+        Mu covariable body -> Mu covariable <$> statement known body
+        Function parameters covariable body -> Function parameters covariable <$> statement known body
+        Thunk covariable body -> Thunk covariable <$> statement known body
+        other -> pure other
+      consumer known = \case
+        MuTilde binder body -> MuTilde binder <$> statement known body
+        Case alternatives otherwise -> do
+          alternatives <- for alternatives $ \(Alternative tag binders body) ->
+            Alternative tag binders <$> statement known body
+          Case alternatives <$> traverse (statement known) otherwise
+        Apply arguments result -> Apply <$> traverse (producerx known) arguments <*> consumer known result
+        Force result -> Force <$> consumer known result
+        other -> pure other
+      statement known = \case
+        Cut (Global function) (Apply arguments result)
+          | Just (Function parameters covariable body) <- find function,
+            length parameters == length arguments,
+            not (null (callsOf function body)),
+            not (builds covariable body),
+            size body <= copied,
+            passed <- static function parameters body,
+            fixed@(_ : _) <- [(index, given) | (index, argument) <- zip [0 ..] arguments, index `elem` passed, Just given <- [knownOf known argument]] -> do
+              let name = copyName top function fixed
+                  indexes = map fst fixed
+                  rest = [argument | (index, argument) <- zip [0 :: Int ..] arguments, index `notElem` indexes]
+              modifySTRef' made $ Map.insert name (copyOf function name parameters covariable body fixed)
+              Cut (Global name) <$> (Apply <$> traverse (producerx known) rest <*> consumer known result)
+        Cut (Global global) (Force (MuTilde binder@Binder {name} body))
+          | Just (_ : _) <- dictionary find global ->
+              Cut (Global global) . Force . MuTilde binder <$> statement (Map.insert name global known) body
+        Cut left right -> Cut <$> producerx known left <*> consumer known right
+        Primitive primitive arguments result ->
+          Primitive primitive <$> traverse (producerx known) arguments <*> consumer known result
+        LetRec bindings body -> do
+          bindings <- for bindings $ \(local, value) -> (,) local <$> producerx known value
+          LetRec bindings <$> statement known body
+        Abort -> pure Abort
+        Halt -> pure Halt
+      -- What an argument is, if it is an instance that is known.
+      knownOf known = \case
+        Global global
+          | Just (_ : _) <- dictionary find global -> Just global
+        Variable name -> Map.lookup name known
+        _ -> Nothing
+  rewritten <- traverse (producerx Map.empty) members
+  copies <- readSTRef made
+  pure (rewritten, copies)
+
+-- |
+-- Whether a definition is a copy of a function made by 'copy'. No name a
+-- program gives is like it.
+isCopy :: Global.Global -> Bool
+isCopy Global.Global {name} = Text.isPrefixOf (Text.pack "copy ") name
+
+-- |
+-- The parameters a function that calls itself passes on as they are,
+-- wherever it calls itself with every argument.
+static :: Global.Global -> [Binder] -> Statement -> [Int]
+static function parameters body =
+  [ index
+    | (index, Binder {name}) <- zip [0 ..] parameters,
+      and [passes index name arguments | arguments <- callsOf function body]
+  ]
+  where
+    passes index name arguments = case drop index arguments of
+      Variable given : _ -> given == name
+      _ -> False
+
+-- |
+-- Whether a function does nothing but build a value, after naming what goes
+-- in it, as an instance that needs others does. Its methods may call it,
+-- but it is not gone round, and a copy of it would make nothing faster.
+builds :: Text -> Statement -> Bool
+builds covariable = \case
+  Cut Constructor {} (Covariable given) -> given == covariable
+  Cut _ (MuTilde _ rest) -> builds covariable rest
+  Cut _ (Force (MuTilde _ rest)) -> builds covariable rest
+  LetRec _ rest -> builds covariable rest
+  _ -> False
+
+-- |
+-- The arguments of each call of a definition that a statement makes.
+callsOf :: Global.Global -> Statement -> [[Producer]]
+callsOf function = statement
+  where
+    producer = \case
+      Constructor _ fields -> concatMap producer fields
+      Mu _ body -> statement body
+      Function _ _ body -> statement body
+      Thunk _ body -> statement body
+      _ -> []
+    consumer = \case
+      MuTilde _ body -> statement body
+      Case alternatives otherwise -> concat [statement body | Alternative _ _ body <- alternatives] ++ foldMap statement otherwise
+      Apply arguments result -> concatMap producer arguments ++ consumer result
+      Force result -> consumer result
+      Covariable _ -> []
+    statement = \case
+      Cut (Global global) (Apply arguments result)
+        | global == function -> arguments : concatMap producer arguments ++ consumer result
+      Cut left right -> producer left ++ consumer right
+      Primitive _ arguments result -> concatMap producer arguments ++ consumer result
+      LetRec bindings body -> concatMap (producer . snd) bindings ++ statement body
+      Abort -> []
+      Halt -> []
+
+-- |
+-- What a copy of a function is called, in the module of a definition, given
+-- what it is given.
+copyName :: Global.Global -> Global.Global -> [(Int, Global.Global)] -> Global.Global
+copyName top function fixed = top {Global.name = Text.pack described}
+  where
+    described =
+      "copy " ++ Runtime.showGlobal function ++ concat [" " ++ show index ++ "=" ++ Runtime.showGlobal given | (index, given) <- fixed]
+
+-- |
+-- A copy of a function that calls itself, for what some of its parameters
+-- are given. Each of those is forced where it starts, and where it calls
+-- itself it calls the copy.
+copyOf :: Global.Global -> Global.Global -> [Binder] -> Text -> Statement -> [(Int, Global.Global)] -> Producer
+copyOf function name parameters covariable body fixed =
+  Function rest covariable (foldr force (redirect body) fixed)
+  where
+    indexes = map fst fixed
+    rest = [parameter | (index, parameter) <- zip [0 ..] parameters, index `notElem` indexes]
+    force (index, given) inner = Cut (Global given) (Force (MuTilde (parameters !! index) inner))
+    keep arguments = [argument | (index, argument) <- zip [0 :: Int ..] arguments, index `notElem` indexes]
+    redirect = \case
+      Cut (Global global) (Apply arguments result)
+        | global == function,
+          length arguments == length parameters ->
+            Cut (Global name) (Apply (map producer (keep arguments)) (consumer result))
+      Cut left right -> Cut (producer left) (consumer right)
+      Primitive primitive arguments result -> Primitive primitive (map producer arguments) (consumer result)
+      LetRec bindings inner -> LetRec [(local, producer value) | (local, value) <- bindings] (redirect inner)
+      Abort -> Abort
+      Halt -> Halt
+    producer = \case
+      Constructor tag fields -> Constructor tag (map producer fields)
+      Mu name' inner -> Mu name' (redirect inner)
+      Function parameters' result inner -> Function parameters' result (redirect inner)
+      Thunk name' inner -> Thunk name' (redirect inner)
+      other -> other
+    consumer = \case
+      MuTilde binder inner -> MuTilde binder (redirect inner)
+      Case alternatives otherwise ->
+        Case [Alternative tag binders (redirect inner) | Alternative tag binders inner <- alternatives] (redirect <$> otherwise)
+      Apply arguments result -> Apply (map producer arguments) (consumer result)
+      Force result -> Force (consumer result)
+      other -> other
 
 -- |
 -- What is known where something is: the names that are instances that

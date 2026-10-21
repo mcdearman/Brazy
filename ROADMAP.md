@@ -1372,13 +1372,32 @@ kept, and eval and apply:
       a function at each element, unless a function that gives back a
       function each time round were made to take one more argument instead,
       as GHC does
-- [ ] A recursive function given evidence or a function that is known is not
-      copied where it is called, so `Data.Map.insert` still compares through
-      `Ord`, and what is made by `build` and then gone through calls the
-      function it was given each time round. A copy for what it is given,
-      as a definition of its own
-- [ ] Making and giving back a block is a call into the runtime each time.
-      Most of it could be done where it happens, as counting is
+- [x] Making a block, and giving back one whose fields were read and are
+      now owned, is done where it happens, from the lists of free blocks, as
+      counting is. The runtime is called when a list is empty, when a block
+      is large, and to take apart a block whose count reached zero, which
+      gives up what it holds in turn. At `-O2`, a shared value that is
+      taken apart, or a closure entered while it is shared, shares what was
+      read of it there too, without the runtime going through it again
+      (PR #112): the compiler built by itself checks itself in 34.3 seconds
+      instead of 37.4
+- [x] A function that calls itself and is given an instance that is known
+      is copied for it (`Sequent.Inline.copy`): `Data.Map.insert` given the
+      instance of `Ord` for `Int` calls a copy that compares `Int`s. The
+      instance has to be passed on as it is wherever the function calls
+      itself. A copy is a definition of the module it is made in, made
+      wherever it is used, so each module has one for each function and
+      instance. Fewer blocks are made: a fifth to a third fewer in `Data.Map`,
+      `Data.Set` and counting words, and 6% fewer in the compiler checking
+      itself, which is 5% faster for 5% more LLVM (test `copies`)
+- [ ] What copying does not do: copy for a function at the top that is
+      given, as `foldr` given one is, or for an instance that needs others.
+      Both were tried on the compiler. With copies for a function at the
+      top, of which it has many, a parser for each thing it parses, it
+      checked itself in 37.4 to 38.1 seconds against 35.3 to 35.8 without.
+      An instance that needs others is copied whole, which made its LLVM
+      15% longer and it ran no faster. Counting with `foldr` and a function
+      at the top made a third fewer blocks with the first
 
 ## Track A: Hazy's own list
 
