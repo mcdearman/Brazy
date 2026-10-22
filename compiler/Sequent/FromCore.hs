@@ -235,21 +235,19 @@ tables modules = Tables {members = family, borrowed = lends, lost = unshared, ta
     -- The fields of the instances that are known are read as what they
     -- are, before and after, and the calls that then give every argument
     -- to a definition that is known are sent to the entry for them. A
-    -- function that calls itself and is given an instance that is known is
-    -- copied for it, but not the last time over, so that what is known in
-    -- the copy can be seen to. A copy is a definition of
-    -- the module it is made in, and of no other family.
+    -- function that calls itself and is given an instance that is known, or
+    -- a function written where it is called, is copied for it: see
+    -- 'copy'. A copy is a definition of the module it is made in, and of no
+    -- other family.
     improve before time =
       let look = memberIn before
           improved global found =
             simplify . Uncurry.rewrite known . specialize look . simplify $
               inline time look global (specialize look found)
-          improving definitions
-            | time < 4 =
-                let made = Map.mapWithKey (\top members -> copy look top (Map.mapWithKey improved members)) definitions
-                    copies = Map.unions (map snd (Map.elems made))
-                 in Map.union (Map.map fst made) (Map.mapWithKey Map.singleton copies)
-            | otherwise = Map.map (Map.mapWithKey improved) definitions
+          improving definitions =
+            let made = Map.mapWithKey (\top members -> copy time look top (Map.mapWithKey improved members)) definitions
+                copies = Map.unions (map snd (Map.elems made))
+             in Map.union (Map.map fst made) (Map.mapWithKey Map.singleton copies)
        in Map.map improving before
     inlined = foldl improve finished [1 .. 4]
     -- Whether calling a definition with every argument runs an action,
