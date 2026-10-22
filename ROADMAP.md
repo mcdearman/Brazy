@@ -1366,12 +1366,28 @@ kept, and eval and apply:
       is called ("Sequent.Simplify"), so the function given to what makes a
       list is gone into. A list that is used more than once is made as it
       was (test `fusion`)
-- [ ] What fusion does not do yet: go through a list from the left. `sum`,
-      `length` and `foldl'` are written going through it themselves, and a
-      list they are given is made. Written with `listFoldr`, each would make
-      a function at each element, unless a function that gives back a
-      function each time round were made to take one more argument instead,
-      as GHC does
+- [x] A list is gone through from the left without being made, by `sum`,
+      `product`, `length` and `foldl'`: the list's own `foldl'` and `length`
+      are written with `listFoldr`, each element given a function of what has
+      been gathered so far. A function that calls itself and is given a
+      function written where the call is, passing it on as it is, is copied
+      for it, and the function is written into the copy wherever it is used
+      (`Sequent.Inline.copy`). When every way through the copy then gives
+      back a function of one argument, as going through a list from the left
+      does, the copy is made to take that argument too, as GHC does with its
+      arity: a loop with an accumulator. `foldl' (+) 0 [1 .. 1000000]` makes
+      76 blocks where it made 4,000,076, and going through a million numbers
+      both ways a third as many as before (test `left-folds`)
+- [ ] What going through from the left does not do yet. A copy that does not
+      come out taking the argument more is not made: it would still make a
+      thunk for the rest of the list at each element, and those made the
+      compiler's LLVM a fifth longer and it ran no faster. So the lazy
+      `foldl` is left as the class has it, since what `Data.Map.fromList` is
+      given is most often made by a comprehension, and the loop of a
+      comprehension gone through from the left does not come out so: each
+      element is a list of one that is gone through, and the function that
+      does that is not known in the loop. The compiler checking itself is no
+      faster, for 6% more LLVM; counting words makes 3% more blocks
 - [x] Making a block, and giving back one whose fields were read and are
       now owned, is done where it happens, from the lists of free blocks, as
       counting is. The runtime is called when a list is empty, when a block
@@ -1392,6 +1408,8 @@ kept, and eval and apply:
       itself, which is 5% faster for 5% more LLVM (test `copies`)
 - [ ] What copying does not do: copy for a function at the top that is
       given, as `foldr` given one is, or for an instance that needs others.
+      (A function written where the call is is copied for, when that makes a
+      loop of going through a list from the left: see above.)
       Both were tried on the compiler. With copies for a function at the
       top, of which it has many, a parser for each thing it parses, it
       checked itself in 37.4 to 38.1 seconds against 35.3 to 35.8 without.

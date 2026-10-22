@@ -564,9 +564,17 @@ instance Monoid (HelperList a) where
   mempty = List []
 
 -- What a list holds is gone through as it is, without the class's way
--- round through a list.
+-- round through a list. Going through it from the left, strictly, as 'sum'
+-- and 'length' do, is going through it from the right to make a function
+-- of what has been gathered so far, so that a list that is made to be gone
+-- through is never made; the compiler makes that a loop with the gathered
+-- value as an argument ("Sequent.Inline"). The lazy 'foldl' is left as the
+-- class has it: what 'Data.Map.fromList' is given is most often made by a
+-- comprehension, whose loop does not come out as one.
 instance Foldable HelperList where
   foldr f z (List xs) = listFoldr f z xs
+  foldl' f z (List xs) = listFoldr (\x k acc -> let next = f acc x in next `seq` k next) (\acc -> acc) xs z
+  length (List xs) = listFoldr (\_ k count -> let next = count + 1 in next `seq` k next) (\count -> count) xs 0
   toList (List xs) = xs
   null (List []) = True
   null (List _) = False
