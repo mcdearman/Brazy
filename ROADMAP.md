@@ -1376,8 +1376,8 @@ kept, and eval and apply:
       back a function of one argument, as going through a list from the left
       does, the copy is made to take that argument too, as GHC does with its
       arity: a loop with an accumulator. `foldl' (+) 0 [1 .. 1000000]` makes
-      76 blocks where it made 4,000,076, and adding up a million numbers half
-      as many as before (test `left-folds`)
+      76 blocks where it made 4,000,076, and going through a million numbers
+      both ways a third as many as before (test `left-folds`)
 - [ ] What going through from the left does not do yet. A copy that does not
       come out taking the argument more is not made: it would still make a
       thunk for the rest of the list at each element, and those made the
