@@ -55,8 +55,6 @@ import Semantic.Check.Temporary.Pattern (Pattern)
 import qualified Semantic.Check.Temporary.Pattern as Pattern
 import Semantic.Check.Temporary.RightHandSide (RightHandSide)
 import qualified Semantic.Check.Temporary.RightHandSide as RightHandSide
-import Semantic.Check.Temporary.Select (Select)
-import qualified Semantic.Check.Temporary.Select as Select
 import Semantic.Check.Temporary.UpdateInfo (UpdateInfo)
 import qualified Semantic.Check.Temporary.UpdateInfo as UpdateInfo
 import qualified Semantic.Check.Binding.Term as TermBinding (TermBinding (..), Type (..))
@@ -80,7 +78,6 @@ import qualified Semantic.Tree.Declarations as Proper.Declarations
 import Semantic.Tree.Expression (Explicit (..))
 import qualified Semantic.Tree.Expression as Semantic (Expression (..), Field (..))
 import qualified Semantic.Tree.Expression as Solved
-import qualified Semantic.Tree.Select as Semantic (Select (..))
 import qualified Semantic.Unify as Unify
 import Syntax.Position (Position)
 import Syntax.StringLiteral (StringLiteral)
@@ -131,7 +128,7 @@ data Expression s scope
       { base :: !(Expression s scope),
         updatePosition :: !Position,
         updateType :: !(Type2.Index scope),
-        updates :: !(Strict.Vector1 (Select s scope)),
+        updates :: !(Strict.Vector1 (Field s scope)),
         updateInfo :: !(UpdateInfo s scope),
         permissive :: !Prelude.Bool
       }
@@ -449,13 +446,15 @@ check
       Builtin.index pure get updateType
     instancex <- Simple.Data.instanciateMark context updatePosition datax
     let typex' = DataInstance.baseType instancex updateType
+        updateInfo = DataInstance.updateInfo instancex
+        checkSelect Semantic.Field {index, field} = do
+          -- What is put in has the type that the value holds there.
+          Unify.unify context updatePosition typex (DataInstance.selected instancex updateType index)
+          field <- fill context (DataInstance.selectorEntry instancex index) field
+          pure Field {index, field}
     Unify.unify context updatePosition typex typex'
     base <- check context typex base
-    updates <- sequence $ flip fmap updates $ \update@Semantic.Select {pick} -> do
-      -- What is put in has the type that the value holds there.
-      Unify.unify context updatePosition typex (DataInstance.selected instancex updateType pick)
-      Select.check (\pick -> fill context (DataInstance.selectorEntry instancex pick)) update
-    let updateInfo = DataInstance.updateInfo instancex
+    updates <- sequence $ flip fmap updates checkSelect
     pure
       Update
         { base,
@@ -560,7 +559,10 @@ solve = \case
         }
   Update {base, updatePosition, updateType, updates, updateInfo, permissive} -> do
     base <- solve base
-    updates <- traverse Select.solve updates
+    let solveField Field {index, field} = do
+          field <- solve field
+          pure $ Solved.Field {index, field}
+    updates <- traverse solveField updates
     updateInfo <- UpdateInfo.solve updateInfo
     pure
       Solved.Update
