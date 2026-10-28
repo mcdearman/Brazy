@@ -17,6 +17,7 @@ import Syntax.Parser
     betweenParens,
     char,
     decimal,
+    optional,
     position,
     sepByComma,
     text,
@@ -26,6 +27,8 @@ import Syntax.Parser
   )
 import qualified Syntax.Lexer as Lexer (Lexeme (Bang))
 import qualified Syntax.Parser as Parser
+import Syntax.Tree.Scheme (Scheme)
+import qualified Syntax.Tree.Scheme as Scheme
 import Syntax.Position (Position)
 import Syntax.Tree.Marked (Marked (..))
 import qualified Syntax.Tree.Marked as Marked
@@ -130,6 +133,13 @@ data Pattern position
         patternx :: !(Pattern position)
       }
   | -- |
+    -- > (x :: t)
+    Signature
+      { startPosition :: !position,
+        patternx :: !(Pattern position),
+        signature :: !(Scheme position)
+      }
+  | -- |
     -- > !x
     Strict
       { startPosition :: !position,
@@ -178,6 +188,7 @@ instance TermBindingVariables Pattern where
     Tuple {elements} -> foldMap termBindingVariables elements
     List {items} -> foldMap termBindingVariables items
     Irrefutable {patternx} -> termBindingVariables patternx
+    Signature {patternx} -> termBindingVariables patternx
     Strict {patternx} -> termBindingVariables patternx
     Cons {head, tail} -> termBindingVariables head ++ termBindingVariables tail
     Infix {left, right} -> termBindingVariables left ++ termBindingVariables right
@@ -234,7 +245,7 @@ parse2 =
           [ at <$> (token "@" *> parse2),
             pure variable
           ],
-      tuple <$> position <*> try (betweenParens (sepByComma parse)),
+      tuple <$> position <*> try (betweenParens (sepByComma signed)),
       list <$> position <*> betweenBrackets (Strict.Vector.fromList <$> sepByComma parse),
       position <**> (Variable.parseLiteral <**> parseConstructor),
       integer <$> position <*> Parser.integer,
@@ -271,6 +282,12 @@ parse2 =
           constructor,
           fields
         }
+
+    -- A pattern in brackets, or in a tuple, may say its type.
+    signed = position <**> (signature <$> parse <*> optional (token "::" *> Scheme.parse))
+    signature patternx = \case
+      Nothing -> const patternx
+      Just signature -> \startPosition -> Signature {startPosition, patternx, signature}
 
     tuple startPosition [] = Unit {startPosition}
     tuple _ [pattern] = pattern
