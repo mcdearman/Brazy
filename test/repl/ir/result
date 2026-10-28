@@ -27,7 +27,7 @@ TypeLambdaOver {
                     methodIndex = 0
                   },
                   evidence = Variable {
-                    variable = (Direct Num Int),
+                    variable = Direct Num Int,
                     instanciation = Mono
                   },
                   instanciation = Mono,
