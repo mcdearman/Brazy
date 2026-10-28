@@ -1510,6 +1510,15 @@ instance Foldable (HelperTuple2 a) where
 instance Traversable (HelperTuple2 a) where
   traverse f (Tuple2 (a, b)) = fmap (\c -> Tuple2 (a, c)) (f b)
 
+-- A value with something put together alongside: the writer monad.
+instance (Monoid a) => Applicative (HelperTuple2 a) where
+  pure b = Tuple2 (mempty, b)
+  Tuple2 (a, f) <*> Tuple2 (a', b) = Tuple2 (a <> a', f b)
+
+instance (Monoid a) => Monad (HelperTuple2 a) where
+  Tuple2 (a, b) >>= f = case f b of
+    Tuple2 (a', c) -> Tuple2 (a <> a', c)
+
 -- What GHC says of an index that is not in its range.
 indexError :: (Show a) => String -> (a, a) -> a -> b
 indexError name bounds i =
@@ -1581,6 +1590,9 @@ instance (Ix a, Ix b) => Ix (HelperTuple2 a b) where
   inRange (Tuple2 (l1, l2), Tuple2 (u1, u2)) (Tuple2 (i1, i2)) = inRange (l1, u1) i1 && inRange (l2, u2) i2
 
 newtype HelperTuple3 a b c = Tuple3 (a, b, c)
+
+instance Functor (HelperTuple3 a b) where
+  fmap f (Tuple3 (a, b, c)) = Tuple3 (a, b, f c)
 
 instance (Eq a, Eq b, Eq c) => Eq (HelperTuple3 a b c) where
   Tuple3 x == Tuple3 y = x == y

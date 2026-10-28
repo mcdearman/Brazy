@@ -1815,7 +1815,17 @@ Missing:
       refused where it is checked. A strict field in a GADT constructor's
       type, `C :: !Int -> T`, works already. What a strict function type
       means is Freddy's strictness in types (Track B)
-- [ ] Remaining builtin instances
+- [x] Remaining builtin instances. Programs that use the standard classes
+      on the standard types (tuples to twelve, functions, `Maybe`,
+      `Either`, `Ordering`, `()`, the numbers, words and `Int`s of each
+      width, `Ratio`, `Complex`, `Identity`, `Const`, `Map` and `Set`) were
+      run against GHC a line at a time. What was missing is there now:
+      `Semigroup` and `Monoid` of `Maybe`, `Semigroup` of `Either`, the
+      monad of a pair whose first is a monoid, `Functor` of a triple,
+      `Alternative` and `MonadPlus` of `IO` (an error of input or output
+      gives way), and `Show` of `Identity` as GHC shows it, not as a record
+      (test `builtin-instances`, which agrees with GHC). An `Int` is 63 bits,
+      so its bounds are not GHC's
 - [x] Pattern type signatures for `ScopedTypeVariables`: `(x :: t)` in
       brackets, alone or in a tuple, wherever a pattern goes. The type is
       resolved as a signature's is: a type variable a `forall` brought into

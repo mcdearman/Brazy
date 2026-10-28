@@ -1,0 +1,8 @@
+(Just [1,2],Nothing,Just [1,3])
+Just (Sum {getSum = 12})
+(Right 'a',Left 2)
+(("ab",3),("xy",2),("",5))
+([1,2,3],[2,4,6])
+(('a',True,4),("x",'y',8))
+(Identity 3,Identity "True",[Identity 'a'],Just (Identity (-2)))
+(3,4,5)
