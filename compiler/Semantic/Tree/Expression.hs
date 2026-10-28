@@ -124,6 +124,13 @@ data Expression layout stage scope
         left :: !(CallHead layout stage scope),
         right :: !(Expression layout stage scope)
       }
+  | -- | A left section with postfix operators off: a function of the
+    -- operator's second argument, @\y -> operator operand y@.
+    LeftSection
+      { operatorPosition :: !Position,
+        operator :: !(CallHead layout stage scope),
+        operand :: !(Expression layout stage scope)
+      }
   | Annotation
       { expression :: !(Explicit layout stage scope),
         operatorPosition :: !Position,
@@ -259,6 +266,12 @@ instance Shift.Functor (Expression layout stage) where
           left = Shift.map category left,
           right = Shift.map category right
         }
+    LeftSection {operatorPosition, operator, operand} ->
+      LeftSection
+        { operatorPosition,
+          operator = Shift.map category operator,
+          operand = Shift.map category operand
+        }
     Generalized {expression} -> Generalized {expression = Shift.map category expression}
     RunSTAlone {startPosition} -> RunSTAlone {startPosition}
     Annotation {expression, operatorPosition, annotation, instanciation} ->
@@ -319,6 +332,11 @@ instance FreeTermVariables Expression where
       concat
         [ freeTermVariables target left,
           freeTermVariables target right
+        ]
+    LeftSection {operator, operand} ->
+      concat
+        [ freeTermVariables target operator,
+          freeTermVariables target operand
         ]
     Annotation {expression} ->
       freeTermVariables target expression
@@ -435,6 +453,12 @@ instance Connect Expression where
           left = connect left,
           right = connect right
         }
+    LeftSection {operatorPosition, operator, operand} ->
+      LeftSection
+        { operatorPosition,
+          operator = connect operator,
+          operand = connect operand
+        }
     Generalized {expression} -> Generalized {expression = connect expression}
     RunSTAlone {startPosition} -> RunSTAlone {startPosition}
     Annotation {expression, operatorPosition, annotation} ->
@@ -542,6 +566,12 @@ instance Connect Expression where
         { operatorPosition,
           left = seperate left,
           right = seperate right
+        }
+    LeftSection {operatorPosition, operator, operand} ->
+      LeftSection
+        { operatorPosition,
+          operator = seperate operator,
+          operand = seperate operand
         }
     Generalized {expression} -> Generalized {expression = seperate expression}
     RunSTAlone {startPosition} -> RunSTAlone {startPosition}
