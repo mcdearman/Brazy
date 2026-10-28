@@ -161,6 +161,53 @@ errorCall message =
   primThrow (Thrown "ErrorCall" (-2) (pack message) (primUnsafeCoerce (ErrorCall message)))
 
 -- |
+-- What arithmetic throws, as GHC's does. Hazy throws only these two: for a
+-- division by nothing, and for a ratio over nothing.
+data ArithException
+  = Overflow
+  | Underflow
+  | LossOfPrecision
+  | DivideByZero
+  | Denormal
+  | RatioZeroDenominator
+  deriving (Eq, Ord)
+
+instance Show ArithException where
+  showsPrec _ exception = showString $ case exception of
+    Overflow -> "arithmetic overflow"
+    Underflow -> "arithmetic underflow"
+    LossOfPrecision -> "loss of precision"
+    DivideByZero -> "divide by zero"
+    Denormal -> "denormal"
+    RatioZeroDenominator -> "Ratio has zero denominator"
+
+-- |
+-- Throw what arithmetic throws. What nothing catches is said as it is, and
+-- the program fails, as with 'error'.
+arithmetic :: ArithException -> a
+arithmetic exception =
+  primThrow (Thrown "ArithException" (-2) (pack (show exception)) (primUnsafeCoerce exception))
+
+-- |
+-- What is thrown where no pattern matches. GHC says where; Hazy does not
+-- know by then.
+data PatternMatchFail = PatternMatchFail String
+
+instance Show PatternMatchFail where
+  showsPrec _ (PatternMatchFail message) = showString message
+
+-- |
+-- Throw what is thrown where no pattern matches. The compiler puts this
+-- where patterns run out, by way of "Hazy.Helper". It is a function, not
+-- a value: a value that threw would be left being worked out, and would
+-- seem to loop the next time it was asked for.
+patternMatchFail :: b -> a
+patternMatchFail _ =
+  primThrow (Thrown "PatternMatchFail" (-2) (pack message) (primUnsafeCoerce (PatternMatchFail message)))
+  where
+    message = "Non-exhaustive patterns"
+
+-- |
 -- Throw an error of input or output from anywhere.
 throwIOError :: IOError -> a
 throwIOError problem =
