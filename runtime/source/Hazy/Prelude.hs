@@ -286,7 +286,7 @@ asTypeOf :: a -> a -> a
 asTypeOf = const
 
 error :: String -> a
-error = errorText . pack
+error = errorCall
 
 -- There is no stack trace to leave out.
 errorWithoutStackTrace :: [Char] -> a
