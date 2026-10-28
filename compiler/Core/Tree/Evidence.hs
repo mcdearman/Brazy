@@ -5,6 +5,7 @@ import qualified Core.Substitute as Substitute
 import {-# SOURCE #-} Core.Tree.Instanciation (InstanciationF)
 import {-# SOURCE #-} qualified Core.Tree.Instanciation as Instanciation
 import qualified Core.Type.Functor as Core
+import qualified Core.Type.Show as Core.Type
 import qualified Data.Vector as Vector
 import Data.Void (Void)
 import qualified Semantic.Index.Evidence as Evidence
@@ -45,27 +46,10 @@ data EvidenceF logical scope
       { function :: !(EvidenceF logical scope),
         arguments :: ![EvidenceF logical scope]
       }
+  deriving (Show)
 
-instance (Show logical) => Show (EvidenceF logical scope) where
-  showsPrec d = \case
-    Logical logical -> showParen (d > 10) $ showString "Logical " . showsPrec 11 logical
-    Variable {variable, instanciation} ->
-      showString "Variable { variable = "
-        . showsPrec 11 variable
-        . showString ", instanciation = "
-        . showsPrec 11 instanciation
-        . showString " }"
-    Super {base, index} ->
-      showString "Super { base = "
-        . showsPrec 11 base
-        . showString ", index = "
-        . showsPrec 11 index
-        . showString " }"
-    Held {term} -> showParen (d > 10) $ showString "Held " . showsPrec 11 term
-    Abstract {count, body} ->
-      showParen (d > 10) $ showString "Abstract " . showsPrec 11 count . showString " " . showsPrec 11 body
-    Applied {function, arguments} ->
-      showParen (d > 10) $ showString "Applied " . showsPrec 11 function . showString " " . showsPrec 11 arguments
+instance Core.Type.Show EvidenceF where
+  showsPrec = showsPrec
 
 instance (Show logical) => Scope.Show (EvidenceF logical) where
   showsPrec = showsPrec

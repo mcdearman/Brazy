@@ -1,5 +1,6 @@
 module Core.Tree.Entry where
 
+import Core.Instanciate (Normal, Store (Empty))
 import qualified Core.Substitute as Substitute
 import Core.Tree.Constraints (ConstraintsF (..))
 import Core.Tree.Forall (ForallOver (..))
@@ -14,11 +15,13 @@ import Semantic.Stage (Check)
 import Semantic.Tree.Entry (Restricted (..))
 import qualified Semantic.Tree.Entry as Solved
 import Semantic.Tree.StrictnessAnnotation (StrictnessAnnotation (..))
+import Syntax.Position (Position)
 
-type Entry = EntryF Void
+type Entry = EntryF Normal Void
 
-data EntryF logical scope = Entry
-  { -- | The type of what is held, which may have a @forall@ of its own.
+data EntryF instanciate logical scope = Entry
+  { position :: !(Store instanciate Position),
+    -- | The type of what is held, which may have a @forall@ of its own.
     entry :: !(ForallOver TypeF logical scope),
     strict :: !(TypeF logical scope)
   }
@@ -26,32 +29,35 @@ data EntryF logical scope = Entry
 
 -- |
 -- Whether the type of what is held has a @forall@ of its own.
-quantified :: EntryF logical scope -> Bool
+quantified :: EntryF instanciate logical scope -> Bool
 quantified Entry {entry = ForallOver {parameters, constraints}} = case constraints of
   None -> not (null parameters)
   Constraints {} -> True
 
-instance Shift0.Functor (EntryF logical) where
+instance Shift0.Functor (EntryF instanciate logical) where
   map = Shift.mapDefault
 
-instance Shift.Functor (EntryF logical) where
-  map category Entry {entry, strict} =
+instance Shift.Functor (EntryF instanciate logical) where
+  map category Entry {position, entry, strict} =
     Entry
-      { entry = Shift.map category entry,
+      { position,
+        entry = Shift.map category entry,
         strict = Shift.map category strict
       }
 
-instance (logical ~ Void) => Substitute.Functor (EntryF logical) where
-  map category Entry {entry, strict} =
+instance (logical ~ Void) => Substitute.Functor (EntryF instanciate logical) where
+  map category Entry {position, entry, strict} =
     Entry
-      { entry = Substitute.map category entry,
+      { position,
+        entry = Substitute.map category entry,
         strict = Substitute.map category strict
       }
 
 simplify :: Solved.Entry position Check scope -> Entry scope
 simplify Solved.Entry {entry = Restricted entry, strict} =
   Entry
-    { entry = Forall.simplify entry,
+    { position = Empty,
+      entry = Forall.simplify entry,
       strict = case strict of
         Lazy -> Type.Constructor Type2.Lazy
         Strict -> Type.Constructor Type2.Strict

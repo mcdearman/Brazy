@@ -2,6 +2,8 @@ module Semantic.Check.Temporary.CallHead where
 
 import Control.Monad.ST (ST)
 import qualified Core.Builtin as Builtin
+import qualified Core.Tree.Class as Class
+import Core.Tree.Combinators.Delay (Delay (..))
 import Core.Tree.Type ((-#>))
 import Core.Tree.TypeDeclaration (assumeClass, assumeData)
 import qualified Data.Vector.Strict as Strict.Vector
@@ -111,7 +113,7 @@ check
         instancex <- Simple.Class.instanciate context methodPosition typeIndex classx
         let function = ClassInstance.methodFunction instancex methodIndex
             methodInfo = ClassInstance.info instancex
-            evidence = ClassInstance.evidence instancex
+            Delay evidence = Class.evidence instancex
         (typex', instanciation) <- Unify.instanciate context methodPosition function
         Unify.unify context methodPosition typex typex'
         pure Method {methodPosition, method, evidence, instanciation, methodInfo}
