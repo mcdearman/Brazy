@@ -2,13 +2,15 @@ module Control.Exception
   ( module Control.Exception,
     IOException,
     ErrorCall (..),
+    ArithException (..),
+    PatternMatchFail (..),
   )
 where
 
 import Data.Text (Text, pack, unpack)
 import Hazy (primCatch, primThrow, primUnsafeCoerce)
 import Hazy.Prelude (IO (..), runIO)
-import Hazy.PreludeIO (Any, ErrorCall (..), IOException, Thrown (..))
+import Hazy.PreludeIO (Any, ArithException (..), ErrorCall (..), IOException, PatternMatchFail (..), Thrown (..))
 
 -- What a type of exception is called, to tell it from the others.
 newtype Tag e = Tag String
@@ -120,6 +122,17 @@ instance Show SomeException where
 -- message, as an error does.
 instance Exception ErrorCall where
   exceptionTag = Tag "ErrorCall"
+  exceptionStatus _ = -2
+
+-- What a division by nothing throws, which ends a program that does not
+-- catch it as an error does.
+instance Exception ArithException where
+  exceptionTag = Tag "ArithException"
+  exceptionStatus _ = -2
+
+-- What is thrown where no pattern matches.
+instance Exception PatternMatchFail where
+  exceptionTag = Tag "PatternMatchFail"
   exceptionStatus _ = -2
 
 instance Exception SomeException where

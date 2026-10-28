@@ -105,7 +105,7 @@ generate entry modules = fst (complete entry modules)
 complete :: Global.Global -> Vector Core.Module -> (Program, Global.Global -> Maybe Lending)
 complete entry modules =
   ( Program
-      { definitions = reach Map.empty (globals (start entry) <> Set.fromList (exportsOf modules [0 .. Vector.length modules - 1])),
+      { definitions = reach Map.empty (globals (start entry) <> Set.fromList (kept <> exportsOf modules [0 .. Vector.length modules - 1])),
         entry = start entry
       },
     lends
@@ -121,6 +121,12 @@ complete entry modules =
       Just (global, wanted) ->
         let found = find global
          in reach (Map.insert global found known) (wanted <> globals found)
+
+-- |
+-- What a program keeps though nothing in it names it: what the compiler
+-- puts where patterns run out, which is put there last ("AxCut.Lower").
+kept :: [Global.Global]
+kept = [Runtime.helperGlobal "patternMatchFail"]
 
 -- |
 -- The definitions of some of the modules that C calls by a name, as foreign
@@ -333,7 +339,7 @@ reached :: Statement -> Unit -> Unit
 reached entry unit@Unit {own, shared, exports} =
   unit {own = Map.restrictKeys own wanted, shared = Map.restrictKeys shared wanted}
   where
-    wanted = go Set.empty (Set.toList (globals entry) ++ exports)
+    wanted = go Set.empty (Set.toList (globals entry) ++ kept ++ exports)
     go seen = \case
       [] -> seen
       global : rest
