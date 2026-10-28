@@ -36,8 +36,8 @@ import Semantic.Check.Temporary.ConstructorInfo (ConstructorInfo)
 import qualified Semantic.Check.Temporary.ConstructorInfo as ConstructorInfo
 import Semantic.Check.Temporary.PatternField (Field)
 import qualified Semantic.Check.Temporary.PatternField as Field
-import Semantic.Check.TermBinding (TermBinding (TermBinding), Type (..))
-import qualified Semantic.Check.TypeBinding as TypeBinding
+import Semantic.Check.Binding.Term (TermBinding (TermBinding), Type (..))
+import qualified Semantic.Check.Binding.Type as TypeBinding
 import qualified Semantic.Index.Constructor as Constructor
 import qualified Semantic.Index.Table.Local as Local
 import qualified Semantic.Index.Table.Term as Term
@@ -54,7 +54,7 @@ import Semantic.Tree.Combinators.Inferred (Inferred (..))
 import qualified Semantic.Tree.Pattern as Semantic
 import qualified Semantic.Tree.Pattern as Solved
 import qualified Semantic.Tree.PatternField as Padding (Field (..))
-import Semantic.Check.LocalBinding (Equality (Given), shiftEquality)
+import Semantic.Check.Binding.Local (Equality (Given), shiftEquality)
 import qualified Semantic.Unify as Unify
 import Syntax.Position (Position)
 import Syntax.StringLiteral (StringLiteral)

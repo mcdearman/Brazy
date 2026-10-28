@@ -204,7 +204,7 @@ executable hazy
     Semantic.Check.Info.Method
     Semantic.Check.Info.Selector
     Semantic.Check.Info.Update
-    Semantic.Check.LocalBinding
+    Semantic.Check.Binding.Local
     Semantic.Check.Mask
     Semantic.Check.Simple.Constructor
     Semantic.Check.Simple.Data
@@ -240,9 +240,9 @@ executable hazy
     Semantic.Check.Temporary.TypeDefinition
     Semantic.Check.Temporary.TypePattern
     Semantic.Check.Temporary.UpdateInfo
-    Semantic.Check.TermBinding
+    Semantic.Check.Binding.Term
     Semantic.Check.TypeAnnotation
-    Semantic.Check.TypeBinding
+    Semantic.Check.Binding.Type
     Semantic.Connect
     Semantic.FreeVariables
     Semantic.Functor2

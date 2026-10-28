@@ -7,7 +7,7 @@ import Core.Tree.TypeDeclaration (assumeData)
 import Data.Foldable (toList)
 import qualified Core.Builtin as Builtin
 import Semantic.Check.Context (Context (..))
-import qualified Semantic.Check.TypeBinding as TypeBinding
+import qualified Semantic.Check.Binding.Type as TypeBinding
 import qualified Semantic.Index.Constructor as Constructor
 import qualified Semantic.Index.Table.Type as Type
 import qualified Semantic.Shift as Shift

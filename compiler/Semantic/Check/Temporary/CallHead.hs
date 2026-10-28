@@ -20,8 +20,8 @@ import Semantic.Check.Temporary.ConstructorInfo (ConstructorInfo)
 import qualified Semantic.Check.Temporary.ConstructorInfo as ConstructorInfo
 import Semantic.Check.Temporary.SelectorInfo (SelectorInfo)
 import qualified Semantic.Check.Temporary.SelectorInfo as SelectorInfo
-import Semantic.Check.TermBinding (TermBinding (..), Type (..))
-import qualified Semantic.Check.TypeBinding as TypeBinding
+import Semantic.Check.Binding.Term (TermBinding (..), Type (..))
+import qualified Semantic.Check.Binding.Type as TypeBinding
 import qualified Semantic.Index.Constructor as Constructor
 import qualified Semantic.Index.Method as Method
 import qualified Semantic.Index.Selector as Selector

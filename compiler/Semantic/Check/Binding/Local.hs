@@ -1,4 +1,4 @@
-module Semantic.Check.LocalBinding where
+module Semantic.Check.Binding.Local where
 
 import Control.Monad.ST (ST)
 import qualified Core.Tree.Evidence as Simple (Evidence)

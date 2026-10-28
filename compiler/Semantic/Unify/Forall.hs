@@ -20,7 +20,7 @@ import Data.Traversable (for)
 import qualified Data.Vector as Vector
 import qualified Data.Vector.Strict as Strict.Vector
 import Semantic.Check.Context (Context (..))
-import Semantic.Check.LocalBinding (shiftEquality)
+import Semantic.Check.Binding.Local (shiftEquality)
 import qualified Semantic.Check.Mask as Mask
 import qualified Semantic.Index.Evidence as Index.Evidence (assumed)
 import qualified Semantic.Index.Local as Local

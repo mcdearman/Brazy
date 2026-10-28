@@ -22,11 +22,11 @@ import qualified Data.Vector as Vector
 import Error (unsupportedFeatureConstraintedTypeDefaulting)
 import Semantic.Check.Context (Context (..))
 import qualified Semantic.Check.Context as Context
-import qualified Semantic.Check.LocalBinding as Local (Constraint (..), Equality (..), LocalBinding (..))
+import qualified Semantic.Check.Binding.Local as Local (Constraint (..), Equality (..), LocalBinding (..))
 import qualified Semantic.Index.Local as Local.Index (Index)
 import qualified Semantic.Check.Mask as Mask
-import Semantic.Check.TypeBinding (TypeBinding (TypeBinding))
-import qualified Semantic.Check.TypeBinding as TypeBinding
+import Semantic.Check.Binding.Type (TypeBinding (TypeBinding))
+import qualified Semantic.Check.Binding.Type as TypeBinding
 import qualified Semantic.Index.Evidence as Evidence (Index (..))
 import qualified Semantic.Index.Table.Local as Local.Table
 import qualified Semantic.Index.Table.Type as Type.Table

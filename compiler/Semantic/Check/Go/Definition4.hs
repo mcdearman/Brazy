@@ -20,7 +20,7 @@ import qualified Graph.Topological as Topological
 import qualified Core.Builtin as Builtin
 import Core.Tree.TypeDeclaration (assumeData)
 import Semantic.Check.Context (Context (..), groupTermBindings, postponed)
-import qualified Semantic.Check.TypeBinding as TypeBinding
+import qualified Semantic.Check.Binding.Type as TypeBinding
 import qualified Semantic.Index.Table.Type as Table.Type
 import qualified Semantic.Check.Go.Scheme as Solved.Scheme
 import qualified Semantic.Check.Mask as Mask

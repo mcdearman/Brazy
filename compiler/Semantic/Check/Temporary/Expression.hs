@@ -58,9 +58,9 @@ import Semantic.Check.Temporary.Select (Select)
 import qualified Semantic.Check.Temporary.Select as Select
 import Semantic.Check.Temporary.UpdateInfo (UpdateInfo)
 import qualified Semantic.Check.Temporary.UpdateInfo as UpdateInfo
-import qualified Semantic.Check.TermBinding as TermBinding (TermBinding (..), Type (..))
+import qualified Semantic.Check.Binding.Term as TermBinding (TermBinding (..), Type (..))
 import qualified Semantic.Check.TypeAnnotation as Annotation
-import qualified Semantic.Check.TypeBinding as TypeBinding
+import qualified Semantic.Check.Binding.Type as TypeBinding
 import qualified Semantic.Index.Constructor as Constructor
 import qualified Semantic.Index.Local as Local (Index (Local))
 import qualified Semantic.Index.Table.Term as Term ((!))

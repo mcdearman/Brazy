@@ -1,6 +1,6 @@
 {-# LANGUAGE RoleAnnotations #-}
 
-module Semantic.Check.LocalBinding where
+module Semantic.Check.Binding.Local where
 
 import qualified Data.Kind as Kind
 import Semantic.Scope (Environment)

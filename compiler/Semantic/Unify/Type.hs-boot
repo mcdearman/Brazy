@@ -6,7 +6,7 @@ import Control.Monad.ST (ST)
 import Core.Tree.Type (TypeF)
 import qualified Data.Kind as Kind
 import {-# SOURCE #-} Semantic.Check.Context (Context)
-import {-# SOURCE #-} Semantic.Check.LocalBinding (Equality)
+import {-# SOURCE #-} Semantic.Check.Binding.Local (Equality)
 import qualified Semantic.Check.Mask as Mask
 import qualified Semantic.Index.Type2 as Type2
 import Semantic.Scope (Environment (..))
