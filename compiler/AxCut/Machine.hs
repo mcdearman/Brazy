@@ -989,6 +989,10 @@ outside World {catching, files, failure, building, arguments, programName, retur
   ("uncaught", [Int code, Text shown])
     | code == 0 -> exitSuccess
     | code > 0 -> exitWith (ExitFailure (fromIntegral code))
+    -- What `error` throws is said as it is.
+    | code == -2 -> do
+        hPutStrLn stderr (unpack shown)
+        exitFailure
     | otherwise -> do
         hPutStrLn stderr $ "uncaught exception: " ++ unpack shown
         exitFailure

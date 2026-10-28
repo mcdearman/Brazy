@@ -50,6 +50,7 @@ import Data.Text (Text)
 import qualified Data.Text as Text
 import Data.Traversable (for)
 import qualified Generate.Global as Global (Global)
+import qualified Sequent.Runtime as Runtime (global)
 import qualified Sequent.Primitive as Primitive (Primitive (..), holding)
 import Sequent.Tree
   ( Alternative (..),
@@ -125,6 +126,11 @@ running known consumers = \case
     (Thunk _ body, MuTilde Binder {name} rest) ->
       let after = running known consumers rest
        in if certain name after then then' after (running known Map.empty body) else after
+    -- Throwing does not come back, as an error does not: what is thrown is
+    -- what 'error' throws.
+    (Global global, Apply _ _)
+      | global == Runtime.global (Text.pack "Hazy") (Text.pack "primThrow") ->
+          Everything
     (Global global, Apply arguments result)
       | Just strict <- demands known global,
         length strict == length arguments ->
