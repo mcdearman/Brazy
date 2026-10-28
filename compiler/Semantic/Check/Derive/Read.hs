@@ -6,13 +6,11 @@
 module Semantic.Check.Derive.Read (readsPrec) where
 
 import qualified Core.Tree.Type as Levity (lazy)
-import Core.Tree.Argument (Argument (..))
 import {-# SOURCE #-} qualified Builtin.Read as Read
 import {-# SOURCE #-} qualified Builtin.Semigroup as Semigroup
 import Control.Monad.ST (ST)
 import qualified Core.Tree.Class as Class
 import Core.Tree.Data (Data)
-import Core.Tree.EntryInfo (EntryInfo (..))
 import Core.Tree.Evidence (Evidence, EvidenceF (Variable, instanciation, variable))
 import Core.Tree.Expression (Expression)
 import qualified Core.Tree.Expression as Expression
@@ -75,8 +73,8 @@ data Alternative scope = Alternative
 
 -- |
 -- Something a constructor holds lazily.
-lazily :: Expression scope -> Argument scope
-lazily argument = Argument {argument, info = EntryInfo {levity = Core.Constructor Type2.Lazy}}
+lazily :: Expression scope -> TypeLambda.TypeLambda scope
+lazily = TypeLambda.mono Levity.lazy
 
 string :: String -> Expression scope
 string = foldr cons nil

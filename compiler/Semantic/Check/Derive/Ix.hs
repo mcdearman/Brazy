@@ -13,7 +13,6 @@ module Semantic.Check.Derive.Ix
 where
 
 import qualified Core.Tree.Type as Levity (lazy)
-import Core.Tree.Argument (Argument (..))
 import {-# SOURCE #-} qualified Builtin.Functor as Functor
 import {-# SOURCE #-} qualified Builtin.Ix as Ix
 import Control.Monad.ST (ST)
@@ -80,8 +79,8 @@ tupleInfo count =
 
 -- |
 -- Something a constructor holds lazily.
-lazily :: Expression scope -> Argument scope
-lazily argument = Argument {argument, info = EntryInfo {levity = Core.Constructor Type2.Lazy}}
+lazily :: Expression scope -> TypeLambda.TypeLambda scope
+lazily = TypeLambda.mono Levity.lazy
 
 tuple :: [Expression scope] -> Expression scope
 tuple elements =
