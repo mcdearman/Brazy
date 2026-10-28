@@ -10,6 +10,7 @@
 -- the one it starts at can reach are kept.
 module Sequent.FromCore (generate, complete, definitionOf, Unit (..), Unshared (..), unit, reached, start) where
 
+import Core.Tree.Argument (Argument (..))
 import Control.Monad (replicateM)
 import Control.Monad.ST (ST, runST)
 import qualified Core.Foreign as Foreign
@@ -560,7 +561,7 @@ number = \case
       argument = Core.Constructor {arguments}
     }
       | methodIndex == fromRational',
-        [Core.Integer {integer = top}, Core.Integer {integer = bottom}] <- toList arguments,
+        [Argument {argument = Core.Integer {integer = top}}, Argument {argument = Core.Integer {integer = bottom}}] <- toList arguments,
         bottom /= 0 -> case target of
           Type2.Double -> Just (Double (fromRational (top % bottom)))
           Type2.Float -> Just (Double (realToFrac (fromRational (top % bottom) :: Float)))
@@ -670,18 +671,17 @@ delayed context = \case
     pure $ fst $ variable context index
   Core.Constructor
     { constructor = Constructor.Index {constructorIndex},
-      arguments,
-      constructorInfo = ConstructorInfo {entries}
+      arguments
     }
-      | all lazy entries -> do
-          arguments <- traverse (delayed context) (toList arguments)
+      | all lazy arguments -> do
+          arguments <- traverse (\Argument {argument} -> delayed context argument) (toList arguments)
           pure $ Constructor constructorIndex arguments
   Core.Character {character} -> pure $ Literal $ Int $ fromIntegral $ ord character
   Core.Integer {integer} -> pure $ Literal $ Integer integer
   Core.Newtype {argument} -> delayed context argument
   expression -> object context expression
   where
-    lazy EntryInfo {strict} = not (Info.strict strict)
+    lazy Argument {info = EntryInfo {strict}} = not (Info.strict strict)
 
 -- |
 -- Evaluate an expression. What the consumer is given is a value.
@@ -727,11 +727,10 @@ evaluate context expression consumer = case expression of
         MuTilde (byValue name) (Primitive (Field selectorIndex) [Variable name] field)
   Core.Constructor
     { constructor = Constructor.Index {constructorIndex},
-      arguments,
-      constructorInfo = ConstructorInfo {entries}
+      arguments
     } -> do
       let go [] continue = continue []
-          go ((EntryInfo {strict}, argument) : rest) continue
+          go (Argument {info = EntryInfo {strict}, argument} : rest) continue
             | Info.strict strict = do
                 name <- fresh context
                 body <- go rest (continue . (Variable name :))
@@ -739,7 +738,7 @@ evaluate context expression consumer = case expression of
             | otherwise = do
                 argument <- delayed context argument
                 go rest (continue . (argument :))
-      go (zip (toList entries) (toList arguments)) $ \fields ->
+      go (toList arguments) $ \fields ->
         pure $ Cut (Constructor constructorIndex fields) consumer
   Core.Integer {integer} -> pure $ Cut (Literal $ Integer integer) consumer
   Core.Character {character} ->

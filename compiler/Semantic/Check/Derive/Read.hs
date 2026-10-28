@@ -5,11 +5,11 @@
 -- @Hazy.Helper@), as @lex@ has them.
 module Semantic.Check.Derive.Read (readsPrec) where
 
+import Core.Tree.Argument (Argument (..))
 import {-# SOURCE #-} qualified Builtin.Read as Read
 import {-# SOURCE #-} qualified Builtin.Semigroup as Semigroup
 import Control.Monad.ST (ST)
 import qualified Core.Tree.Class as Class
-import qualified Core.Tree.ConstructorInfo as Core.ConstructorInfo
 import Core.Tree.Data (Data)
 import Core.Tree.EntryInfo (EntryInfo (..))
 import Core.Tree.Evidence (Evidence, EvidenceF (Variable, instanciation, variable))
@@ -72,11 +72,10 @@ data Alternative scope = Alternative
     info :: ConstructorInfo scope
   }
 
-lazy :: Int -> Core.ConstructorInfo.ConstructorInfo scope
-lazy count =
-  Core.ConstructorInfo.ConstructorInfo
-    { entries = Strict.Vector.replicate count EntryInfo {strict = Core.Constructor Type2.Lazy}
-    }
+-- |
+-- Something a constructor holds lazily.
+lazily :: Expression scope -> Argument scope
+lazily argument = Argument {argument, info = EntryInfo {strict = Core.Constructor Type2.Lazy}}
 
 string :: String -> Expression scope
 string = foldr cons nil
@@ -84,16 +83,14 @@ string = foldr cons nil
     cons character rest =
       Expression.Constructor
         { constructor = Constructor.cons,
-          arguments = Strict.Vector.fromList [Expression.Character {character}, rest],
-          constructorInfo = lazy 2
+          arguments = lazily <$> Strict.Vector.fromList [Expression.Character {character}, rest]
         }
 
 nil :: Expression scope
 nil =
   Expression.Constructor
     { constructor = Constructor.nil,
-      arguments = Strict.Vector.empty,
-      constructorInfo = lazy 0
+      arguments = Strict.Vector.empty
     }
 
 helper :: String -> Expression scope
@@ -114,19 +111,19 @@ chain [] held constructor info rest =
   Expression.Constructor
     { constructor = Constructor.cons,
       arguments =
-        Strict.Vector.fromList
+        lazily
+          <$> Strict.Vector.fromList
           [ Expression.Constructor
               { constructor = Constructor.tuple 2,
                 arguments =
-                  Strict.Vector.fromList
+                  lazily
+                    <$> Strict.Vector.fromList
                     [ Expression.simplifyConstructorExact constructor info (Strict.Vector.fromList (reverse held)),
                       rest
-                    ],
-                constructorInfo = lazy 2
+                    ]
               },
             nil
-          ],
-      constructorInfo = lazy 2
+          ]
     }
 chain (step : steps) held constructor info rest =
   helper "derivedBind"

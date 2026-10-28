@@ -12,6 +12,7 @@ module Semantic.Check.Derive.Ix
   )
 where
 
+import Core.Tree.Argument (Argument (..))
 import {-# SOURCE #-} qualified Builtin.Functor as Functor
 import {-# SOURCE #-} qualified Builtin.Ix as Ix
 import Control.Monad.ST (ST)
@@ -22,7 +23,6 @@ import Core.Temporary.Pattern (Pattern (..))
 import qualified Core.Temporary.Pattern as Pattern
 import Core.Temporary.RightHandSide (RightHandSide (..))
 import qualified Core.Tree.Class as Class
-import qualified Core.Tree.ConstructorInfo as Core.ConstructorInfo
 import Core.Tree.Data (Data)
 import Core.Tree.EntryInfo (EntryInfo (..))
 import Core.Tree.Evidence (Evidence, EvidenceF (Variable, instanciation, variable))
@@ -76,16 +76,16 @@ tupleInfo count =
     { entries = Strict.Vector.replicate count EntryInfo {strict = Core.Constructor Type2.Lazy}
     }
 
+-- |
+-- Something a constructor holds lazily.
+lazily :: Expression scope -> Argument scope
+lazily argument = Argument {argument, info = EntryInfo {strict = Core.Constructor Type2.Lazy}}
+
 tuple :: [Expression scope] -> Expression scope
 tuple elements =
   Expression.Constructor
     { constructor = Constructor.tuple (length elements),
-      arguments = Strict.Vector.fromList elements,
-      constructorInfo =
-        Core.ConstructorInfo.ConstructorInfo
-          { entries =
-              Strict.Vector.replicate (length elements) EntryInfo {strict = Core.Constructor Type2.Lazy}
-          }
+      arguments = lazily <$> Strict.Vector.fromList elements
     }
 
 -- |

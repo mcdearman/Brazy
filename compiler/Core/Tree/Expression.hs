@@ -15,8 +15,8 @@ import Core.Temporary.Function (Function (Bound))
 import qualified Core.Temporary.Function as Function
 import qualified Core.Temporary.Pattern as Pattern
 import qualified Core.Temporary.RightHandSide as RightHandSide
+import Core.Tree.Argument (Argument (..))
 import qualified Core.Tree.Class as Class
-import Core.Tree.ConstructorInfo (ConstructorInfo (..))
 import {-# SOURCE #-} qualified Core.Tree.Declaration as Declaration
 import {-# SOURCE #-} Core.Tree.Declarations (Declarations)
 import {-# SOURCE #-} qualified Core.Tree.Declarations as Declarations
@@ -80,8 +80,7 @@ data Expression scope
       }
   | Constructor
       { constructor :: !(Constructor.Index scope),
-        arguments :: !(Strict.Vector (Expression scope)),
-        constructorInfo :: !(ConstructorInfo scope)
+        arguments :: !(Strict.Vector (Argument scope))
       }
   | Selector
       { selector :: !(Selector.Index scope),
@@ -178,11 +177,10 @@ instance Substitute.Functor Expression where
           argument = Substitute.map category argument,
           selectorInfo = Substitute.map category selectorInfo
         }
-    Constructor {constructor, arguments, constructorInfo} ->
+    Constructor {constructor, arguments} ->
       Constructor
         { constructor = Substitute.map category constructor,
-          arguments = Substitute.map category <$> arguments,
-          constructorInfo = Substitute.map category constructorInfo
+          arguments = Substitute.map category <$> arguments
         }
     Method {method, evidence, instanciation, methodInfo} ->
       Method
@@ -268,8 +266,7 @@ nil :: Expression scope
 nil =
   Constructor
     { constructor = Constructor.nil,
-      arguments = Strict.Vector.empty,
-      constructorInfo = ConstructorInfo {entries = Strict.Vector.empty}
+      arguments = Strict.Vector.empty
     }
 
 eqChar :: Expression scope -> Expression scope -> Expression scope
@@ -333,8 +330,7 @@ orderingEqual :: Expression scope
 orderingEqual =
   Constructor
     { constructor = Constructor.eq,
-      arguments = Strict.Vector.empty,
-      constructorInfo = ConstructorInfo {entries = Strict.Vector.empty}
+      arguments = Strict.Vector.empty
     }
 
 orderingCombine :: Expression scope -> Expression scope -> Expression scope
@@ -450,26 +446,19 @@ float_ float evidence =
           { constructor = Constructor.makeRatio,
             arguments =
               Strict.Vector.fromList
-                [ Integer {integer = numerator float},
-                  Integer {integer = denominator float}
-                ],
-            constructorInfo =
-              ConstructorInfo
-                { entries =
-                    Strict.Vector.fromList
-                      [ EntryInfo {strict = Type.Constructor Type2.Strict},
-                        EntryInfo {strict = Type.Constructor Type2.Strict}
-                      ]
-                }
+                [ Argument {argument = Integer {integer = numerator float}, info},
+                  Argument {argument = Integer {integer = denominator float}, info}
+                ]
           }
     }
+  where
+    info = EntryInfo {strict = Type.Constructor Type2.Strict}
 
 bool :: Bool -> Expression scope
 bool value =
   Constructor
     { constructor = if value then Constructor.true else Constructor.false,
-      arguments = Strict.Vector.empty,
-      constructorInfo = ConstructorInfo {entries = Strict.Vector.empty}
+      arguments = Strict.Vector.empty
     }
 
 true :: Expression scope
@@ -664,16 +653,14 @@ simplifyConstructorExact ::
 simplifyConstructorExact constructor Semantic.ConstructorInfo {entries} arguments =
   Constructor
     { constructor,
-      arguments,
-      constructorInfo = ConstructorInfo {entries}
+      arguments = Strict.Vector.zipWith Argument arguments entries
     }
 -- What the constructor requires of its types is held after everything
 -- else, as evidence.
 simplifyConstructorExact constructor Semantic.ConstructorInfo.Holding {entries, held} arguments =
   Constructor
     { constructor,
-      arguments = arguments <> fmap dictionary held,
-      constructorInfo = ConstructorInfo {entries}
+      arguments = Strict.Vector.zipWith Argument (arguments <> fmap dictionary held) entries
     }
   where
     dictionary evidence = Dictionary {evidence}
@@ -814,17 +801,15 @@ simplifyWith expression [] = case expression of
   Semantic.Tuple {elements} ->
     Constructor
       { constructor = Constructor.tuple (length elements),
-        arguments = simplify <$> elements,
-        constructorInfo =
-          ConstructorInfo
-            { entries =
-                Strict.Vector.replicate
-                  (length elements)
-                  EntryInfo
-                    { strict = Type.Constructor Type2.Lazy
-                    }
-            }
+        arguments = Strict.Vector.map argument elements
       }
+    where
+      argument element =
+        Argument
+          { argument = simplify element,
+            info
+          }
+      info = EntryInfo {strict = Type.Constructor Type2.Lazy}
   Semantic.List {items} ->
     foldr (cons . simplify) nil items
   Semantic.Comprehension {statements} -> simplify statements
@@ -964,19 +949,15 @@ simplifyWith expression [] = case expression of
     cons head tail =
       Constructor
         { constructor = Constructor.cons,
-          arguments = Strict.Vector.fromList [head, tail],
-          constructorInfo =
-            ConstructorInfo
-              { entries =
-                  Strict.Vector.fromList
-                    [ EntryInfo {strict = Type.Constructor Type2.Lazy},
-                      EntryInfo {strict = Type.Constructor Type2.Lazy}
-                    ]
-              }
+          arguments =
+            Strict.Vector.fromList
+              [ Argument {argument = head, info},
+                Argument {argument = tail, info}
+              ]
         }
+    info = EntryInfo {strict = Type.Constructor Type2.Lazy}
     nil =
       Constructor
         { constructor = Constructor.nil,
-          arguments = Strict.Vector.empty,
-          constructorInfo = ConstructorInfo {entries = Strict.Vector.empty}
+          arguments = Strict.Vector.empty
         }
