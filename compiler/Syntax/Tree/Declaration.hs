@@ -41,8 +41,8 @@ import {-# SOURCE #-} Syntax.Tree.ClassDeclarations (ClassDeclarations)
 import {-# SOURCE #-} qualified Syntax.Tree.ClassDeclarations as ClassDeclarations
 import Syntax.Tree.Constraint (Constraint)
 import qualified Syntax.Tree.Constraint as Constraint
-import Syntax.Tree.Constraints (Constraints)
 import qualified Syntax.Tree.Constraints as Constraints
+import Syntax.Tree.Constraints (Constraints)
 import Syntax.Tree.Data (Data)
 import qualified Syntax.Tree.Data as Data
 import Syntax.Tree.Fixity (Fixity)
@@ -497,17 +497,15 @@ parse =
 
     parseInstance :: Bool -> Parser (Declaration Position)
     parseInstance manual =
-      instancex
-        <$> position
-        <*> Constraints.parse
-        <*> position
-        <*> Variable.parse
-        <*> InstanceHead.parse
+      Scheme.parseWith
+        instancex
+        (pure ())
+        ((,,) <$> position <*> Variable.parse <*> InstanceHead.parse)
         <*> if manual
           then InstanceDeclarations.parse
           else pure InstanceDeclarations._derivingInstance
       where
-        instancex startPosition prerequisites classPosition className instanceHead instanceDefinition =
+        instancex startPosition () prerequisites (classPosition, className, instanceHead) instanceDefinition =
           Instance
             { startPosition,
               prerequisites,
