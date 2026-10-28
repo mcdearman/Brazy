@@ -55,6 +55,8 @@ instance MonadPlus Maybe
 
 instance MonadPlus []
 
+instance MonadPlus IO
+
 infixr 1 >=>
 
 (>=>) :: (Monad m) => (a -> m b) -> (b -> m c) -> a -> m c
