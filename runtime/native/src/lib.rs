@@ -1742,6 +1742,10 @@ pub extern "C" fn hazy_prim_uncaught(status: Value, shown: Value) -> Value {
         let _ = std::io::stdout().flush();
         std::process::exit(int(status) as i32)
     }
+    // What `error` throws is said as it is.
+    if int(status) == -2 {
+        fail(text(shown))
+    }
     fail(&format!("uncaught exception: {}", text(shown)))
 }
 
