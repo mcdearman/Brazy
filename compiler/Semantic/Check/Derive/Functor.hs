@@ -49,7 +49,7 @@ import qualified Semantic.Check.ConstructorInstance as ConstructorInstance
 import Semantic.Check.Context (Context)
 import Semantic.Check.DataInstance (DataInstance (..))
 import Semantic.Check.EntryInstance (EntryInstance (..))
-import Semantic.Check.Simple.ConstructorInfo (ConstructorInfo)
+import Semantic.Check.Info.Constructor (ConstructorInfo)
 import Semantic.Check.Simple.Data (instanciateApart)
 import qualified Semantic.Check.Temporary.ConstructorInfo as ConstructorInfo
 import qualified Semantic.Check.Temporary.Pattern as Apart (within)

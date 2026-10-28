@@ -8,7 +8,7 @@ import qualified Core.Tree.Constraint as Constraint (ConstraintF (..))
 import qualified Core.Tree.Evidence as Evidence (EvidenceF (..))
 import qualified Core.Tree.Forall as Core (mono)
 import qualified Core.Tree.Forall as Forall (simplify)
-import Semantic.Check.Simple.Scheme (instanciate)
+import Semantic.Check.Scheme (instanciate)
 import qualified Semantic.Check.TypeAnnotation as Annotation
 import qualified Core.Tree.Type as Core (char, list, typex)
 import Core.Tree.TypeDeclaration (assumeClass, assumeData)

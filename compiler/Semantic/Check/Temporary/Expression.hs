@@ -34,8 +34,8 @@ import qualified Semantic.Check.Go.Definition4 as Definition4
 import Semantic.Check.Go.Scheme (Scheme)
 import qualified Semantic.Check.Mask as Mask
 import qualified Semantic.Check.Simple.Data as Simple.Data
-import Semantic.Check.Simple.Scheme (instanciate)
-import qualified Semantic.Check.Simple.Scheme as Rigid (augment)
+import Semantic.Check.Scheme (instanciate)
+import qualified Semantic.Check.Scheme as Rigid (augment)
 import Semantic.Check.Temporary.Alternative (Alternative)
 import qualified Semantic.Check.Temporary.Alternative as Alternative
 import Semantic.Check.Temporary.CallHead (CallHead)
