@@ -34,8 +34,6 @@ import Semantic.Check.Instanciate.Entry (EntryInstance (..))
 import qualified Semantic.Check.Simple.Data as Simple.Data
 import Semantic.Check.Temporary.ConstructorInfo (ConstructorInfo)
 import qualified Semantic.Check.Temporary.ConstructorInfo as ConstructorInfo
-import Semantic.Check.Temporary.PatternField (Field)
-import qualified Semantic.Check.Temporary.PatternField as Field
 import Semantic.Check.Binding.Term (TermBinding (TermBinding), Type (..))
 import qualified Semantic.Check.Binding.Type as TypeBinding
 import qualified Semantic.Index.Constructor as Constructor
@@ -53,7 +51,6 @@ import Semantic.Stage (Check, Resolve)
 import Semantic.Tree.Combinators.Inferred (Inferred (..))
 import qualified Semantic.Tree.Pattern as Semantic
 import qualified Semantic.Tree.Pattern as Solved
-import qualified Semantic.Tree.PatternField as Padding (Field (..))
 import Semantic.Check.Binding.Local (Equality (Given), shiftEquality)
 import qualified Semantic.Unify as Unify
 import Syntax.Position (Position)
@@ -202,7 +199,7 @@ given path = \case
       ++ concat (zipWith (\index -> given (path . Bound.Select index)) [0 ..] (toList patterns))
   Record {required, fields} ->
     evidence path (length fields) required
-      ++ concat (zipWith (\index -> Field.given (path . Bound.Select index)) [0 ..] (toList fields))
+      ++ concat (zipWith (\index Field {field} -> given (path . Bound.Select index) field) [0 ..] (toList fields))
   List {items} -> concat (zipWith (\index -> given (path . Bound.Select index)) [0 ..] (toList items))
   Integer {} -> []
   Float {} -> []
@@ -216,12 +213,19 @@ given path = \case
           super base index = Evidence.Super {base, index}
       pure (Given (shift classx) (shiftLogical subject) (foldl super held supers))
 
+data Field s scope = Field
+  { index :: !Int,
+    field :: !(Pattern s scope)
+  }
+
 (!) :: Pattern s scope -> Bound -> Unify.Type s scope
 Polymorphic {position} ! _ = unsupportedFeaturePolymorphicComponents position
 patternx ! Bound.At = typex patternx
 patternx ! Bound.Select index bound = case patternx of
   Constructor {patterns} -> patterns Strict.Vector.! index ! bound
-  Record {fields} -> fields Strict.Vector.! index Field.! bound
+  Record {fields} -> fields Strict.Vector.! index !! bound
+    where
+      Field {field} !! bound = field ! bound
   List {items} -> items Strict.Vector.! index ! bound
   Integer {} -> error "bad index"
   Float {} -> error "bad index"
@@ -248,7 +252,7 @@ learnt = \case
   Wildcard {} -> []
   Polymorphic {} -> []
   Constructor {equalities, patterns} -> foldMap learnt patterns ++ equalities
-  Record {equalities, fields} -> foldMap Field.learnt fields ++ equalities
+  Record {equalities, fields} -> foldMap (\Field {field} -> learnt field) fields ++ equalities
   List {items} -> foldMap learnt items
   Integer {} -> []
   Float {} -> []
@@ -266,7 +270,9 @@ augmentPattern patternx = Term.Bound {at, select}
       Polymorphic {} -> Strict.Vector.empty
       List {items} -> Strict.Vector.map augmentPattern items
       Constructor {patterns} -> fmap augmentPattern patterns
-      Record {fields} -> fmap Field.augmentField fields
+      Record {fields} -> fmap augmentField fields
+        where
+          augmentField Field {field} = augmentPattern field
       Integer {} -> Strict.Vector.empty
       Float {} -> Strict.Vector.empty
       Character {} -> Strict.Vector.empty
@@ -282,7 +288,7 @@ owned = \case
   Constructor {constructorPosition, hidden, patterns} ->
     [(constructorPosition, typex) | typex <- hidden] ++ foldMap owned patterns
   Record {constructorPosition, hidden, fields} ->
-    [(constructorPosition, typex) | typex <- hidden] ++ foldMap Field.owned fields
+    [(constructorPosition, typex) | typex <- hidden] ++ foldMap (\Field {field} -> owned field) fields
   List {items} -> foldMap owned items
   Integer {} -> []
   Float {} -> []
@@ -469,7 +475,10 @@ check context@Context {typeEnvironment} typex = \case
       ConstructorInstance.mark context instancex
       equalities <- matched context constructorPosition datax typeIndex instancex typex
       required <- requirements context (ConstructorInstance.asked instancex)
-      fields <- traverse (Field.check (knowing equalities context) lookup) fields
+      let checkField Semantic.Field {index, field} = do
+            field <- held (knowing equalities context) (lookup index) field
+            pure Field {index, field}
+      fields <- traverse checkField fields
       pure $
         Record
           { typex,
@@ -509,8 +518,8 @@ check context@Context {typeEnvironment} typex = \case
 -- |
 -- A match on something a value holds that the pattern does not say: the
 -- evidence, which is held after everything else.
-unnamed :: Int -> Padding.Field Check scope
-unnamed index = Padding.Field index Solved.Wildcard {names = Map.empty, forced = Prelude.False}
+unnamed :: Int -> Solved.Field Check scope
+unnamed index = Solved.Field {index, field = Solved.Wildcard {names = Map.empty, forced = Prelude.False}}
 
 solve :: Pattern s scope -> Unify.Solve s (Solved.Pattern Check scope)
 solve = \case
@@ -552,7 +561,10 @@ solve = \case
       arity,
       constructorInfo
     } -> do
-      fields <- traverse Field.solve fields
+      let solveField Field {index, field} = do
+            field <- solve field
+            pure Solved.Field {index, field}
+      fields <- traverse solveField fields
       fields <- pure $ fields <> Strict.Vector.fromList (unnamed <$> [arity .. arity + evident - 1])
       constructorInfo <- ConstructorInfo.solve constructorInfo
       pure

@@ -10,7 +10,6 @@ import qualified Semantic.Shift0 as Shift0
 import Semantic.Stage (Check)
 import Semantic.Tree.Combinators.Inferred (Inferred (..))
 import qualified Semantic.Tree.Pattern as Semantic
-import qualified Semantic.Tree.PatternField as Semantic.Field
 import Syntax.StringLiteral (StringLiteral)
 
 data Pattern scope
@@ -104,7 +103,10 @@ instance Shift0.Functor Field where
 instance Shift.Functor Field where
   map category (Field index patternx) = Field index (Shift.map category patternx)
 
-data Field scope = Field !Int !(Pattern scope)
+data Field scope = Field
+  { index :: !Int,
+    field :: !(Pattern scope)
+  }
   deriving (Show)
 
 simplify :: Semantic.Pattern Check scope -> Pattern scope
@@ -160,5 +162,5 @@ within outer = \case
     where
       irrefutable = outer || Semantic.irrefutable patternx
 
-resolveField :: Prelude.Bool -> Semantic.Field.Field Check scope -> Field scope
-resolveField irrefutable (Semantic.Field.Field index patternx) = Field index (within irrefutable patternx)
+resolveField :: Prelude.Bool -> Semantic.Field Check scope -> Field scope
+resolveField irrefutable Semantic.Field {index, field} = Field index (within irrefutable field)

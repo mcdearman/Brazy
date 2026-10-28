@@ -14,8 +14,7 @@ import qualified Semantic.Shift as Shift
 import qualified Semantic.Tree.Alternative as Alternative (Alternative (..))
 import qualified Semantic.Tree.Body as Body (Body (..))
 import qualified Semantic.Tree.Expression as Expression (Expression (..))
-import qualified Semantic.Tree.Pattern as Pattern (Pattern (..))
-import qualified Semantic.Tree.PatternField as PatternField (Field (..))
+import qualified Semantic.Tree.Pattern as Pattern (Field (..), Pattern (..))
 import qualified Semantic.Tree.RightHandSide as RightHandSide (RightHandSide (..))
 import Semantic.Check.Temporary.Definition2 (Definition2)
 import qualified Semantic.Check.Temporary.Definition2 as Definition2
@@ -90,7 +89,7 @@ indexed Context {typeEnvironment} (Semantic.Label _ definition) = case definitio
     constructors = \case
       Pattern.Constructor {constructor, patterns} -> constructor : concatMap constructors (toList patterns)
       Pattern.Record {constructor, fields} ->
-        constructor : concat [constructors patternx | PatternField.Field {patternx} <- toList fields]
+        constructor : concat [constructors field | Pattern.Field {field} <- toList fields]
       Pattern.List {items} -> concatMap constructors (toList items)
       _ -> []
     -- The patterns are two scopes in: that of the definitions this one is
