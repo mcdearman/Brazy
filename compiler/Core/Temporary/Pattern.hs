@@ -116,6 +116,7 @@ simplify = within False
 -- wanted, and that goes for the patterns inside it: they are lazy too.
 within :: Prelude.Bool -> Semantic.Pattern Check scope -> Pattern scope
 within outer = \case
+  Semantic.Signature {} -> error "a pattern the checker does not leave"
   -- Inside a lazy pattern a bang only says what a name is when it is
   -- wanted, and that is evaluated then anyway.
   Semantic.Wildcard {forced}

@@ -1795,7 +1795,15 @@ Missing:
       type, `C :: !Int -> T`, works already. What a strict function type
       means is Freddy's strictness in types (Track B)
 - [ ] Remaining builtin instances
-- [ ] Pattern type signatures for `ScopedTypeVariables`
+- [x] Pattern type signatures for `ScopedTypeVariables`: `(x :: t)` in
+      brackets, alone or in a tuple, wherever a pattern goes. The type is
+      resolved as a signature's is: a type variable a `forall` brought into
+      scope is that one, and any other is one of the signature's own, so a
+      pattern may say part of its type. The checker makes the type the
+      pattern's and leaves the pattern inside, so nothing after it sees the
+      signature. A type variable of the signature's own is not in scope in
+      what follows, as GHC's is (test `pattern-signatures`, which agrees
+      with GHC)
 - [ ] Proper type operators
 
 Planned toggles and TODOs:
