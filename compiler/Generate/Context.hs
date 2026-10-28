@@ -113,10 +113,10 @@ patternBindings names ConstructorInfo {entries} Context {terms, evidence, types,
     }
   where
     patterns = Strict.Vector.toLazy $ Strict.Vector.zipWith bind names entries
-    bind name EntryInfo {strict} =
+    bind name EntryInfo {levity} =
       Term.Binding
         { name = Local name,
-          strict = Info.strict strict,
+          strict = Info.strict levity,
           delayed = False
         }
 

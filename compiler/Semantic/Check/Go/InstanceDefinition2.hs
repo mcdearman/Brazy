@@ -1,5 +1,6 @@
 module Semantic.Check.Go.InstanceDefinition2 where
 
+import qualified Core.Tree.Type as Levity (lazy)
 import Control.Monad (filterM)
 import Control.Monad.ST (ST)
 import qualified Core.Builtin as Builtin
@@ -151,7 +152,7 @@ requirements Context {typeEnvironment} derived self datax
     held Core.Data.Data {parameters = typeParameters, definition = Core.Data.Definition {constructors}} =
       [ found
       | Core.Constructor.Constructor {entries} <- toList constructors,
-        Core.Entry.Entry {entry = Core.ForallOver {parameters, constraints = Core.Constraints.None, result}} <- toList entries,
+        Core.Entry.Entry {entry = Core.ForallOver {parameters, constraints = Core.Constraints.None {}, result}} <- toList entries,
         null parameters,
         let typex = Shift.map (Shift.Unshift $ error "a type variable that nothing binds") result,
         found <-
@@ -208,7 +209,7 @@ requirements Context {typeEnvironment} derived self datax
               _ -> do
                 Core.Constraints.Prerequisites {required} <- prerequisites
                 case required of
-                  Core.Constraints.None -> pure []
+                  Core.Constraints.None {} -> pure []
                   Core.Constraints.Constraints wanted ->
                     fmap concat $ for (toList wanted) $ \constraint@Core.Constraint {classx = next} ->
                       simplify
@@ -223,7 +224,7 @@ requirements Context {typeEnvironment} derived self datax
                 unused =
                   Core.Evidence.Variable
                     { variable = Evidence.Direct asked head,
-                      instanciation = Core.Instanciation.Mono
+                      instanciation = Core.Instanciation.Mono {levity = Levity.lazy}
                     }
                 record next typex = do
                   more <- simplify visiting next typex
@@ -343,7 +344,7 @@ checkHeader position key information Header {parameters, prerequisites, lenient}
               requirements context (keyIndex key) (keyHead key) datax
             else pure Nothing
         let needed = case found of
-              Just [] -> Core.Constraints.None
+              Just [] -> Core.Constraints.None {levity = Levity.lazy}
               Just constraints -> Core.Constraints.Constraints (Strict.Vector.fromList constraints)
               Nothing -> Core.Constraints.simplify prerequisites
         pure
@@ -529,13 +530,13 @@ checkBody position key Solve {solve} reflection information lookup members =
                   Data {index1, head1} -> Evidence.Direct index1 (Type2.Index head1)
                   Class {index2, head2} -> Evidence.Direct (Type2.Index index2) head2
                 instanciation = case prerequisites of
-                  Core.Constraints.None -> Core.Mono
+                  Core.Constraints.None {} -> Core.Mono {levity = Core.Type.lazy}
                   Core.Constraints.Constraints prerequisites -> Core.Instanciation $ Strict.Vector.fromList $ do
                     i <- [0 .. length prerequisites - 1]
                     pure
                       Core.Evidence.Variable
                         { variable = Evidence.Index (Evidence0.Assumed i),
-                          instanciation = Core.Instanciation.Mono
+                          instanciation = Core.Instanciation.Mono {levity = Core.Type.strict}
                         }
         context <- Scheme.augmentNeeding position parameters prerequisites Mask.Runtime context
         -- Inside the instance, a parameter that is required to be a type

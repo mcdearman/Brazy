@@ -12,6 +12,7 @@ module Semantic.Check.Derive.Ix
   )
 where
 
+import qualified Core.Tree.Type as Levity (lazy)
 import Core.Tree.Argument (Argument (..))
 import {-# SOURCE #-} qualified Builtin.Functor as Functor
 import {-# SOURCE #-} qualified Builtin.Ix as Ix
@@ -74,13 +75,13 @@ data Through scope = Through
 tupleInfo :: Int -> ConstructorInfo scope
 tupleInfo count =
   ConstructorInfo
-    { entries = Strict.Vector.replicate count EntryInfo {strict = Core.Constructor Type2.Lazy}
+    { entries = Strict.Vector.replicate count EntryInfo {levity = Core.Constructor Type2.Lazy}
     }
 
 -- |
 -- Something a constructor holds lazily.
 lazily :: Expression scope -> Argument scope
-lazily argument = Argument {argument, info = EntryInfo {strict = Core.Constructor Type2.Lazy}}
+lazily argument = Argument {argument, info = EntryInfo {levity = Core.Constructor Type2.Lazy}}
 
 tuple :: [Expression scope] -> Expression scope
 tuple elements =
@@ -94,13 +95,15 @@ tuple elements =
 matchTuple :: Int -> Pattern () Check scope
 matchTuple count =
   Match
-    { names = Map.empty,
+    { startPosition = (),
+      levity = Solved Levity.lazy,
+      names = Map.empty,
       irrefutable = False,
       match =
         Pattern.Constructor
           { constructorPosition = (),
             constructor = Constructor.tuple count,
-            patterns = Strict.Vector.replicate count Wildcard {names = Map.empty, forced = False},
+            patterns = Strict.Vector.replicate count Wildcard {startPosition = (), levity = Solved Levity.lazy, names = Map.empty, forced = False},
             constructorInfo = Solved (tupleInfo count),
             failable = Unused
           }
@@ -127,7 +130,7 @@ through context position typeIndex datax = do
             back <- back
             pure
               Through
-                { evidence = Variable {variable = Index.Evidence.Direct Type2.Ix Type2.Int, instanciation = Mono},
+                { evidence = Variable {variable = Index.Evidence.Direct Type2.Ix Type2.Int, instanciation = Mono {levity = Levity.lazy}},
                   to,
                   back
                 }
@@ -146,18 +149,20 @@ through context position typeIndex datax = do
             let constructor = Constructor.Index {typeIndex = shift typeIndex, constructorIndex = 0}
                 matched =
                   Match
-                    { names = Map.empty,
+                    { startPosition = (),
+                      levity = Solved Levity.lazy,
+                      names = Map.empty,
                       irrefutable = False,
                       match =
                         Pattern.Constructor
                           { constructorPosition = (),
                             constructor,
-                            patterns = Strict.Vector.replicate count Wildcard {names = Map.empty, forced = False},
+                            patterns = Strict.Vector.replicate count Wildcard {startPosition = (), levity = Solved Levity.lazy, names = Map.empty, forced = False},
                             constructorInfo = Solved info,
                             failable = Unused
                           }
                     }
-                held' = [Expression.patternVariableAt' place | place <- [0 .. count - 1]]
+                held' = [Expression.patternVariableAt' Levity.lazy place | place <- [0 .. count - 1]]
                 function patternx done =
                   Definition.desugar
                     Definition {definition = Bound {patternx, body = Plain {plain = Done {done}}}}
@@ -185,7 +190,7 @@ method methodIndex evidence =
   Expression.Method
     { method = methodIndex,
       evidence,
-      instanciation = Mono,
+      instanciation = Mono {levity = Levity.lazy},
       methodInfo = Class.info Ix.definition
     }
 
@@ -201,13 +206,13 @@ range context position typeIndex datax = do
   found <- through context position typeIndex datax
   pure $ do
     Through {evidence, to, back} <- found
-    let low = Expression.patternVariableAt' 0
-        high = Expression.patternVariableAt' 1
+    let low = Expression.patternVariableAt' Levity.lazy 0
+        high = Expression.patternVariableAt' Levity.lazy 1
         done =
           Expression.Method
             { method = Method.fmap,
-              evidence = Variable {variable = Index.Evidence.Direct Type2.Functor Type2.List, instanciation = Mono},
-              instanciation = Mono,
+              evidence = Variable {variable = Index.Evidence.Direct Type2.Functor Type2.List, instanciation = Mono {levity = Levity.lazy}},
+              instanciation = Mono {levity = Levity.lazy},
               methodInfo = Class.info Functor.definition
             }
             `Expression.call` shift back
@@ -215,7 +220,7 @@ range context position typeIndex datax = do
                                   `Expression.call` tuple [shift to `Expression.call` low, shift to `Expression.call` high]
                               )
         body = Definition.desugar Definition {definition = Bound {patternx = matchTuple 2, body = Plain {plain = Done {done}}}}
-    pure $ Generated $ Solved $ TypeLambda.mono body
+    pure $ Generated $ Solved $ TypeLambda.mono Levity.lazy body
 
 -- |
 -- > index (l, u) i = index (to l, to u) (to i)
@@ -248,12 +253,12 @@ compared which context position typeIndex datax = do
           Index -> Method.ixIndex
           InRange -> Method.ixInRange
         to' = shift (shift to)
-        low = shift (Expression.patternVariableAt' 0)
-        high = shift (Expression.patternVariableAt' 1)
+        low = shift (Expression.patternVariableAt' Levity.lazy 0)
+        high = shift (Expression.patternVariableAt' Levity.lazy 1)
         done =
           method methodIndex (shift (shift evidence))
             `Expression.call` tuple [to' `Expression.call` low, to' `Expression.call` high]
-            `Expression.call` (to' `Expression.call` Expression.patternVariable)
+            `Expression.call` (to' `Expression.call` (Expression.patternVariable Levity.lazy))
         body =
           Definition.desugar
             Definition
@@ -262,9 +267,9 @@ compared which context position typeIndex datax = do
                     { patternx = matchTuple 2,
                       body =
                         Bound
-                          { patternx = Pattern.Wildcard {names = Map.empty, forced = False},
+                          { patternx = Pattern.Wildcard {startPosition = (), levity = Solved Levity.lazy, names = Map.empty, forced = False},
                             body = Plain {plain = Done {done}}
                           }
                     }
               }
-    pure $ Generated $ Solved $ TypeLambda.mono body
+    pure $ Generated $ Solved $ TypeLambda.mono Levity.lazy body

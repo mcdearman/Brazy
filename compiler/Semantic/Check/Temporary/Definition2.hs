@@ -1,6 +1,7 @@
 module Semantic.Check.Temporary.Definition2 where
 
 import Control.Monad.ST (ST)
+import qualified Core.Tree.Type as Type
 import Semantic.Check.Binding.Term (TermBinding (TermBinding), Type (..))
 import Semantic.Check.Context (Context (..))
 import Semantic.Check.Scheme (instanciate)
@@ -34,6 +35,7 @@ data Definition2 source mark s scope where
 data Choice s scope = Choice
   { index :: !(Term.Index scope),
     instanciation :: !(Unify.Instanciation s scope),
+    levity :: !(Unify.Type s scope),
     patternx :: !(Pattern s scope),
     bound :: !Bound
   }
@@ -58,11 +60,11 @@ checkManual context@Context {termEnvironment} typex declaration = case declarati
       binding >>= \case
         Wobbly typex -> Unify.instanciate context position typex
         Rigid scheme -> instanciate context position scheme
-    patternx <- Pattern.check context full (shift patternx)
+    patternx <- Pattern.check context Type.lazy full (shift patternx)
     Pattern.bindable position patternx
-    let typex' = patternx Pattern.! bound
+    (levity, typex') <- pure $ patternx Pattern.! bound
     Unify.unify context position typex typex'
-    pure $ Piece Choice {index = shift index, instanciation, patternx, bound}
+    pure $ Piece Choice {index = shift index, instanciation, levity, patternx, bound}
 
 checkAuto ::
   Context s scopes ->
@@ -82,11 +84,11 @@ checkAuto context@Context {termEnvironment} typex declaration = case declaration
       binding >>= \case
         Wobbly typex -> Unify.instanciate context position typex
         Rigid scheme -> instanciate context position scheme
-    patternx <- Pattern.check context full patternx
+    patternx <- Pattern.check context Type.lazy full patternx
     Pattern.bindable position patternx
-    let typex' = patternx Pattern.! bound
+    (levity, typex') <- pure $ patternx Pattern.! bound
     Unify.unify context position typex typex'
-    pure $ Piece Choice {index, instanciation, patternx, bound}
+    pure $ Piece Choice {index, instanciation, levity, patternx, bound}
 
 solve ::
   Position ->
@@ -96,15 +98,17 @@ solve position = \case
   Definition definition -> do
     definition <- Definition.solve definition
     pure $ Solved.Definition definition
-  Piece Choice {index, instanciation, patternx, bound} -> do
+  Piece Choice {index, instanciation, levity, patternx, bound} -> do
     instanciation <- Unify.solveEvidence position instanciation
     patternx <- Pattern.solve patternx
+    levity <- Unify.solve position levity
     pure $
       Solved.Piece
         Solved.Choice
           { position,
             index,
             instanciation = Inferred.Solved instanciation,
+            levity = Inferred.Solved levity,
             patternx,
             bound
           }

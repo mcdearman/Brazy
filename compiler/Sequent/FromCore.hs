@@ -406,7 +406,7 @@ moduleDefinitions
       -- An instance, and its methods as definitions of their own if it
       -- needs nothing.
       instanceDefinitions global instancex@Instance {prerequisites, members} = case prerequisites of
-        None ->
+        None {} ->
           (global, runST (globalInstance pre (Just global) instancex)) : do
             (index, method) <- zip [0 ..] (toList members)
             pure (Runtime.member global index, runST (globalMember pre method))
@@ -430,7 +430,7 @@ globalDeclaration :: Precontext -> Global.Global -> TypeLambda Scope.Global -> S
 globalDeclaration pre global definition = do
   context <- Context.start pre
   case definition of
-    TypeLambdaOver {constraints = None, result = Core.ForeignExport {foreignCall, exported}} ->
+    TypeLambdaOver {constraints = None {}, result = Core.ForeignExport {foreignCall, exported}} ->
       exportOf (Context.evidenceBindings Vector.empty context) global foreignCall exported
     _ -> declaration context definition
 
@@ -487,8 +487,8 @@ named context consumer continue = case consumer of
 -- |
 -- Use a variable or call a function of evidence.
 implicit :: Context s scope -> Bool -> Producer -> Instanciation scope -> Consumer -> ST s Statement
-implicit _ False producer Instanciation.Mono consumer = pure $ Cut producer (Force consumer)
-implicit _ True producer Instanciation.Mono consumer = pure $ Cut producer consumer
+implicit _ False producer Instanciation.Mono {} consumer = pure $ Cut producer (Force consumer)
+implicit _ True producer Instanciation.Mono {} consumer = pure $ Cut producer consumer
 implicit context _ producer (Instanciation arguments) consumer =
   generateEvidences context (toList arguments) $ \arguments ->
     pure $ Cut producer (Apply arguments consumer)
@@ -532,7 +532,7 @@ instanceOf context = \case
 knownMethod :: Context s scope -> Evidence scope -> Int -> Maybe Producer
 knownMethod context dictionary index = case dictionary of
   Evidence.Variable {variable = Direct _ (Tuple _)} -> Nothing
-  Evidence.Variable {variable = variable@Direct {}, instanciation = Instanciation.Mono}
+  Evidence.Variable {variable = variable@Direct {}, instanciation = Instanciation.Mono {}}
     | (Global global, _) <- instanceOf context variable -> Just (Global (Runtime.member global index))
   _ -> Nothing
 
@@ -546,7 +546,7 @@ number = \case
     { function =
         Core.Method
           { method = Method.Index {typeIndex = Type2.Num, methodIndex},
-            evidence = Evidence.Variable {variable = Direct Type2.Num target, instanciation = Instanciation.Mono}
+            evidence = Evidence.Variable {variable = Direct Type2.Num target, instanciation = Instanciation.Mono {}}
           },
       argument = Core.Integer {integer}
     }
@@ -562,7 +562,7 @@ number = \case
     { function =
         Core.Method
           { method = Method.Index {typeIndex = Type2.Fractional, methodIndex},
-            evidence = Evidence.Variable {variable = Direct Type2.Fractional target, instanciation = Instanciation.Mono}
+            evidence = Evidence.Variable {variable = Direct Type2.Fractional target, instanciation = Instanciation.Mono {}}
           },
       argument = Core.Constructor {arguments}
     }
@@ -592,11 +592,11 @@ generateEvidence context = \case
             name <- fresh context
             body <- continue (Variable name)
             pure $ Cut (Global global) (Apply arguments (MuTilde (byValue name) body))
-        Instanciation.Mono -> error "bad tuple instance"
+        Instanciation.Mono {} -> error "bad tuple instance"
   Evidence.Variable {variable, instanciation} -> \continue -> do
     let (producer, strict) = instanceOf context variable
     case instanciation of
-      Instanciation.Mono
+      Instanciation.Mono {}
         | strict -> continue producer
         | otherwise -> do
             name <- fresh context
@@ -673,7 +673,7 @@ object context = \case
 delayed :: Context s scope -> Expression scope -> ST s Producer
 delayed context = \case
   expression | Just literal <- number expression -> pure (Literal literal)
-  Core.Variable {variable = index, instanciation = Instanciation.Mono} ->
+  Core.Variable {variable = index, instanciation = Instanciation.Mono {}} ->
     pure $ fst $ variable context index
   Core.Constructor
     { constructor = Constructor.Index {constructorIndex},
@@ -687,7 +687,7 @@ delayed context = \case
   Core.Newtype {argument} -> delayed context argument
   expression -> object context expression
   where
-    lazy Argument {info = EntryInfo {strict}} = not (Info.strict strict)
+    lazy Argument {info = EntryInfo {levity = strict}} = not (Info.strict strict)
 
 -- |
 -- Evaluate an expression. What the consumer is given is a value.
@@ -723,7 +723,7 @@ evaluate context expression consumer = case expression of
   Core.Selector
     { selector = Selector.Index {selectorIndex},
       argument,
-      selectorInfo = EntryInfo {strict}
+      selectorInfo = EntryInfo {levity = strict}
     } -> do
       name <- fresh context
       let field
@@ -736,7 +736,7 @@ evaluate context expression consumer = case expression of
       arguments
     } -> do
       let go [] continue = continue []
-          go (Argument {info = EntryInfo {strict}, argument} : rest) continue
+          go (Argument {info = EntryInfo {levity = strict}, argument} : rest) continue
             | Info.strict strict = do
                 name <- fresh context
                 body <- go rest (continue . (Variable name :))
@@ -780,7 +780,7 @@ evaluate context expression consumer = case expression of
   -- evaluated.
   Core.Run {imperative} -> evaluate context imperative (Apply [] (Force consumer))
   Core.Generalized {definition = definition@TypeLambdaOver {constraints, result}} -> case constraints of
-    None -> evaluate (Context.evidenceBindings Vector.empty context) result consumer
+    None {} -> evaluate (Context.evidenceBindings Vector.empty context) result consumer
     Constraints {} -> do
       function <- declaration context definition
       pure $ Cut function consumer
@@ -871,7 +871,7 @@ headed name = \case
 -- |
 -- Whether each field of the constructor a clause tests for holds a value.
 fields :: Head s -> [Bool]
-fields (Head _ _ _ ConstructorInfo {entries} _ _) = [Info.strict strict | EntryInfo {strict} <- toList entries]
+fields (Head _ _ _ ConstructorInfo {entries} _ _) = [Info.strict strict | EntryInfo {levity = strict} <- toList entries]
 
 -- |
 -- What a clause goes on to do when its test has matched, given the names of
@@ -900,14 +900,14 @@ data Head s where
 peel :: Context s scope -> Statements scope -> Maybe (Head s)
 peel context = \case
   Statements.LetOne
-    { declaration = Core.Variable {variable = index, instanciation = Instanciation.Mono},
+    { declaration = Core.Variable {variable = index, instanciation = Instanciation.Mono {}},
       body
     }
       | (Variable name, _) <- variable context index -> peel (singleBinding name context) body
   Statements.Bind
     { constructor = Constructor.Index {constructorIndex},
       constructorInfo,
-      check = Core.Variable {variable = index, instanciation = Instanciation.Mono},
+      check = Core.Variable {variable = index, instanciation = Instanciation.Mono {}},
       thenx
     }
       | (Variable name, strict) <- variable context index ->
@@ -938,7 +938,7 @@ attemptOne context statements success failure = case statements of
     } -> do
       names <- replicateM (length entries) (fresh context)
       let binders = zipWith binder names (toList entries)
-          binder name EntryInfo {strict}
+          binder name EntryInfo {levity = strict}
             | Info.strict strict = byValue name
             | otherwise = byNeed name
       thenx <-
@@ -980,11 +980,11 @@ declaration :: Context s scope -> TypeLambda scope -> ST s Producer
 declaration context TypeLambdaOver {constraints, result = expression} = do
   let count = case constraints of
         Constraints constraints -> length constraints
-        None -> 0
+        None {} -> 0
   names <- Vector.replicateM count (fresh context)
   context <- pure $ Context.evidenceBindings names context
   case constraints of
-    None -> object context expression
+    None {} -> object context expression
     Constraints {} -> do
       result <- fresh context
       body <- evaluate context expression (Covariable result)
@@ -1026,7 +1026,7 @@ generateInstance :: Context s scope -> Maybe Global.Global -> Instance scope -> 
 generateInstance context lifted Instance {evidence = EvidenceSet supers, prerequisites, members} = do
   let count = case prerequisites of
         Constraints count -> length count
-        None -> 0
+        None {} -> 0
   names <- Vector.replicateM count (fresh context)
   context <- pure $ Context.evidenceBindings names context
   result <- fresh context
@@ -1038,5 +1038,5 @@ generateInstance context lifted Instance {evidence = EvidenceSet supers, prerequ
         declaration context definition
     pure $ Cut (Constructor 0 (supers ++ members)) (Covariable result)
   pure $ case prerequisites of
-    None -> Thunk result body
+    None {} -> Thunk result body
     Constraints {} -> Function (byValue <$> toList names) result body

@@ -4,6 +4,7 @@ import Control.Monad.ST (ST)
 import Core.Tree.Data (Data)
 import qualified Core.Tree.Expression as Expression
 import qualified Core.Tree.Type as Core
+import qualified Core.Tree.Type as Type
 import qualified Core.Tree.TypeLambda as TypeLambda
 import Data.Foldable (toList)
 import qualified Data.Vector.Strict as Strict.Vector
@@ -80,7 +81,7 @@ bound bound context position typeIndex datax = do
       | otherwise -> derivingNonEnum position
   pure $ do
     body <- body
-    pure $ Generated $ Solved $ TypeLambda.mono body
+    pure $ Generated $ Solved $ TypeLambda.mono Type.lazy body
 
 minBound ::
   Context s (Local ':+ scope) ->

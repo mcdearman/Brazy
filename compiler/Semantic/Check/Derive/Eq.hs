@@ -7,6 +7,8 @@ import Core.Tree.Expression (Direction (..), lambdaVariable)
 import qualified Core.Tree.Expression as Expression
 import qualified Core.Tree.Statements as Statements
 import qualified Core.Tree.Type as Simple (TypeF (Variable))
+import Core.Tree.EntryInfo (EntryInfo (..))
+import qualified Core.Tree.Type as Type
 import qualified Core.Tree.TypeLambda as TypeLambda
 import Data.Foldable (toList)
 import qualified Data.Vector.Strict as Strict.Vector
@@ -68,11 +70,13 @@ equal context position typeIndex datax = do
                             thenx =
                               Statements.Done
                                 { done =
-                                    let compare index evidence =
-                                          Expression.eq
-                                            (shift $ shift $ shift $ shift evidence)
-                                            (shift $ Expression.patternVariableAt index)
-                                            (Expression.patternVariableAt index)
+                                    let compare index evidence
+                                          | EntryInfo {levity} <- entries Strict.Vector.! index,
+                                            levity <- shift $ shift levity =
+                                              Expression.eq
+                                                (shift $ shift $ shift $ shift evidence)
+                                                (shift $ Expression.patternVariableAt levity index)
+                                                (Expression.patternVariableAt (shift levity) index)
                                      in foldr
                                           (Expression.&&)
                                           Expression.true
@@ -114,4 +118,4 @@ equal context position typeIndex datax = do
                           done = Statements.Done {done = Expression.false}
                        in foldr branch done definitions
                   }
-    pure $ Generated $ Solved $ TypeLambda.mono body
+    pure $ Generated $ Solved $ TypeLambda.mono Type.lazy body

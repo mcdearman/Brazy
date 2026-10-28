@@ -8,7 +8,7 @@ import qualified Core.Tree.Constraints as Constraints (ConstraintsF (..))
 import Core.Tree.Forall (ForallOver (..))
 import Core.Tree.Instanciation (InstanciationF (..))
 import Core.Tree.Type (TypeF (Logical, Variable))
-import qualified Core.Tree.Type as Type (TypeF (..))
+import qualified Core.Tree.Type as Type (TypeF (..), lazy, strict)
 import qualified Core.Tree.TypeLambda as Simple (TypeLambdaOver (..))
 import Data.Foldable (toList, traverse_)
 import qualified Data.Kind as Kind
@@ -21,6 +21,7 @@ import qualified Data.Vector as Vector
 import qualified Data.Vector.Strict as Strict.Vector
 import Semantic.Check.Context (Context (..))
 import Semantic.Check.Binding.Local (shiftEquality)
+import Semantic.Check.Mask (Erasure (Known))
 import qualified Semantic.Check.Mask as Mask
 import qualified Semantic.Index.Evidence as Index.Evidence (assumed)
 import qualified Semantic.Index.Local as Local
@@ -42,6 +43,7 @@ import Semantic.Unify.Type
     Logical (..),
     Type (..),
     fresh,
+    mark,
     unshift,
   )
 import Semantic.Unify.Type1 (constrainWith)
@@ -86,7 +88,9 @@ instanciate context position ForallOver {parameters, constraints, result} = do
         arguments <- pure $ toList $ fmap (substitute fresh) arguments
         constrainWith context position classx head arguments
       pure $ Instanciation evidence
-    None -> pure Mono
+    None {levity} -> do
+      mark context position Known levity
+      pure Mono {levity}
   pure $ (substitute fresh result, instanciation)
 
 newtype Generalize typex s scopes = Generalize
@@ -156,12 +160,12 @@ generalizeBody position context requiring varying (Generalize run) = do
     Evidence.unify inner position evidence $
       Evidence.Variable
         { variable = Index.Evidence.assumed index,
-          instanciation = Mono
+          instanciation = Mono {levity = Type.strict}
         }
     arguments <- traverse (zonk Zonker Shift0.Id) arguments
     pure Constraint {classx = Type2.unlocal classx, head, arguments = Strict.Vector.fromList arguments}
   let constraints
-        | null assumed = Constraints.None
+        | null assumed = Constraints.None {levity = Type.lazy}
         | otherwise = Constraints.Constraints (Strict.Vector.fromList assumed)
   pure $
     ForallOver

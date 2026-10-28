@@ -3,8 +3,10 @@ module Semantic.Check.Binding.Term where
 import Control.Monad.ST (ST)
 import qualified Core.Tree.Forall as Core (mono)
 import qualified Core.Tree.Forall as Simple (Forall)
+import qualified Core.Tree.Type as Type
 import qualified Core.Type.Functor as Core (mapLogical, shiftLogical)
 import Data.Void (Void)
+import qualified Semantic.Index.Type2 as Type2
 import Semantic.Scope (Environment (..), GroupTerm)
 import qualified Semantic.Shift0 as Shift0
 import Semantic.Stage (Check)
@@ -46,4 +48,4 @@ local Declaration {typex} = TermBinding $ do
 group :: ST s () -> Unify.Type s scopes -> TermBinding s (GroupTerm ':+ scopes)
 group used typex = TermBinding $ do
   used
-  pure $ Wobbly $ Core.mono $ Core.shiftLogical typex
+  pure $ Wobbly $ Core.mono (Type.Constructor Type2.Lazy) $ Core.shiftLogical typex

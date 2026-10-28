@@ -64,7 +64,7 @@ info ConstructorInstance {position, entries, brand, asked} = case brand of
   -- constructor requires, unevaluated as anything else it holds may be.
   Brand.Boxed -> ConstructorInfo {entries = fmap EntryInstance.info entries <> evidence}
     where
-      evidence = Strict.Vector.fromList [EntryInfo {position, strict = Constructor Type2.Lazy} | _ <- asked]
+      evidence = Strict.Vector.fromList [EntryInfo {position, levity = Constructor Type2.Lazy} | _ <- asked]
 
 -- |
 -- What says how a constructor is laid out, where it is used to make a
@@ -83,6 +83,9 @@ built context instancex@ConstructorInstance {position, asked, equated} = do
 
 types :: ConstructorInstance s scope -> Strict.Vector (Unify.Type s scope)
 types ConstructorInstance {entries} = entry <$> entries
+
+levities :: ConstructorInstance s scope -> Strict.Vector (Unify.Type s scope)
+levities ConstructorInstance {entries} = EntryInstance.levity <$> entries
 
 function :: ConstructorInstance s scope -> Unify.Type s scope -> Unify.Type s scope
 function ConstructorInstance {entries} base = foldr ((-#>) . entry) base entries

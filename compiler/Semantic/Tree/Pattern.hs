@@ -3,6 +3,7 @@
 module Semantic.Tree.Pattern where
 
 import qualified Core.Tree.Evidence as Simple
+import qualified Core.Tree.Type as Core (Type)
 import Data.Kind (Constraint, Type)
 import Data.Map (Map)
 import qualified Data.Map as Map
@@ -24,13 +25,17 @@ import qualified Prelude
 
 data Pattern position stage scope
   = Wildcard
-      { names :: !(Map Variable position),
+      { startPosition :: !position,
+        levity :: !(Inferred Core.Type stage scope),
+        names :: !(Map Variable position),
         -- | Whether what it is matched against is evaluated: a bang
         -- pattern, @!x@ or @!_@.
         forced :: !Prelude.Bool
       }
   | Match
-      { names :: !(Map Variable position),
+      { startPosition :: !position,
+        levity :: !(Inferred Core.Type stage scope),
+        names :: !(Map Variable position),
         irrefutable :: !Prelude.Bool,
         match :: !(Bindings position stage scope)
       }
@@ -39,7 +44,7 @@ data Pattern position stage scope
     Signature
       { names :: !(Map Variable position),
         patternx :: !(Pattern position stage scope),
-        signatureStart :: !position,
+        startPosition :: !position,
         signature :: !(Scheme position stage scope)
       }
   deriving (Show)
@@ -49,18 +54,26 @@ instance Shift0.Functor (Pattern position stage) where
 
 instance Shift.Functor (Pattern position stage) where
   map category = \case
-    Wildcard {names, forced} -> Wildcard {names, forced}
-    Match {names, irrefutable, match} ->
+    Wildcard {startPosition, levity, names, forced} ->
+      Wildcard
+        { startPosition,
+          levity = Shift.map category levity,
+          names,
+          forced
+        }
+    Match {startPosition, levity, names, irrefutable, match} ->
       Match
-        { names,
+        { startPosition,
+          levity = Shift.map category levity,
+          names,
           irrefutable,
           match = Shift.map category match
         }
-    Signature {names, patternx, signatureStart, signature} ->
+    Signature {names, patternx, startPosition, signature} ->
       Signature
         { names,
           patternx = Shift.map category patternx,
-          signatureStart,
+          startPosition,
           signature = Shift.map category signature
         }
 
@@ -80,28 +93,23 @@ data Bindings position stage scope
         constructorInfo :: !(Inferred ConstructorInfo stage scope)
       }
   | Integer
-      { startPosition :: !position,
-        integer :: !Integer,
+      { integer :: !Integer,
         evidence :: !(Inferred Simple.Evidence stage scope),
         equal :: !(Inferred Simple.Evidence stage scope)
       }
   | Float
-      { startPosition :: !position,
-        float :: !Rational,
+      { float :: !Rational,
         evidence :: !(Inferred Simple.Evidence stage scope),
         equal :: !(Inferred Simple.Evidence stage scope)
       }
   | Character
-      { startPosition :: !position,
-        character :: !Char
+      { character :: !Char
       }
   | String
-      { startPosition :: !position,
-        string :: !StringLiteral
+      { string :: !StringLiteral
       }
   | List
-      { startPosition :: !position,
-        items :: !(Strict.Vector1 (Pattern position stage scope))
+      { items :: !(Strict.Vector1 (Pattern position stage scope))
       }
   deriving (Show)
 
@@ -126,31 +134,27 @@ instance Shift.Functor (Bindings position stage) where
           failable,
           constructorInfo = Shift.map category constructorInfo
         }
-    Integer {startPosition, integer, evidence, equal} ->
+    Integer {integer, evidence, equal} ->
       Integer
-        { startPosition,
-          integer,
+        { integer,
           evidence = Shift.map category evidence,
           equal = Shift.map category equal
         }
-    Float {startPosition, float, evidence, equal} ->
+    Float {float, evidence, equal} ->
       Float
-        { startPosition,
-          float,
+        { float,
           evidence = Shift.map category evidence,
           equal = Shift.map category equal
         }
-    Character {startPosition, character} ->
-      Character {startPosition, character}
-    String {startPosition, string} ->
+    Character {character} ->
+      Character {character}
+    String {string} ->
       String
-        { startPosition,
-          string
+        { string
         }
-    List {startPosition, items} ->
+    List {items} ->
       List
-        { startPosition,
-          items = fmap (Shift.map category) items
+        { items = fmap (Shift.map category) items
         }
 
 data Failable stage where
@@ -179,9 +183,16 @@ instance Shift.Functor (Field position stage) where
 
 lazy :: Pattern position stage scope -> Pattern position stage scope
 lazy = \case
-  Wildcard {names, forced} -> Wildcard {names, forced}
-  Match {names, match} -> Match {names, irrefutable = Prelude.True, match}
-  Signature {names, patternx, signatureStart, signature} -> Signature {names, patternx = lazy patternx, signatureStart, signature}
+  Wildcard {startPosition, levity, names, forced} -> Wildcard {startPosition, levity, names, forced}
+  Match {startPosition, levity, names, match} ->
+    Match
+      { startPosition,
+        levity,
+        names,
+        irrefutable = Prelude.True,
+        match
+      }
+  Signature {names, patternx, startPosition, signature} -> Signature {names, patternx = lazy patternx, startPosition, signature}
 
 type NeverFails :: (Type -> Stage -> Environment -> Type) -> Constraint
 class NeverFails patternx where
@@ -226,10 +237,13 @@ class Anonymize patternx where
 
 instance Anonymize Pattern where
   within outer = \case
-    Wildcard {names, forced} -> Wildcard {names = Map.map (const ()) names, forced = forced && not outer}
-    Match {names, irrefutable, match} ->
+    Wildcard {names, levity, forced} ->
+      Wildcard {startPosition = (), names = Map.map (const ()) names, levity, forced = forced && not outer}
+    Match {names, levity, irrefutable, match} ->
       Match
-        { names = Map.map (const ()) names,
+        { startPosition = (),
+          names = Map.map (const ()) names,
+          levity,
           irrefutable = lazily,
           match = within lazily match
         }
@@ -256,33 +270,16 @@ instance Anonymize Bindings where
           constructorInfo
         }
     Integer {integer, evidence, equal} ->
-      Integer
-        { startPosition = (),
-          integer,
-          evidence,
-          equal
-        }
+      Integer {integer, evidence, equal}
     Float {float, evidence, equal} ->
-      Float
-        { startPosition = (),
-          float,
-          evidence,
-          equal
-        }
+      Float {float, evidence, equal}
     Character {character} ->
-      Character
-        { startPosition = (),
-          character
-        }
+      Character {character}
     String {string} ->
-      String
-        { startPosition = (),
-          string
-        }
+      String {string}
     List {items} ->
       List
-        { startPosition = (),
-          items = within outer <$> items
+        { items = within outer <$> items
         }
 
 instance Anonymize Field where
@@ -292,5 +289,11 @@ instance Anonymize Field where
         field = within outer field
       }
 
-variable :: Position -> Variable -> Pattern Position stage scope
-variable position name = Wildcard {names = Map.singleton name position, forced = Prelude.False}
+variable :: Position -> Variable -> Pattern Position Resolve scope
+variable position name =
+  Wildcard
+    { startPosition = position,
+      levity = Inferred,
+      names = Map.singleton name position,
+      forced = Prelude.False
+    }

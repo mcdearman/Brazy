@@ -16,6 +16,7 @@ import Data.Void (Void)
 import qualified Semantic.Check.Go.Scheme as Semantic (Scheme)
 import qualified Semantic.Index.Term as Semantic.Term
 import Semantic.Layout (Normal)
+import Semantic.Shift (shift)
 import qualified Semantic.Shift as Shift
 import qualified Semantic.Shift0 as Shift0
 import Semantic.Stage (Check)
@@ -88,20 +89,27 @@ simplify = \case
             exported = definition2 solved exported
           }
       Semantic.Definition definition -> Expression.simplify definition
-      Semantic.Piece Semantic.Choice {index, instanciation = Solved instanciation, patternx, bound} ->
-        Expression.Join
-          { statements =
-              Statements.bind
-                (Pattern.anonymize patternx)
-                Expression.Variable
-                  { variable = index,
-                    instanciation
-                  }
-                Statements.Done
-                  { done =
-                      Expression.monoVariable $ Semantic.Term.Pattern bound
-                  }
-          }
+      Semantic.Piece
+        Semantic.Choice
+          { index,
+            instanciation = Solved instanciation,
+            levity = Solved levity,
+            patternx,
+            bound
+          } ->
+          Expression.Join
+            { statements =
+                Statements.bind
+                  (Pattern.anonymize patternx)
+                  Expression.Variable
+                    { variable = index,
+                      instanciation
+                    }
+                  Statements.Done
+                    { done =
+                        Expression.monoVariable (shift levity) $ Semantic.Term.Pattern bound
+                    }
+            }
       Semantic.Definition2.Shared shared -> Expression.simplify shared
 
 annotation ::

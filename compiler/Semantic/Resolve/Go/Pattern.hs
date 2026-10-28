@@ -103,13 +103,19 @@ resolve context = \case
   Syntax.At {variable = position :@ variable, patternx} ->
     let pre = resolve context patternx
      in pre {names = Map.insert variable position (names pre)}
-  Syntax.Wildcard {} -> Wildcard {names = Map.empty, forced = Prelude.False}
+  Syntax.Wildcard {startPosition} ->
+    Wildcard
+      { startPosition,
+        levity = Inferred,
+        names = Map.empty,
+        forced = Prelude.False
+      }
   -- A bang pattern. Matching anything but a name, or nothing, evaluates
   -- what is matched already, so a bang only changes those. A bang on a
   -- lazy pattern is only the lazy pattern, which does not evaluate what it
   -- is matched against first, as GHC's does.
   Syntax.Strict {patternx} -> case resolve context patternx of
-    Wildcard {names} -> Wildcard {names, forced = Prelude.True}
+    Wildcard {startPosition, levity, names} -> Wildcard {startPosition, levity, names, forced = Prelude.True}
     patternx -> patternx
   Syntax.Irrefutable {patternx} -> lazy (resolve context patternx)
   Syntax.Infix {startPosition, left, operator, operatorPosition, right} ->
@@ -140,12 +146,14 @@ resolve context = \case
     Signature
       { names = Map.empty,
         patternx = resolve context patternx,
-        signatureStart = startPosition,
+        startPosition,
         signature = Scheme.resolve context signature
       }
   patternx ->
     Match
-      { names = Map.empty,
+      { startPosition = Syntax.startPosition patternx,
+        levity = Inferred,
+        names = Map.empty,
         irrefutable = Prelude.False,
         match = case patternx of
           Syntax.Constructor {startPosition, constructor, patterns} ->
@@ -174,43 +182,37 @@ resolve context = \case
                       failable,
                       constructorInfo = Inferred
                     }
-          Syntax.Integer {startPosition, integer} ->
+          Syntax.Integer {integer} ->
             Integer
-              { startPosition,
-                integer,
+              { integer,
                 evidence = Inferred,
                 equal = Inferred
               }
-          Syntax.Float {startPosition, float} ->
+          Syntax.Float {float} ->
             Float
-              { startPosition,
-                float,
+              { float,
                 evidence = Inferred,
                 equal = Inferred
               }
-          Syntax.NegativeInteger {startPosition, integer} ->
+          Syntax.NegativeInteger {integer} ->
             Integer
-              { startPosition,
-                integer = -integer,
+              { integer = -integer,
                 evidence = Inferred,
                 equal = Inferred
               }
-          Syntax.NegativeFloat {startPosition, float} ->
+          Syntax.NegativeFloat {float} ->
             Float
-              { startPosition,
-                float = -float,
+              { float = -float,
                 evidence = Inferred,
                 equal = Inferred
               }
-          Syntax.Character {startPosition, character} ->
+          Syntax.Character {character} ->
             Character
-              { startPosition,
-                character
+              { character
               }
-          Syntax.String {startPosition, string} ->
+          Syntax.String {string} ->
             String
-              { startPosition,
-                string
+              { string
               }
           Syntax.Unit {startPosition} ->
             Constructor
@@ -239,8 +241,7 @@ resolve context = \case
                   }
             | otherwise ->
                 List
-                  { startPosition,
-                    items = fmap (resolve context) items
+                  { items = fmap (resolve context) items
                   }
           Syntax.Cons {startPosition, head, tail} ->
             Constructor

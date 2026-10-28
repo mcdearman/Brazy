@@ -5,6 +5,7 @@
 -- @Hazy.Helper@), as @lex@ has them.
 module Semantic.Check.Derive.Read (readsPrec) where
 
+import qualified Core.Tree.Type as Levity (lazy)
 import Core.Tree.Argument (Argument (..))
 import {-# SOURCE #-} qualified Builtin.Read as Read
 import {-# SOURCE #-} qualified Builtin.Semigroup as Semigroup
@@ -75,7 +76,7 @@ data Alternative scope = Alternative
 -- |
 -- Something a constructor holds lazily.
 lazily :: Expression scope -> Argument scope
-lazily argument = Argument {argument, info = EntryInfo {strict = Core.Constructor Type2.Lazy}}
+lazily argument = Argument {argument, info = EntryInfo {levity = Core.Constructor Type2.Lazy}}
 
 string :: String -> Expression scope
 string = foldr cons nil
@@ -145,7 +146,7 @@ chain (step : steps) held constructor info rest =
         ( Expression.Method
             { method = Method.readsPrec,
               evidence,
-              instanciation = Mono,
+              instanciation = Mono {levity = Levity.lazy},
               methodInfo = Class.info Read.definition
             }
             `Expression.call` Expression.int precedence
@@ -241,8 +242,8 @@ readsPrec context position typeIndex datax = do
         append left right =
           Expression.Method
             { method = Method.combine,
-              evidence = Variable {variable = Index.Evidence.Direct Type2.Semigroup Type2.List, instanciation = Mono},
-              instanciation = Mono,
+              evidence = Variable {variable = Index.Evidence.Direct Type2.Semigroup Type2.List, instanciation = Mono {levity = Levity.lazy}},
+              instanciation = Mono {levity = Levity.lazy},
               methodInfo = Class.info Semigroup.definition
             }
             `Expression.call` left
@@ -250,4 +251,4 @@ readsPrec context position typeIndex datax = do
         body = case alternatives of
           [] -> nil
           _ -> foldr1 append (map alternative alternatives)
-    pure $ Generated $ Solved $ TypeLambda.mono $ Expression.Lambda $ Expression.Lambda body
+    pure $ Generated $ Solved $ TypeLambda.mono Levity.lazy $ Expression.Lambda $ Expression.Lambda body

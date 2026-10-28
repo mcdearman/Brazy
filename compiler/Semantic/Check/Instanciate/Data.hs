@@ -80,10 +80,10 @@ selectorEntry DataInstance {constructors, selectors} selectorIndex = entries Str
 
 selectorInfo :: DataInstance s scope -> Int -> SelectorInfo s scope
 selectorInfo DataInstance {position, constructors, selectors} index = case selectors Strict.Vector.! index of
-  Selector {first, index, uniform = Selector.Uniform} -> Uniform {position, strict}
+  Selector {first, index, uniform = Selector.Uniform} -> Uniform {position, levity}
     where
       ConstructorInstance {entries} = constructors Strict.Vector.! first
-      EntryInstance {strict} = entries Strict.Vector.! index
+      EntryInstance {levity} = entries Strict.Vector.! index
   Selector {uniform = Selector.Disjoint {indexes}} ->
     Disjoint
       { select = Strict.Vector.imap pick indexes

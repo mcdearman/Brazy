@@ -2,13 +2,18 @@
 double =
 TypeLambdaOver {
   parameters = [],
-  constraints = None,
+  constraints = None {
+    levity = Constructor Lazy
+  },
   result = Lambda {
     body = Join {
       statements = LetOne {
+        levity = Constructor Lazy,
         declaration = Variable {
           variable = SimpleDeclaration,
-          instanciation = Mono
+          instanciation = Mono {
+            levity = Constructor Lazy
+          }
         },
         body = Let {
           declarations = Declarations {
@@ -28,21 +33,29 @@ TypeLambdaOver {
                   },
                   evidence = Variable {
                     variable = Direct Num Int,
-                    instanciation = Mono
+                    instanciation = Mono {
+                      levity = Constructor Lazy
+                    }
                   },
-                  instanciation = Mono,
+                  instanciation = Mono {
+                    levity = Constructor Lazy
+                  },
                   methodInfo = MethodInfo {
                     constraintCount = 0
                   }
                 },
                 argument = Variable {
                   variable = Shift SimpleDeclaration,
-                  instanciation = Mono
+                  instanciation = Mono {
+                    levity = Constructor Lazy
+                  }
                 }
               },
               argument = Variable {
                 variable = Shift SimpleDeclaration,
-                instanciation = Mono
+                instanciation = Mono {
+                  levity = Constructor Lazy
+                }
               }
             }
           }

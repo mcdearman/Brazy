@@ -13,6 +13,7 @@ module Semantic.Check.Derive.Functor
   )
 where
 
+import qualified Core.Tree.Type as Levity (lazy, strict)
 import {-# SOURCE #-} qualified Builtin.Applicative as Applicative
 import {-# SOURCE #-} qualified Builtin.Foldable as Foldable
 import {-# SOURCE #-} qualified Builtin.Functor as Functor
@@ -207,13 +208,15 @@ method index classx evidence instanciation =
 matching :: Made scope -> Pattern () Check scope
 matching Made {constructor, info, shapes} =
   Match
-    { names = Map.empty,
+    { startPosition = (),
+      levity = Solved Levity.lazy,
+      names = Map.empty,
       irrefutable = False,
       match =
         Pattern.Constructor
           { constructorPosition = (),
             constructor,
-            patterns = Strict.Vector.replicate (length shapes) Wildcard {names = Map.empty, forced = False},
+            patterns = Strict.Vector.replicate (length shapes) Wildcard {startPosition = (), levity = Solved Levity.lazy, names = Map.empty, forced = False},
             constructorInfo = Solved info,
             failable = Unused
           }
@@ -260,7 +263,7 @@ fmap context position typeIndex datax scheme = do
       Definition
         { definition =
             Bound
-              { patternx = Pattern.Wildcard {names = Map.empty, forced = False},
+              { patternx = Pattern.Wildcard {startPosition = (), levity = Solved Levity.lazy, names = Map.empty, forced = False},
                 body =
                   Bound
                     { patternx = shift (matching constructorx),
@@ -275,8 +278,8 @@ fmap context position typeIndex datax scheme = do
             (shift (shift info))
             ( Strict.Vector.fromList
                 [ shift (shift (mapper fieldShape))
-                    `Expression.call` shift Expression.patternVariable
-                    `Expression.call` Expression.patternVariableAt' index
+                    `Expression.call` shift (Expression.patternVariable Levity.lazy)
+                    `Expression.call` Expression.patternVariableAt' Levity.lazy index
                 | (index, fieldShape) <- zip [0 ..] shapes
                 ]
             )
@@ -291,7 +294,7 @@ fmap context position typeIndex datax scheme = do
       Inside evidence rest ->
         Expression.Lambda $
           Expression.Lambda $
-            method Method.fmap Functor.definition (shift (shift evidence)) Mono
+            method Method.fmap Functor.definition (shift (shift evidence)) (Mono {levity = Levity.lazy})
               `Expression.call` (shift (shift (mapper rest)) `Expression.call` shift Expression.lambdaVariable)
               `Expression.call` Expression.lambdaVariable
 
@@ -317,14 +320,14 @@ foldr context position typeIndex datax scheme = do
       Definition
         { definition =
             Bound
-              { patternx = Pattern.Wildcard {names = Map.empty, forced = False},
+              { patternx = Pattern.Wildcard {startPosition = (), levity = Solved Levity.lazy, names = Map.empty, forced = False},
                 body =
                   Bound
-                    { patternx = Pattern.Wildcard {names = Map.empty, forced = False},
+                    { patternx = Pattern.Wildcard {startPosition = (), levity = Solved Levity.lazy, names = Map.empty, forced = False},
                       body =
                         Bound
-                          { patternx = Pattern.Wildcard {names = Map.empty, forced = False},
-                            body = Plain {plain = Done {done = shift Expression.patternVariable}}
+                          { patternx = Pattern.Wildcard {startPosition = (), levity = Solved Levity.lazy, names = Map.empty, forced = False},
+                            body = Plain {plain = Done {done = shift (Expression.patternVariable Levity.lazy)}}
                           }
                     }
               }
@@ -333,10 +336,10 @@ foldr context position typeIndex datax scheme = do
       Definition
         { definition =
             Bound
-              { patternx = Pattern.Wildcard {names = Map.empty, forced = False},
+              { patternx = Pattern.Wildcard {startPosition = (), levity = Solved Levity.lazy, names = Map.empty, forced = False},
                 body =
                   Bound
-                    { patternx = Pattern.Wildcard {names = Map.empty, forced = False},
+                    { patternx = Pattern.Wildcard {startPosition = (), levity = Solved Levity.lazy, names = Map.empty, forced = False},
                       body =
                         Bound
                           { patternx = shift (shift (matching constructorx)),
@@ -350,11 +353,11 @@ foldr context position typeIndex datax scheme = do
           Prelude.foldr
             ( \(index, fieldShape) rest ->
                 shift (shift (shift (step fieldShape)))
-                  `Expression.call` shift (shift Expression.patternVariable)
-                  `Expression.call` Expression.patternVariableAt' index
+                  `Expression.call` shift (shift (Expression.patternVariable Levity.lazy))
+                  `Expression.call` Expression.patternVariableAt' Levity.lazy index
                   `Expression.call` rest
             )
-            (shift Expression.patternVariable)
+            (shift (Expression.patternVariable Levity.lazy))
             (zip [0 ..] shapes)
     -- \f x rest -> rest, with x folded in front of it by f
     step :: Shape (Evidence scope') -> Expression scope'
@@ -371,7 +374,7 @@ foldr context position typeIndex datax scheme = do
         Expression.Lambda $
           Expression.Lambda $
             Expression.Lambda $
-              method Method.foldr Foldable.definition (shift (shift (shift evidence))) Mono
+              method Method.foldr Foldable.definition (shift (shift (shift evidence))) (Mono {levity = Levity.lazy})
                 `Expression.call` ( Expression.Lambda $
                                       Expression.Lambda $
                                         shift (shift (shift (shift (shift (step rest)))))
@@ -406,13 +409,13 @@ traverse context position typeIndex datax scheme = do
     applicative =
       Variable
         { variable = Index.Evidence.Index (Evidence0.Assumed 0),
-          instanciation = Mono
+          instanciation = Mono {levity = Levity.strict}
         }
     definition constructorx@Made {constructor, info, shapes} =
       Definition
         { definition =
             Bound
-              { patternx = Pattern.Wildcard {names = Map.empty, forced = False},
+              { patternx = Pattern.Wildcard {startPosition = (), levity = Solved Levity.lazy, names = Map.empty, forced = False},
                 body =
                   Bound
                     { patternx = shift (matching constructorx),
@@ -425,14 +428,14 @@ traverse context position typeIndex datax scheme = do
         built =
           foldl
             ( \before (index, fieldShape) ->
-                method Method.ap Applicative.definition given Mono
+                method Method.ap Applicative.definition given (Mono {levity = Levity.lazy})
                   `Expression.call` before
                   `Expression.call` ( shift (shift (stepper applicative fieldShape))
-                                        `Expression.call` shift Expression.patternVariable
-                                        `Expression.call` Expression.patternVariableAt' index
+                                        `Expression.call` shift (Expression.patternVariable Levity.lazy)
+                                        `Expression.call` Expression.patternVariableAt' Levity.lazy index
                                     )
             )
-            ( method Method.pure Applicative.definition given Mono
+            ( method Method.pure Applicative.definition given (Mono {levity = Levity.lazy})
                 `Expression.call` Expression.simplifyConstructor (shift (shift constructor)) (shift (shift info)) 0 Nil
             )
             (zip [0 ..] shapes)
@@ -442,7 +445,7 @@ traverse context position typeIndex datax scheme = do
       Fixed ->
         Expression.Lambda $
           Expression.Lambda $
-            method Method.pure Applicative.definition (shift (shift given)) Mono
+            method Method.pure Applicative.definition (shift (shift given)) (Mono {levity = Levity.lazy})
               `Expression.call` Expression.lambdaVariable
       Whole ->
         Expression.Lambda $

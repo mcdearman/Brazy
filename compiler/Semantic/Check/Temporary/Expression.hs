@@ -1,17 +1,20 @@
 module Semantic.Check.Temporary.Expression where
 
+import qualified Core.Tree.Type as Levity (lazy)
 import Control.Monad (when, zipWithM)
 import Control.Monad.ST (ST)
 import qualified Core.Builtin as Builtin
 import qualified Core.Tree.Constructor (ConstructorF (..))
 import qualified Core.Tree.Data (Data (..), DefinitionF (..))
 import qualified Core.Tree.Entry (quantified)
-import Core.Tree.Constraints (ConstraintsF (None))
+import Core.Tree.Constraints (ConstraintsF (None, levity))
 import Core.Tree.Forall (ForallOver (..))
-import Core.Tree.Instanciation (InstanciationF (Mono))
+import Core.Tree.Instanciation (InstanciationF (Mono, levity))
+import qualified Core.Tree.Data as Data
 import qualified Core.Tree.Forall as Forall
 import Core.Tree.Type ((#), (-#>))
 import qualified Core.Tree.Type as Core
+import qualified Core.Tree.Type as Type (lazy)
 import Core.Tree.TypeDeclaration (assumeData)
 import qualified Core.Tree.TypeLambda as Simple
 import Core.Type.Functor (shiftLogical)
@@ -64,7 +67,7 @@ import qualified Semantic.Check.Binding.Type as TypeBinding
 import qualified Semantic.Index.Constructor as Constructor
 import qualified Semantic.Index.Local as Local (Index (Local))
 import qualified Semantic.Index.Table.Term as Term ((!))
-import qualified Semantic.Index.Table.Type as Type
+import qualified Semantic.Index.Table.Type as Type ((!))
 import qualified Semantic.Index.Term as Term.Index (Index)
 import qualified Semantic.Index.Type2 as Type2
 import Semantic.Layout (Group)
@@ -292,7 +295,7 @@ holding
             made = CallHead {callHead}
         pure $ Just $ case (through, reverse arguments) of
           (Just (variablePosition, variable), final : before) ->
-            let apply = CallHead.Variable {variablePosition, variable, instanciation = Mono}
+            let apply = CallHead.Variable {variablePosition, variable, instanciation = Mono {levity = Levity.lazy}}
              in Call (Call CallHead {callHead = apply} (foldl Call made (reverse before))) final
           _ -> foldl Call made arguments
       else pure Nothing
@@ -305,7 +308,7 @@ applying = \case
   TermBinding.Rigid
     ForallOver
       { parameters,
-        constraints = None,
+        constraints = None {},
         result =
           Core.Function
             (Core.Function (Core.Variable from) (Core.Variable to))
@@ -470,7 +473,7 @@ check context typex Semantic.Lambda {startPosition, parameter, body} = do
   -- matching on a constructor that says what type it makes tells nothing
   -- of a type that is not known yet.
   Unify.unify context startPosition typex (parameterType -#> resultType)
-  parameter <- Pattern.check context parameterType parameter
+  parameter <- Pattern.check context Type.lazy parameterType parameter
   body <- Lambda.check (Pattern.augment parameter context) (shiftLogical resultType) body
   Pattern.sealed context parameter [parameterType, resultType]
   pure Lambda {startPosition, parameter, body}
@@ -518,7 +521,7 @@ check context typex Semantic.RunST {startPosition, imperative} = do
       scheme =
         ForallOver
           { parameters = Strict.Vector.singleton Core.typex,
-            constraints = None,
+            constraints = None {levity = Levity.lazy},
             result = Core.Constructor Type2.ST # state # Shift0.map Shift0.Shift typex
           }
   imperative <- generalize context startPosition scheme imperative

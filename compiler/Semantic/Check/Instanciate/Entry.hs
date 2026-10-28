@@ -30,20 +30,20 @@ data EntryInstance s scope = EntryInstance
     scheme :: !(Unify.Forall s scope),
     -- | Whether it has one.
     quantified :: !Bool,
-    strict :: !(Unify.Type s scope)
+    levity :: !(Unify.Type s scope)
   }
 
 instanciate :: Position -> Strict.Vector (Unify.Type s scope) -> Entry (Local ':+ scope) -> EntryInstance s scope
-instanciate position fresh Entry {entry = scheme@ForallOver {parameters, constraints, result}, strict}
+instanciate position fresh Entry {entry = scheme@ForallOver {parameters, constraints, result}, levity}
   | null parameters,
-    None <- constraints,
+    None {} <- constraints,
     entry <- substituteType types (Shift.map (Shift.Unshift $ error "a type variable that nothing binds") result) =
       EntryInstance
         { position,
           entry,
-          scheme = Forall.mono entry,
+          scheme = Forall.mono (substituteType types levity) entry,
           quantified = False,
-          strict = substituteType types strict
+          levity = substituteType types levity
         }
   | otherwise =
       EntryInstance
@@ -55,8 +55,8 @@ instanciate position fresh Entry {entry = scheme@ForallOver {parameters, constra
           -- That function is what is held, and not something that is yet to
           -- be worked out to be it, so that it can be given the evidence
           -- wherever it is taken out.
-          strict = case constraints of
-            None -> substituteType types strict
+          levity = case constraints of
+            None {} -> substituteType types levity
             Constraints {} -> Constructor Type2.Strict
         }
   where
@@ -73,12 +73,12 @@ taken context position EntryInstance {entry, scheme, quantified}
   | otherwise = do
       (typex, instanciation) <- Unify.instanciate context position scheme
       case instanciation of
-        Mono -> pure typex
+        Mono {} -> pure typex
         Instanciation {} -> unsupportedFeaturePolymorphicComponents position
 
 info :: EntryInstance s scope -> EntryInfo s scope
-info EntryInstance {position, strict} = EntryInfo {position, strict}
+info EntryInstance {position, levity} = EntryInfo {position, levity}
 
 mark :: Context s scope -> EntryInstance s scope -> ST s ()
-mark context EntryInstance {position, strict} =
-  Unify.mark context position Mask.Known strict
+mark context EntryInstance {position, levity} =
+  Unify.mark context position Mask.Known levity

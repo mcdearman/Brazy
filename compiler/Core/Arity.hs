@@ -43,7 +43,7 @@ measure TypeLambdaOver {constraints, result} =
   Arity
     { evidences = case constraints of
         Constraints required -> length required
-        None -> 0,
+        None {} -> 0,
       lambdas = depth result
     }
   where
@@ -65,5 +65,5 @@ measure TypeLambdaOver {constraints, result} =
 -- for a name.
 alias :: Expression scope -> Bool
 alias = \case
-  Variable {instanciation = Mono} -> True
+  Variable {instanciation = Mono {}} -> True
   _ -> False

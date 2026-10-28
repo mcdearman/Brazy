@@ -160,8 +160,8 @@ declaration known original@Declaration {name, definition = TypeLambdaOver {param
       Flow.Done {done} -> Flow.Done {done = under done}
       Flow.Let {declarations, letBody}
         | Declarations.none declarations -> Flow.Let {declarations, letBody = flow letBody}
-      Flow.LetOne {declaration = named, body}
-        | alias named -> Flow.LetOne {declaration = named, body = flow body}
+      Flow.LetOne {levity, declaration = named, body}
+        | alias named -> Flow.LetOne {levity, declaration = named, body = flow body}
       other -> other
     wrap :: Int -> Expression scope -> Expression scope
     wrap count expression
@@ -200,14 +200,14 @@ top = \case
 -- out.
 atom :: Expression scope -> Bool
 atom = \case
-  Variable {instanciation = Mono} -> True
+  Variable {instanciation = Mono {}} -> True
   Integer {} -> True
   Character {} -> True
   Constructor {arguments} -> null arguments
   -- A method of evidence that is there.
-  Method {evidence, instanciation = Mono} -> held evidence
+  Method {evidence, instanciation = Mono {}} -> held evidence
   -- A number that is written.
-  Call {function = Method {method, evidence, instanciation = Mono}, argument = Integer {}} ->
+  Call {function = Method {method, evidence, instanciation = Mono {}}, argument = Integer {}} ->
     method == Method.fromInteger && held evidence
   _ -> False
 
@@ -215,13 +215,13 @@ atom = \case
 -- Whether the evidence a definition is given is there already.
 ready :: Instanciation scope -> Bool
 ready = \case
-  Mono -> True
+  Mono {} -> True
   Instanciation evidence -> all held evidence
 
 -- |
 -- Whether evidence is there already, and not made of other evidence.
 held :: Evidence.EvidenceF logicalEvidence logicalType scope -> Bool
 held = \case
-  Evidence.Variable {instanciation = Mono} -> True
+  Evidence.Variable {instanciation = Mono {}} -> True
   Evidence.Super {base} -> held base
   _ -> False

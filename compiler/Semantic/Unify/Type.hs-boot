@@ -36,3 +36,9 @@ refine :: Context s scope -> Position -> Type s scope -> Type s scope -> ST s [E
 absorb :: [Type s scope] -> Equality s scope -> ST s Bool
 lowerEquality :: Equality s (scope' ':+ scope) -> Maybe (Equality s scope)
 alike :: Type s scope -> Type s scope -> ST s Bool
+unshift ::
+  forall s scope scopes.
+  Context s (scope ':+ scopes) ->
+  Position ->
+  Type s (scope ':+ scopes) ->
+  ST s (Type s scopes)
