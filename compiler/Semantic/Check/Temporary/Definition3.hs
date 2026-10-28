@@ -1,7 +1,7 @@
 module Semantic.Check.Temporary.Definition3 where
 
 import Control.Monad.ST (ST)
-import qualified Core.Tree.Constructor (Constructor (..), Shape (..))
+import qualified Core.Tree.Constructor (ConstructorF (..), Shape (..))
 import qualified Core.Tree.Data (Data (..))
 import Core.Tree.TypeDeclaration (assumeData)
 import Data.Foldable (toList)

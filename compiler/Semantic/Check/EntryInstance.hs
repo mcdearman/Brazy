@@ -3,7 +3,7 @@ module Semantic.Check.EntryInstance where
 import Control.Monad.ST (ST)
 import Core.Substitute (substituteType)
 import Core.Tree.Constraints (ConstraintsF (..))
-import Core.Tree.Entry (Entry (..))
+import Core.Tree.Entry (Entry, EntryF (..))
 import Core.Tree.Forall (ForallOver (..))
 import Core.Tree.Instanciation (InstanciationF (..))
 import qualified Core.Tree.Forall as Forall (mono)

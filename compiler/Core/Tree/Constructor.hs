@@ -1,12 +1,13 @@
 module Core.Tree.Constructor where
 
 import qualified Core.Substitute as Substitute
-import Core.Tree.Entry (Entry)
+import Core.Tree.Entry (EntryF)
 import qualified Core.Tree.Entry as Entry
 import Core.Tree.Type (Type)
 import qualified Core.Tree.Type as Type
 import qualified Data.Vector.Strict as Strict
 import qualified Semantic.Index.Type2 as Type2
+import Data.Void (Void)
 import qualified Semantic.Shift as Shift
 import qualified Semantic.Shift0 as Shift0
 import Semantic.Stage (Check)
@@ -34,21 +35,50 @@ data Asked scope = Asked
   }
   deriving (Show)
 
-data Constructor scope = Constructor
+type Constructor = ConstructorF Void
+
+data ConstructorF logical scope = Constructor
   { name :: !Variable.Constructor,
     syntax :: !Syntax,
-    entries :: !(Strict.Vector (Entry scope)),
+    entries :: !(Strict.Vector (EntryF logical scope)),
     shape :: !(Shape scope)
   }
   deriving (Show)
 
-instance Shift0.Functor Constructor where
+instance Shift0.Functor (ConstructorF logical) where
   map = Shift.mapDefault
 
-instance Shift.Functor Constructor where
-  map = Substitute.mapDefault
+instance Shift.Functor (ConstructorF logical) where
+  map category Constructor {name, syntax, entries, shape} =
+    Constructor
+      { name,
+        syntax,
+        entries = Shift.map category <$> entries,
+        shape = Shift.map category shape
+      }
 
-instance Substitute.Functor Constructor where
+instance Shift0.Functor Shape where
+  map = Shift.mapDefault
+
+instance Shift.Functor Shape where
+  map category = \case
+    Ordinary -> Ordinary
+    Indexed {variables, asked, equated, arguments} ->
+      Indexed
+        { variables,
+          asked = Shift.map category <$> asked,
+          equated = fmap (\(left, right) -> (Shift.map category left, Shift.map category right)) equated,
+          arguments = Shift.map category <$> arguments
+        }
+
+instance Shift0.Functor Asked where
+  map = Shift.mapDefault
+
+instance Shift.Functor Asked where
+  map category Asked {classx, subject} =
+    Asked {classx = Shift.map category classx, subject = Shift.map category subject}
+
+instance (logical ~ Void) => Substitute.Functor (ConstructorF logical) where
   map category Constructor {name, syntax, entries, shape} =
     Constructor
       { name,

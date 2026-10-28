@@ -3,7 +3,7 @@ module Semantic.Check.Temporary.Expression where
 import Control.Monad (when, zipWithM)
 import Control.Monad.ST (ST)
 import qualified Core.Builtin as Builtin
-import qualified Core.Tree.Constructor (Constructor (..))
+import qualified Core.Tree.Constructor (ConstructorF (..))
 import qualified Core.Tree.Data (Data (..))
 import qualified Core.Tree.Entry (quantified)
 import Core.Tree.Constraints (ConstraintsF (None))

@@ -2,7 +2,7 @@ module Semantic.Check.Simple.Constructor where
 
 import Control.Monad.ST (ST)
 import Core.Substitute (substituteType)
-import Core.Tree.Constructor (Asked (..), Constructor (..), Shape (..))
+import Core.Tree.Constructor (Asked (..), Constructor, ConstructorF (..), Shape (..))
 import qualified Core.Tree.Type as Core
 import qualified Data.Vector.Strict as Strict
 import Data.Traversable (for)
