@@ -4,6 +4,7 @@ module Syntax.Parser
   ( Parser,
     token,
     token',
+    bang,
     Integer,
     integer,
     Rational,
@@ -85,6 +86,12 @@ type Parser = ParserCombinator.Parser Lexer
 
 token :: String -> Parser ()
 token = token' . lex
+
+-- |
+-- A @!@ that makes something strict: written straight before it, as a bang
+-- is, or apart from it, as the operator.
+bang :: Parser ()
+bang = token' Lexer.Bang <|> token "!"
 
 token' :: Lexeme -> Parser ()
 token' token = satifyBind (fromString $ show $ formatLexeme token) $ \case
