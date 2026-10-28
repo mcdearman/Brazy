@@ -930,6 +930,25 @@ simplifyWith expression [] = case expression of
               argument = shift $ simplify right
             }
       }
+  Semantic.LeftSection {operator, operand} ->
+    Call
+      { function =
+          Lambda
+            { body =
+                Lambda
+                  { body =
+                      Call
+                        { function =
+                            Call
+                              { function = shift $ shift $ simplifyCallHead operator,
+                                argument = shift lambdaVariable
+                              },
+                          argument = lambdaVariable
+                        }
+                  }
+            },
+        argument = simplify operand
+      }
   Semantic.Negate {evidence = Solved evidence, negative} ->
     Call
       { function =

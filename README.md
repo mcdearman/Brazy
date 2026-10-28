@@ -530,6 +530,16 @@ What is not there yet:
 The implicit prelude can be turn off like in GHC. This has the same effect of
 as `import Prelude()`.
 
+### Postfix Operators
+* Pragma: `PostfixOperators`
+* Toggleable: True
+
+A left section `(e !)` is the operator called on `e`, `(!) e`, as with GHC's
+`PostfixOperators`, so an operator of one argument can be written after what
+it takes. This is on unless turned off. With `NoPostfixOperators`, or with
+`Haskell2010`, a left section is `\y -> e ! y`, as the report has it, with
+`e` worked out once for every call.
+
 ### Lambda Case
 * Pragma: `LambdaCase`
 * Toggleable: False
@@ -622,13 +632,6 @@ arguments, or for something that is not a type of values at all. But the
 class is required of a parameter that is the type of nothing the value
 holds, which Haskell would not require. For that, write the
 `deriving instance` out with what it requires.
-
-## Planned Toggles
-These are devitations that will eventually toggleable with a language pragma.
-
-### Postfix Operators
-Left sections are treated as function application and are not eta expanded.
-This follows GHC's `PostfixOperators` extension.
 
 ## Intentional
 These are deviations that are unlikely to be fixed in the the near future.

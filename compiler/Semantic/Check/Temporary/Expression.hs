@@ -188,6 +188,11 @@ data Expression s scope
         left :: !(CallHead s scope),
         right :: !(Expression s scope)
       }
+  | LeftSection
+      { operatorPosition :: !Position,
+        operator :: !(CallHead s scope),
+        operand :: !(Expression s scope)
+      }
   | Negate
       { startPosition :: !Position,
         evidence :: !(Unify.Evidence s scope),
@@ -484,6 +489,15 @@ check context typex Semantic.RightSection {left, operatorPosition, right} = do
   right <- check context argumentType2 right
   Unify.unify context operatorPosition typex (argumentType1 -#> result)
   pure RightSection {operatorPosition, left, right}
+check context typex Semantic.LeftSection {operator, operatorPosition, operand} = do
+  argumentType1 <- Unify.fresh Core.typex
+  argumentType2 <- Unify.fresh Core.typex
+  result <- Unify.fresh Core.typex
+  let target = argumentType1 -#> argumentType2 -#> result
+  operator <- CallHead.check context target operator
+  operand <- check context argumentType1 operand
+  Unify.unify context operatorPosition typex (argumentType2 -#> result)
+  pure LeftSection {operatorPosition, operator, operand}
 check context typex Semantic.Annotation {expression = Explicit expression, operatorPosition, annotation} = do
   annotation <- Annotation.checkAnnotation context annotation
   let annotation' = Forall.simplify annotation
@@ -611,6 +625,10 @@ solve = \case
     left <- CallHead.solve left
     right <- solve right
     pure Solved.RightSection {operatorPosition, left, right}
+  LeftSection {operatorPosition, operator, operand} -> do
+    operator <- CallHead.solve operator
+    operand <- solve operand
+    pure Solved.LeftSection {operatorPosition, operator, operand}
   Negate {startPosition, evidence, negative} -> do
     evidence <- Unify.solveEvidence startPosition evidence
     negative <- solve negative

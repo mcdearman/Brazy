@@ -1835,7 +1835,11 @@ Planned toggles and TODOs:
       calls itself through another, as the report has it (test
       `generalisation`, which agrees with GHC). The README no longer lists
       the restriction among the deviations
-- [ ] A pragma for postfix operators (eta-expanded left sections when off)
+- [x] A pragma for postfix operators. `PostfixOperators` is on unless
+      turned off, as before; with `NoPostfixOperators` (or `Haskell2010`) a
+      left section is a function of the operator's second argument, with
+      what is on its left worked out once, as GHC has it (test
+      `postfix-operators`, which agrees with GHC)
 - [ ] Use `UnorderedRecords` throughout the compiler (after M6)
 - [ ] Top-level documentation for every module
 

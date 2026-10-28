@@ -36,7 +36,7 @@ import {-# SOURCE #-} qualified Semantic.Resolve.Temporary.ExpressionInfix as In
 import Semantic.Stage (Resolve)
 import Semantic.Tree.Combinators.Inferred (Inferred (..))
 import Semantic.Tree.Expression (Explicit (..), Expression (..))
-import Syntax.Extensions (permissiveUpdates)
+import Syntax.Extensions (permissiveUpdates, postfixOperators)
 import Syntax.Position (Position)
 import Syntax.Tree.Associativity (Associativity (..))
 import qualified Syntax.Tree.Expression as Syntax (Expression (..))
@@ -252,6 +252,18 @@ resolveWith context expression [] = case expression of
           { startPosition,
             negative
           }
+  Syntax.LeftSection {leftSection, operator = operatorPosition :@ operator}
+    | not postfix -> case operator of
+        QualifiedVariable operator -> LeftSection {operatorPosition, operator = function, operand}
+          where
+            _ Term.:@ Identity Term.Binding {index, fixity} = context !- operatorPosition :@ operator
+            function = CallHead.resolveVariable operatorPosition index
+            operand = section Left fixity leftSection
+        QualifiedConstructor name -> LeftSection {operatorPosition, operator = function, operand}
+          where
+            _ Constructor.:@ Identity Constructor.Binding {index, fixity} = context !=~ operatorPosition :@ name
+            function = CallHead.resolveConstructor operatorPosition index
+            operand = section Left fixity leftSection
   Syntax.LeftSection {leftSection, operator = operatorPosition :@ operator} -> case operator of
     QualifiedVariable operator -> resolveTerm2 position index (Nil :> left)
       where
@@ -261,6 +273,15 @@ resolveWith context expression [] = case expression of
       where
         position Constructor.:@ Identity Constructor.Binding {index, fixity} = context !=~ operatorPosition :@ operator
         left = section Left fixity leftSection
+  Syntax.LeftSectionCons {operatorPosition, leftSection}
+    | not postfix ->
+        LeftSection
+          { operatorPosition,
+            operator = CallHead.resolveCons operatorPosition,
+            operand = section Left fixity leftSection
+          }
+    where
+      fixity = Fixity {associativity = Right, precedence = 5}
   Syntax.LeftSectionCons {operatorPosition, leftSection} ->
     resolveConstructor2 operatorPosition Constructor.cons (Nil :> left)
     where
@@ -292,6 +313,7 @@ resolveWith context expression [] = case expression of
             instanciation = Inferred
           }
   where
+    postfix = postfixOperators $ extensions context
     section wanted Fixity {associativity, precedence} section
       | wanted == associativity =
           Infix.fixWith (Just associativity) precedence $ Infix.resolve context section
