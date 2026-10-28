@@ -31,6 +31,23 @@ import {-# SOURCE #-} Semantic.Unify.Error (Error (..), abort)
 import Semantic.Unify.Evidence (Evidence)
 import qualified Semantic.Unify.Evidence as Evidence (Box (..), Logical (..))
 import Semantic.Unify.Type
+  ( Box (..),
+    Delay (..),
+    Logical (..),
+    Type,
+    alikeAll,
+    compared,
+    defaults,
+    equated,
+    equatedHidden,
+    firstM,
+    fresh,
+    hidden,
+    sameAll,
+    typeCheck,
+    unify,
+    unshift,
+  )
 import Control.Monad (filterM)
 import qualified Core.Tree.Constraints as Instance (Prerequisites (..))
 import qualified Core.Tree.Type as Simple (Type)
