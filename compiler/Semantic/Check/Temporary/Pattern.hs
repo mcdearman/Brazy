@@ -369,7 +369,7 @@ knowing found Context {termEnvironment, localEnvironment, typeEnvironment, equal
 
 -- |
 -- Check the pattern for something a constructor holds.
-held :: Context s scope -> EntryInstance s scope -> Semantic.Pattern Resolve scope -> ST s (Pattern s scope)
+held :: Context s scope -> EntryInstance s scope -> Semantic.Pattern Position Resolve scope -> ST s (Pattern s scope)
 held context EntryInstance {quantified = Prelude.False, entry} patternx = check context entry patternx
 held _ EntryInstance {position, scheme} Semantic.Wildcard {names} = pure Polymorphic {position, scheme, names}
 held _ EntryInstance {position} _ = unsupportedFeaturePolymorphicComponents position
@@ -381,7 +381,7 @@ held _ EntryInstance {position} _ = unsupportedFeaturePolymorphicComponents posi
 -- what the first said.
 inOrder ::
   Context s scope ->
-  [(EntryInstance s scope, Semantic.Pattern Resolve scope)] ->
+  [(EntryInstance s scope, Semantic.Pattern Position Resolve scope)] ->
   ST s [Pattern s scope]
 inOrder context = \case
   [] -> pure []
@@ -390,7 +390,7 @@ inOrder context = \case
     rest <- inOrder (knowing (learnt patternx) context) rest
     pure (patternx : rest)
 
-check :: Context s scope -> Unify.Type s scope -> Semantic.Pattern Resolve scope -> ST s (Pattern s scope)
+check :: Context s scope -> Unify.Type s scope -> Semantic.Pattern Position Resolve scope -> ST s (Pattern s scope)
 check context@Context {typeEnvironment} typex = \case
   -- The type a pattern says is what it is matched against, a type variable
   -- of its own being any type, and the pattern inside is matched as it is.
@@ -498,10 +498,10 @@ check context@Context {typeEnvironment} typex = \case
 -- |
 -- A match on something a value holds that the pattern does not say: the
 -- evidence, which is held after everything else.
-unnamed :: Int -> Solved.Field Check scope
+unnamed :: Int -> Solved.Field Position Check scope
 unnamed index = Solved.Field {index, field = Solved.Wildcard {names = Map.empty, forced = Prelude.False}}
 
-solve :: Pattern s scope -> Unify.Solve s (Solved.Pattern Check scope)
+solve :: Pattern s scope -> Unify.Solve s (Solved.Pattern Position Check scope)
 solve = \case
   Wildcard {names, forced} -> pure Solved.Wildcard {names, forced}
   Polymorphic {names} -> pure Solved.Wildcard {names, forced = Prelude.False}

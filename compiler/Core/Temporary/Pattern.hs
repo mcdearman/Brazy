@@ -109,14 +109,14 @@ data Field scope = Field
   }
   deriving (Show)
 
-simplify :: Semantic.Pattern Check scope -> Pattern scope
+simplify :: Semantic.Pattern position Check scope -> Pattern scope
 simplify = within False
 
 -- |
 -- A pattern, which may be inside one that is lazy. Nothing of what a lazy
 -- pattern is matched against is looked at until something it binds is
 -- wanted, and that goes for the patterns inside it: they are lazy too.
-within :: Prelude.Bool -> Semantic.Pattern Check scope -> Pattern scope
+within :: Prelude.Bool -> Semantic.Pattern position Check scope -> Pattern scope
 within outer = \case
   Semantic.Signature {} -> error "a pattern the checker does not leave"
   -- Inside a lazy pattern a bang only says what a name is when it is
@@ -162,5 +162,5 @@ within outer = \case
     where
       irrefutable = outer || inner
 
-resolveField :: Prelude.Bool -> Semantic.Field Check scope -> Field scope
+resolveField :: Prelude.Bool -> Semantic.Field position Check scope -> Field scope
 resolveField irrefutable Semantic.Field {index, field} = Field index (within irrefutable field)

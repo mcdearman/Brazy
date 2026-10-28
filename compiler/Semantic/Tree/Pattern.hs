@@ -22,32 +22,32 @@ import Syntax.Variable (Variable)
 import Prelude hiding (Bool (False, True), Either (Left, Right), head, tail)
 import qualified Prelude
 
-data Pattern stage scope
+data Pattern position stage scope
   = Wildcard
-      { names :: !(Map Variable Position),
+      { names :: !(Map Variable position),
         -- | Whether what it is matched against is evaluated: a bang
         -- pattern, @!x@ or @!_@.
         forced :: !Prelude.Bool
       }
   | Match
-      { names :: !(Map Variable Position),
+      { names :: !(Map Variable position),
         irrefutable :: !Prelude.Bool,
-        match :: !(Bindings stage scope)
+        match :: !(Bindings position stage scope)
       }
   | -- | A pattern that says its type, @(x :: t)@. The checker reads the
     -- type and leaves the pattern inside, so only the resolver makes these.
     Signature
-      { names :: !(Map Variable Position),
-        patternx :: !(Pattern stage scope),
-        signatureStart :: !Position,
-        signature :: !(Scheme Position stage scope)
+      { names :: !(Map Variable position),
+        patternx :: !(Pattern position stage scope),
+        signatureStart :: !position,
+        signature :: !(Scheme position stage scope)
       }
   deriving (Show)
 
-instance Shift0.Functor (Pattern stage) where
+instance Shift0.Functor (Pattern position stage) where
   map = Shift.mapDefault
 
-instance Shift.Functor (Pattern stage) where
+instance Shift.Functor (Pattern position stage) where
   map category = \case
     Wildcard {names, forced} -> Wildcard {names, forced}
     Match {names, irrefutable, match} ->
@@ -64,51 +64,51 @@ instance Shift.Functor (Pattern stage) where
           signature = Shift.map category signature
         }
 
-data Bindings stage scope
+data Bindings position stage scope
   = Constructor
-      { constructorPosition :: !Position,
+      { constructorPosition :: !position,
         constructor :: !(Constructor.Index scope),
-        patterns :: !(Strict.Vector (Pattern stage scope)),
+        patterns :: !(Strict.Vector (Pattern position stage scope)),
         failable :: !(Failable stage),
         constructorInfo :: !(Inferred ConstructorInfo stage scope)
       }
   | Record
-      { constructorPosition :: !Position,
+      { constructorPosition :: !position,
         constructor :: !(Constructor.Index scope),
-        fields :: !(Strict.Vector (Field stage scope)),
+        fields :: !(Strict.Vector (Field position stage scope)),
         failable :: !(Failable stage),
         constructorInfo :: !(Inferred ConstructorInfo stage scope)
       }
   | Integer
-      { startPosition :: !Position,
+      { startPosition :: !position,
         integer :: !Integer,
         evidence :: !(Inferred Simple.Evidence stage scope),
         equal :: !(Inferred Simple.Evidence stage scope)
       }
   | Float
-      { startPosition :: !Position,
+      { startPosition :: !position,
         float :: !Rational,
         evidence :: !(Inferred Simple.Evidence stage scope),
         equal :: !(Inferred Simple.Evidence stage scope)
       }
   | Character
-      { startPosition :: !Position,
+      { startPosition :: !position,
         character :: !Char
       }
   | String
-      { startPosition :: !Position,
+      { startPosition :: !position,
         string :: !StringLiteral
       }
   | List
-      { startPosition :: !Position,
-        items :: !(Strict.Vector1 (Pattern stage scope))
+      { startPosition :: !position,
+        items :: !(Strict.Vector1 (Pattern position stage scope))
       }
   deriving (Show)
 
-instance Shift0.Functor (Bindings stage) where
+instance Shift0.Functor (Bindings position stage) where
   map = Shift.mapDefault
 
-instance Shift.Functor (Bindings stage) where
+instance Shift.Functor (Bindings position stage) where
   map category = \case
     Constructor {constructorPosition, constructor, patterns, failable, constructorInfo} ->
       Constructor
@@ -164,28 +164,28 @@ instance Show (Failable stage) where
     Failable -> showString "Failable"
     Unused -> showString "Unused"
 
-data Field stage scope = Field
+data Field position stage scope = Field
   { index :: !Int,
-    field :: !(Pattern stage scope)
+    field :: !(Pattern position stage scope)
   }
   deriving (Show)
 
-instance Shift0.Functor (Field stage) where
+instance Shift0.Functor (Field position stage) where
   map = Shift.mapDefault
 
-instance Shift.Functor (Field stage) where
+instance Shift.Functor (Field position stage) where
   map category = \case
     Field {index, field} -> Field {index, field = Shift.map category field}
 
-lazy :: Pattern stage scope -> Pattern stage scope
+lazy :: Pattern position stage scope -> Pattern position stage scope
 lazy = \case
   Wildcard {names, forced} -> Wildcard {names, forced}
   Match {names, match} -> Match {names, irrefutable = Prelude.True, match}
   Signature {names, patternx, signatureStart, signature} -> Signature {names, patternx = lazy patternx, signatureStart, signature}
 
-type NeverFails :: (Stage -> Environment -> Type) -> Constraint
+type NeverFails :: (Type -> Stage -> Environment -> Type) -> Constraint
 class NeverFails patternx where
-  neverFails :: patternx Resolve scope -> Prelude.Bool
+  neverFails :: patternx position Resolve scope -> Prelude.Bool
 
 instance NeverFails Pattern where
   neverFails = \case
@@ -212,5 +212,5 @@ instance NeverFails Bindings where
 instance NeverFails Field where
   neverFails Field {field} = neverFails field
 
-variable :: Position -> Variable -> Pattern stage scope
+variable :: Position -> Variable -> Pattern Position stage scope
 variable position name = Wildcard {names = Map.singleton name position, forced = Prelude.False}

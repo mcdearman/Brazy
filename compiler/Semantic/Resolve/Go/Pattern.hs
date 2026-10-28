@@ -39,7 +39,7 @@ import Syntax.Variable (Variable)
 import Prelude hiding (Bool (False, True), Either (Left, Right), head, tail)
 import qualified Prelude
 
-augment :: Pattern Resolve scope' -> Context scope -> Context (Scope.Pattern ':+ scope)
+augment :: Pattern Position Resolve scope' -> Context scope -> Context (Scope.Pattern ':+ scope)
 augment patternx context
   | context@Context {locals} <- shift context =
       context
@@ -48,7 +48,7 @@ augment patternx context
 
 bindings ::
   (Monoid stability) =>
-  Pattern Resolve scope' ->
+  Pattern Position Resolve scope' ->
   Bindings.Bindings stability (Scope.Pattern ':+ scope)
 bindings patternx =
   Bindings.Bindings
@@ -67,7 +67,7 @@ bindings patternx =
               selector = Term.Normal
             }
 
-selections :: Pattern Resolve scope -> Map Variable (Marked Term.Bound Position)
+selections :: Pattern Position Resolve scope -> Map Variable (Marked Term.Bound Position)
 selections patternx = Map.map single (selections patternx)
   where
     single = \case
@@ -75,14 +75,14 @@ selections patternx = Map.map single (selections patternx)
       [(position, patternx)] -> position :@ patternx
       patterns -> duplicateVariableEntries (map fst patterns)
 
-    selections :: Pattern Resolve scope -> Map Variable [(Position, Term.Bound)]
+    selections :: Pattern Position Resolve scope -> Map Variable [(Position, Term.Bound)]
     selections patternx = Map.unionWith (++) outer inner
       where
         outer = Map.map (\position -> [(position, Term.At)]) (names patternx)
-        select :: [Pattern Resolve scope] -> Map Variable [(Position, Term.Bound)]
+        select :: [Pattern Position Resolve scope] -> Map Variable [(Position, Term.Bound)]
         select patterns = foldr (Map.unionWith (++)) Map.empty $ zipWith pick patterns [0 ..]
           where
-            pick :: Pattern Resolve scope -> Int -> Map Variable [(Position, Term.Bound)]
+            pick :: Pattern Position Resolve scope -> Int -> Map Variable [(Position, Term.Bound)]
             pick patternx i = (Map.map . map) (\(position, x) -> (position, Term.Select i x)) (selections patternx)
         inner = case patternx of
           Wildcard {} -> select []
@@ -97,7 +97,7 @@ selections patternx = Map.map single (selections patternx)
           -- What says its type is matched against the same.
           Signature {patternx} -> selections patternx
 
-resolve :: Context scope -> Syntax.Pattern Position -> Pattern Resolve scope
+resolve :: Context scope -> Syntax.Pattern Position -> Pattern Position Resolve scope
 resolve context = \case
   Syntax.Variable {variable = position :@ name} -> variable position name
   Syntax.At {variable = position :@ variable, patternx} ->
