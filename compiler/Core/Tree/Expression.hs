@@ -13,7 +13,6 @@ import {-# SOURCE #-} Core.Temporary.Definition (Definition (Definition))
 import {-# SOURCE #-} qualified Core.Temporary.Definition as Definition
 import Core.Temporary.Function (Function (Bound))
 import qualified Core.Temporary.Function as Function
-import qualified Core.Temporary.Pattern as Pattern
 import qualified Core.Temporary.RightHandSide as RightHandSide
 import Core.Tree.Argument (Argument (..))
 import qualified Core.Tree.Class as Class
@@ -34,6 +33,7 @@ import Data.Foldable (toList)
 import qualified Data.Kind
 import Data.List.Reverse (List (..))
 import qualified Data.List.Reverse as Reverse
+import qualified Data.Map as Map
 import Data.Ratio (denominator, numerator)
 import Data.Text (Text)
 import qualified Data.Strict.Maybe as Strict (Maybe (..))
@@ -65,6 +65,8 @@ import Semantic.Tree.Expression (Explicit (Known))
 import qualified Semantic.Tree.Expression as Semantic (Expression (..))
 import qualified Semantic.Tree.ExpressionField as Semantic (Field (Field))
 import qualified Semantic.Tree.ExpressionField as Semantic.Field
+import Semantic.Tree.Pattern (Failable (Unused))
+import qualified Semantic.Tree.Pattern as Pattern
 import qualified Semantic.Tree.RightHandSide as Semantic (RightHandSide)
 import qualified Semantic.Tree.Select as Semantic (Select (..))
 import qualified Semantic.Tree.Statements as Semantic (Evidence, Statements, Syntax)
@@ -490,11 +492,14 @@ ifx condition thenx =
   guard
     ( Statements.bind
         ( Pattern.Match
-            { match =
+            { names = Map.empty,
+              match =
                 Pattern.Constructor
-                  { constructor = Constructor.true,
+                  { constructorPosition = (),
+                    constructor = Constructor.true,
                     patterns = Strict.Vector.empty,
-                    constructorInfo = Semantic.ConstructorInfo {entries = Strict.Vector.empty}
+                    constructorInfo = Solved Semantic.ConstructorInfo {entries = Strict.Vector.empty},
+                    failable = Unused
                   },
               irrefutable = False
             }
@@ -607,14 +612,14 @@ instance (Monadic syntax) => Simplify (Semantic.Statements syntax) where
         monadic = monad fail evidence
         definition =
           Bound
-            { patternx = Pattern.simplify patternx,
+            { patternx = Pattern.anonymize patternx,
               body = Function.Plain {plain = RightHandSide.Done {done = simplify thenx}}
             }
         alternative =
           Definition
             { definition =
                 Function.Bound
-                  { patternx = Pattern.Wildcard,
+                  { patternx = Pattern.Wildcard {names = Map.empty, forced = False},
                     body =
                       Function.Plain
                         { plain =
@@ -690,15 +695,18 @@ simplifySelector (Selector.Index typeIndex _) Disjoint {select} argument =
       where
         match =
           Pattern.Match
-            { irrefutable = False,
+            { names = Map.empty,
+              irrefutable = False,
               match =
                 Pattern.Constructor
-                  { constructor = Constructor.Index typeIndex index,
+                  { constructorPosition = (),
+                    constructor = Constructor.Index typeIndex index,
                     patterns =
                       Strict.Vector.replicate
                         (Semantic.ConstructorInfo.entryCount constructorInfo)
-                        Pattern.Wildcard,
-                    constructorInfo
+                        Pattern.Wildcard {names = Map.empty, forced = False},
+                    constructorInfo = Solved constructorInfo,
+                    failable = Unused
                   }
             }
         get =
@@ -762,11 +770,19 @@ simplifyWith expression [] = case expression of
         update constructorIndex Update {constructorInfo, selectorIndexes} =
           Statements.bind
             Pattern.Match
-              { match =
+              { names = Map.empty,
+                match =
                   Pattern.Constructor
-                    { constructor,
-                      patterns = Strict.Vector.replicate length Pattern.Wildcard,
-                      constructorInfo = shift constructorInfo
+                    { constructorPosition = (),
+                      constructor,
+                      patterns =
+                        Strict.Vector.replicate
+                          length
+                          Pattern.Wildcard
+                            { names = Map.empty, forced = False
+                            },
+                      constructorInfo = Solved $ shift constructorInfo,
+                      failable = Unused
                     },
                 irrefutable = False
               }
@@ -822,11 +838,16 @@ simplifyWith expression [] = case expression of
     guard
       ( Statements.bind
           ( Pattern.Match
-              { match =
+              { names = Map.empty,
+                match =
                   Pattern.Constructor
-                    { constructor = Constructor.true,
+                    { constructorPosition = (),
+                      constructor = Constructor.true,
                       patterns = Strict.Vector.empty,
-                      constructorInfo = Semantic.ConstructorInfo {entries = Strict.Vector.empty}
+                      constructorInfo =
+                        Solved
+                          Semantic.ConstructorInfo {entries = Strict.Vector.empty},
+                      failable = Unused
                     },
                 irrefutable = False
               }
@@ -867,7 +888,7 @@ simplifyWith expression [] = case expression of
   Semantic.Lambda {parameter, body} ->
     let definition =
           Bound
-            { patternx = Pattern.simplify parameter,
+            { patternx = Pattern.anonymize parameter,
               body = Function.simplify body
             }
      in Definition.desugar Definition {definition}

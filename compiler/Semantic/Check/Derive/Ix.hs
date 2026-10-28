@@ -19,8 +19,9 @@ import Control.Monad.ST (ST)
 import Core.Temporary.Definition (Definition (..))
 import qualified Core.Temporary.Definition as Definition
 import Core.Temporary.Function (Function (..))
-import Core.Temporary.Pattern (Pattern (..))
-import qualified Core.Temporary.Pattern as Pattern
+import Semantic.Tree.Pattern (Bindings (..), Failable (..), Pattern (..))
+import qualified Semantic.Tree.Pattern as Pattern
+import qualified Data.Map as Map
 import Core.Temporary.RightHandSide (RightHandSide (..))
 import qualified Core.Tree.Class as Class
 import Core.Tree.Data (Data)
@@ -90,15 +91,18 @@ tuple elements =
 
 -- |
 -- A tuple of so many things, matched, with each thing named by its place.
-matchTuple :: Int -> Pattern scope
+matchTuple :: Int -> Pattern () Check scope
 matchTuple count =
   Match
-    { irrefutable = False,
+    { names = Map.empty,
+      irrefutable = False,
       match =
         Pattern.Constructor
-          { constructor = Constructor.tuple count,
-            patterns = Strict.Vector.replicate count Wildcard,
-            constructorInfo = tupleInfo count
+          { constructorPosition = (),
+            constructor = Constructor.tuple count,
+            patterns = Strict.Vector.replicate count Wildcard {names = Map.empty, forced = False},
+            constructorInfo = Solved (tupleInfo count),
+            failable = Unused
           }
     }
 
@@ -142,12 +146,15 @@ through context position typeIndex datax = do
             let constructor = Constructor.Index {typeIndex = shift typeIndex, constructorIndex = 0}
                 matched =
                   Match
-                    { irrefutable = False,
+                    { names = Map.empty,
+                      irrefutable = False,
                       match =
                         Pattern.Constructor
-                          { constructor,
-                            patterns = Strict.Vector.replicate count Wildcard,
-                            constructorInfo = info
+                          { constructorPosition = (),
+                            constructor,
+                            patterns = Strict.Vector.replicate count Wildcard {names = Map.empty, forced = False},
+                            constructorInfo = Solved info,
+                            failable = Unused
                           }
                     }
                 held' = [Expression.patternVariableAt' place | place <- [0 .. count - 1]]
@@ -255,7 +262,7 @@ compared which context position typeIndex datax = do
                     { patternx = matchTuple 2,
                       body =
                         Bound
-                          { patternx = Pattern.Wildcard,
+                          { patternx = Pattern.Wildcard {names = Map.empty, forced = False},
                             body = Plain {plain = Done {done}}
                           }
                     }

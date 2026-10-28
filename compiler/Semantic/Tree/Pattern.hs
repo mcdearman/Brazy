@@ -212,5 +212,85 @@ instance NeverFails Bindings where
 instance NeverFails Field where
   neverFails Field {field} = neverFails field
 
+type Anonymize :: (Type -> Stage -> Environment -> Type) -> Constraint
+class Anonymize patternx where
+  anonymize :: patternx position resolve scope -> patternx () resolve scope
+  anonymize = within Prelude.False
+
+  -- | The same, for a pattern that may be inside one that is lazy. Nothing
+  -- of what a lazy pattern is matched against is looked at until something
+  -- it binds is wanted, and that goes for the patterns inside it: they are
+  -- lazy too. Inside a lazy pattern a bang only says what a name is when it
+  -- is wanted, and that is evaluated then anyway.
+  within :: Prelude.Bool -> patternx position resolve scope -> patternx () resolve scope
+
+instance Anonymize Pattern where
+  within outer = \case
+    Wildcard {names, forced} -> Wildcard {names = Map.map (const ()) names, forced = forced && not outer}
+    Match {names, irrefutable, match} ->
+      Match
+        { names = Map.map (const ()) names,
+          irrefutable = lazily,
+          match = within lazily match
+        }
+      where
+        lazily = outer || irrefutable
+    Signature {} -> error "a pattern the checker does not leave"
+
+instance Anonymize Bindings where
+  within outer = \case
+    Constructor {constructor, patterns, failable, constructorInfo} ->
+      Constructor
+        { constructorPosition = (),
+          constructor,
+          failable,
+          patterns = within outer <$> patterns,
+          constructorInfo
+        }
+    Record {constructor, fields, failable, constructorInfo} ->
+      Record
+        { constructorPosition = (),
+          constructor,
+          failable,
+          fields = within outer <$> fields,
+          constructorInfo
+        }
+    Integer {integer, evidence, equal} ->
+      Integer
+        { startPosition = (),
+          integer,
+          evidence,
+          equal
+        }
+    Float {float, evidence, equal} ->
+      Float
+        { startPosition = (),
+          float,
+          evidence,
+          equal
+        }
+    Character {character} ->
+      Character
+        { startPosition = (),
+          character
+        }
+    String {string} ->
+      String
+        { startPosition = (),
+          string
+        }
+    List {items} ->
+      List
+        { startPosition = (),
+          items = within outer <$> items
+        }
+
+instance Anonymize Field where
+  within outer Field {index, field} =
+    Field
+      { index,
+        field = within outer field
+      }
+
 variable :: Position -> Variable -> Pattern Position stage scope
 variable position name = Wildcard {names = Map.singleton name position, forced = Prelude.False}

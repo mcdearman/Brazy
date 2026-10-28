@@ -4,7 +4,6 @@ import Core.Arity (Arity)
 import qualified Core.Arity as Arity (measure)
 import qualified Core.Foreign as Foreign
 import qualified Core.Substitute as Substitute
-import qualified Core.Temporary.Pattern as Pattern
 import Core.Tree.Expression (Expression)
 import qualified Core.Tree.Expression as Expression
 import Core.Tree.Forall (Forall)
@@ -29,6 +28,7 @@ import qualified Semantic.Tree.Definition2 as Semantic.Definition2
 import qualified Semantic.Tree.Definition3 as Semantic (Definition3 (..))
 import qualified Semantic.Tree.Definition4 as Semantic (Definition4 (..))
 import qualified Semantic.Tree.Expression as Semantic (Expression)
+import qualified Semantic.Tree.Pattern as Pattern
 
 data Declaration scope = Declaration
   { name :: !Key,
@@ -92,7 +92,7 @@ simplify = \case
         Expression.Join
           { statements =
               Statements.bind
-                (Pattern.simplify patternx)
+                (Pattern.anonymize patternx)
                 Expression.Variable
                   { variable = index,
                     instanciation

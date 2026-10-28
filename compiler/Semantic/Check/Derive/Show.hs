@@ -5,8 +5,6 @@ import Control.Monad.ST (ST)
 import Core.Temporary.Definition (Definition (..))
 import qualified Core.Temporary.Definition as Definition
 import Core.Temporary.Function (Function (..))
-import Core.Temporary.Pattern (Bindings (..), Pattern (..))
-import qualified Core.Temporary.Pattern as Pattern
 import Core.Temporary.RightHandSide (RightHandSide (..))
 import qualified Core.Tree.Class as Class
 import Core.Tree.Data (Data)
@@ -19,6 +17,7 @@ import qualified Core.Tree.Type as Type
 import qualified Core.Tree.TypeLambda as TypeLambda
 import Data.Foldable (toList)
 import Data.List (intersperse)
+import qualified Data.Map as Map
 import Data.Text (unpack)
 import Data.Text.Lazy (toStrict)
 import Data.Text.Lazy.Builder (Builder, fromString, fromText, toLazyText)
@@ -43,6 +42,7 @@ import Semantic.Stage (Check)
 import Semantic.Tree.Combinators.Inferred (Inferred (Solved))
 import qualified Semantic.Tree.Constructor as Constructor (Syntax (..))
 import Semantic.Tree.MethodConcrete (Auto, MethodConcrete (Generated))
+import Semantic.Tree.Pattern (Bindings (..), Failable (..), Pattern (..))
 import qualified Semantic.Unify as Unify
 import Syntax.Lexer (runConstructorIdentifier, runConstructorSymbol, runVariableIdentifier, runVariableSymbol)
 import Syntax.Position (Position)
@@ -100,8 +100,9 @@ showsPrec context position typeIndex datax = do
   let unify index typex = Unify.unify context position typex (Core.Variable $ Local.Local index)
   sequence $ zipWith unify [0 ..] (toList types)
   let generate index constructor@ConstructorInstance {name, syntax, entries} = do
-        let patterns :: Strict.Vector (Pattern scope)
-            patterns = Strict.Vector.replicate (length entries) Wildcard
+        let patterns :: Strict.Vector (Pattern () Check scope)
+            patterns =
+              Strict.Vector.replicate (length entries) Wildcard {names = Map.empty, forced = False}
             types = entry <$> entries
         inside <- Apart.within context position datay (shift typeIndex) constructor
         evidence <- traverse (Unify.constrain inside position Type2.Show) types
@@ -211,23 +212,26 @@ showsPrec context position typeIndex datax = do
                 | otherwise = show [bracket '('] [bracket ')']
               mainPattern =
                 Match
-                  { irrefutable = False,
+                  { names = Map.empty,
+                    irrefutable = False,
                     match =
                       Constructor
-                        { constructor =
+                        { constructorPosition = (),
+                          constructor =
                             Constructor.Index
                               { typeIndex = shift typeIndex,
                                 constructorIndex = index
                               },
                           patterns,
-                          constructorInfo = info
+                          constructorInfo = Solved info,
+                          failable = Unused
                         }
                   }
           pure
             Definition
               { definition =
                   Bound
-                    { patternx = Pattern.Wildcard,
+                    { patternx = Wildcard {names = Map.empty, forced = False},
                       body =
                         Bound
                           { patternx = shift mainPattern,

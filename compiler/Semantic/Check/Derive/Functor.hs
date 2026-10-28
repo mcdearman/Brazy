@@ -21,8 +21,9 @@ import Control.Monad.ST (ST)
 import Core.Temporary.Definition (Definition (..))
 import qualified Core.Temporary.Definition as Definition
 import Core.Temporary.Function (Function (..))
-import Core.Temporary.Pattern (Pattern (..))
-import qualified Core.Temporary.Pattern as Pattern
+import Semantic.Tree.Pattern (Bindings (..), Failable (..), Pattern (..))
+import qualified Semantic.Tree.Pattern as Pattern
+import qualified Data.Map as Map
 import Core.Temporary.RightHandSide (RightHandSide (..))
 import Core.Tree.Class (Class)
 import qualified Core.Tree.Class as Class
@@ -203,15 +204,18 @@ method index classx evidence instanciation =
 
 -- |
 -- What a constructor holds, matched with nothing more asked of it.
-matching :: Made scope -> Pattern scope
+matching :: Made scope -> Pattern () Check scope
 matching Made {constructor, info, shapes} =
   Match
-    { irrefutable = False,
+    { names = Map.empty,
+      irrefutable = False,
       match =
         Pattern.Constructor
-          { constructor,
-            patterns = Strict.Vector.replicate (length shapes) Wildcard,
-            constructorInfo = info
+          { constructorPosition = (),
+            constructor,
+            patterns = Strict.Vector.replicate (length shapes) Wildcard {names = Map.empty, forced = False},
+            constructorInfo = Solved info,
+            failable = Unused
           }
     }
 
@@ -256,7 +260,7 @@ fmap context position typeIndex datax scheme = do
       Definition
         { definition =
             Bound
-              { patternx = Pattern.Wildcard,
+              { patternx = Pattern.Wildcard {names = Map.empty, forced = False},
                 body =
                   Bound
                     { patternx = shift (matching constructorx),
@@ -313,13 +317,13 @@ foldr context position typeIndex datax scheme = do
       Definition
         { definition =
             Bound
-              { patternx = Pattern.Wildcard,
+              { patternx = Pattern.Wildcard {names = Map.empty, forced = False},
                 body =
                   Bound
-                    { patternx = Pattern.Wildcard,
+                    { patternx = Pattern.Wildcard {names = Map.empty, forced = False},
                       body =
                         Bound
-                          { patternx = Pattern.Wildcard,
+                          { patternx = Pattern.Wildcard {names = Map.empty, forced = False},
                             body = Plain {plain = Done {done = shift Expression.patternVariable}}
                           }
                     }
@@ -329,10 +333,10 @@ foldr context position typeIndex datax scheme = do
       Definition
         { definition =
             Bound
-              { patternx = Pattern.Wildcard,
+              { patternx = Pattern.Wildcard {names = Map.empty, forced = False},
                 body =
                   Bound
-                    { patternx = Pattern.Wildcard,
+                    { patternx = Pattern.Wildcard {names = Map.empty, forced = False},
                       body =
                         Bound
                           { patternx = shift (shift (matching constructorx)),
@@ -408,7 +412,7 @@ traverse context position typeIndex datax scheme = do
       Definition
         { definition =
             Bound
-              { patternx = Pattern.Wildcard,
+              { patternx = Pattern.Wildcard {names = Map.empty, forced = False},
                 body =
                   Bound
                     { patternx = shift (matching constructorx),
