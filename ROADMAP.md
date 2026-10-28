@@ -1826,10 +1826,6 @@ Missing:
       gives way), and `Show` of `Identity` as GHC shows it, not as a record
       (test `builtin-instances`, which agrees with GHC). An `Int` is 63 bits,
       so its bounds are not GHC's
-- [ ] Exceptions that GHC throws and Hazy does not: dividing by nothing
-      ends the program, where GHC throws an `ArithException` that can be
-      caught, and a pattern that does not match ends it saying `bottom`,
-      where GHC throws a `PatternMatchFail`
 - [x] Pattern type signatures for `ScopedTypeVariables`: `(x :: t)` in
       brackets, alone or in a tuple, wherever a pattern goes. The type is
       resolved as a signature's is: a type variable a `forall` brought into
