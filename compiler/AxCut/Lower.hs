@@ -24,7 +24,8 @@ import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Text (Text, pack, unpack)
 import Generate.Global (Global)
-import qualified Sequent.Tree as Tree (free)
+import qualified Sequent.Runtime as Runtime (helperGlobal)
+import qualified Sequent.Tree as Tree (Literal (Int), free)
 import Sequent.Tree
   ( Alternative (..),
     Binder (..),
@@ -370,6 +371,25 @@ joined consumer = go
       LetRec bindings body -> Set.notMember consumer (Tree.free (map snd bindings)) && go body
       _ -> False
 
+-- |
+-- Where patterns run out, what GHC throws is thrown, which can be caught.
+-- This is done last of all, so that until now a failure is known for what
+-- it is. The helper is a function of one argument, which it does not look
+-- at, and is called straight; what is thrown never gives a value, so the
+-- consumer it is given is a number, which nothing ever gives to. Neither is
+-- counted. What is left of the row is given up.
+patternMatchFail :: AxCut.Statement
+patternMatchFail =
+  AxCut.Literal argument (Tree.Int 0) $
+    AxCut.Literal consumer (Tree.Int 0) $
+      AxCut.Global function (Runtime.helperGlobal "patternMatchFail") Nothing $
+        AxCut.Substitute [(argument, argument), (consumer, consumer), (function, function)] $
+          AxCut.Invoke AxCut.Apply
+  where
+    argument = pack "unused%"
+    consumer = pack "never%"
+    function = pack "patternMatchFail%"
+
 named :: Producer -> Text
 named = \case
   Variable name -> name
@@ -378,7 +398,7 @@ named = \case
 linearly :: Statement -> Linear
 linearly = \case
   Halt -> Linear {free = Set.empty, build = const AxCut.Halt}
-  Abort -> Linear {free = Set.empty, build = const AxCut.Abort}
+  Abort -> Linear {free = Set.empty, build = const patternMatchFail}
   -- A value to its consumer.
   Cut (Variable value) (Covariable consumer) ->
     leaving [value, consumer] (AxCut.Invoke AxCut.Return)
