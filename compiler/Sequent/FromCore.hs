@@ -51,7 +51,7 @@ import qualified Data.Vector.Strict as Strict.Vector
 import qualified Generate.Binding.Evidence as Evidence (Binding (..))
 import qualified Generate.Binding.Term as Term (Binding (..))
 import qualified Generate.Binding.Type as Type
-import Generate.Context (Context, fresh, singleBinding, (!-), (!=.), (!~))
+import Generate.Context (Context, fresh, singleBinding, strictBinding, (!-), (!=.), (!~))
 import qualified Generate.Context as Context
 import qualified Generate.Global as Global (Global (..))
 import qualified Generate.GlobalType as GlobalType
@@ -963,6 +963,11 @@ attemptOne context statements success failure = case statements of
         name <- fresh context
         body <- attempt (singleBinding name context) body success failure
         pure $ Cut value (MuTilde (byNeed name) body)
+  -- A name for what something is evaluated to, which it is first.
+  Statements.LetStrict {declaration = value, body} -> do
+    name <- fresh context
+    body <- attempt (strictBinding name context) body success failure
+    evaluate context value (MuTilde (byValue name) body)
   Statements.Branch {left, right} -> do
     -- The right branch is where the left one goes when it fails.
     right <- attempt context right success failure

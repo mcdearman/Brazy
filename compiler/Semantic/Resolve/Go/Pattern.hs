@@ -22,6 +22,7 @@ import Semantic.Resolve.Context
   )
 import qualified Semantic.Resolve.Go.PatternField as Field (resolve)
 import {-# SOURCE #-} qualified Semantic.Resolve.Temporary.PatternInfix as Infix (fix, resolve)
+import qualified Semantic.Resolve.Go.Scheme as Scheme (resolve)
 import Semantic.Scope (Environment (..))
 import qualified Semantic.Scope as Scope (Pattern)
 import Semantic.Shift (shift)
@@ -93,6 +94,8 @@ selections patternx = Map.map single (selections patternx)
           Character {} -> select []
           String {} -> select []
           List {items} -> select (toList items)
+          -- What says its type is matched against the same.
+          Signature {patternx} -> selections patternx
 
 resolve :: Context scope -> Syntax.Pattern Position -> Pattern Resolve scope
 resolve context = \case
@@ -100,7 +103,14 @@ resolve context = \case
   Syntax.At {variable = position :@ variable, patternx} ->
     let pre = resolve context patternx
      in pre {names = Map.insert variable position (names pre)}
-  Syntax.Wildcard {} -> Wildcard {names = Map.empty}
+  Syntax.Wildcard {} -> Wildcard {names = Map.empty, forced = Prelude.False}
+  -- A bang pattern. Matching anything but a name, or nothing, evaluates
+  -- what is matched already, so a bang only changes those. A bang on a
+  -- lazy pattern is only the lazy pattern, which does not evaluate what it
+  -- is matched against first, as GHC's does.
+  Syntax.Strict {patternx} -> case resolve context patternx of
+    Wildcard {names} -> Wildcard {names, forced = Prelude.True}
+    patternx -> patternx
   Syntax.Infix {startPosition, left, operator, operatorPosition, right} ->
     Infix.fix $
       Infix.resolve
@@ -123,6 +133,16 @@ resolve context = \case
             right
           }
   Syntax.Irrefutable {patternx} -> lazy (resolve context patternx)
+  -- The type a pattern says is resolved as a signature's is. A type
+  -- variable that is not in scope is one of its own, so a pattern may say
+  -- only part of its type.
+  Syntax.Signature {startPosition, patternx, signature} ->
+    Signature
+      { names = Map.empty,
+        patternx = resolve context patternx,
+        signatureStart = startPosition,
+        signature = Scheme.resolve context signature
+      }
   Syntax.Constructor {startPosition, constructor, patterns} ->
     case context !=~ startPosition :@ constructor of
       _ Constructor.:@ Identity Constructor.Binding {index = constructor, single} ->
