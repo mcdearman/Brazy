@@ -4,7 +4,7 @@ import Control.Monad (when, zipWithM)
 import Control.Monad.ST (ST)
 import qualified Core.Builtin as Builtin
 import qualified Core.Tree.Constructor (ConstructorF (..))
-import qualified Core.Tree.Data (Data (..))
+import qualified Core.Tree.Data (Data (..), DefinitionF (..))
 import qualified Core.Tree.Entry (quantified)
 import Core.Tree.Constraints (ConstraintsF (None))
 import Core.Tree.Forall (ForallOver (..))
@@ -268,7 +268,7 @@ holding
     datax <- do
       let get index = assumeData <$> TypeBinding.content (typeEnvironment Type.! index)
       Builtin.index pure get typeIndex
-    let Core.Tree.Data.Data {constructors = declared} = datax
+    let Core.Tree.Data.Data {definition = Core.Tree.Data.Definition {constructors = declared}} = datax
         Core.Tree.Constructor.Constructor {entries = held} = declared Strict.Vector.! constructorIndex
     applies <- case through of
       Nothing -> pure Prelude.True

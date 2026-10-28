@@ -138,7 +138,7 @@ mentions parameter = \case
 -- |
 -- What each constructor holds, as the type has it in its own parameters.
 declared :: Data scope -> [[Core.Type (Local ':+ scope)]]
-declared Core.Data.Data {constructors} =
+declared Core.Data.Data {definition = Core.Data.Definition {constructors}} =
   [ [ Shift.map (Shift.Unshift $ error "a type variable that nothing binds") result
     | Core.Entry.Entry {entry = ForallOver {result}} <- toList entries
     ]

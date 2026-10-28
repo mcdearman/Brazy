@@ -12,7 +12,7 @@ import qualified Core.Tree.Constraint as Core (Constraint, ConstraintF (..))
 import qualified Core.Tree.Constraint as Core.Constraint (argument)
 import qualified Core.Tree.Constraints as Core.Constraints (ConstraintsF (..), Prerequisites (..), simplify)
 import qualified Core.Tree.Constructor as Core.Constructor (ConstructorF (..), Shape (..))
-import qualified Core.Tree.Data as Core.Data (Data (..))
+import qualified Core.Tree.Data as Core.Data (Data (..), DefinitionF (..))
 import qualified Core.Tree.Entry as Core.Entry (EntryF (..))
 import qualified Core.Tree.Data as Core (Data)
 import qualified Core.Tree.Evidence as Core (Evidence)
@@ -142,13 +142,13 @@ requirements Context {typeEnvironment} derived self datax
     -- argument of.
     functorial = derived `elem` [Type2.Functor, Type2.Foldable, Type2.Traversable]
     indexed :: Core.Data.Data scope' -> Bool
-    indexed Core.Data.Data {constructors} = any telling constructors
+    indexed Core.Data.Data {definition = Core.Data.Definition {constructors}} = any telling constructors
     telling Core.Constructor.Constructor {shape} = case shape of
       Core.Constructor.Ordinary -> False
       Core.Constructor.Indexed {} -> True
     -- The types of what a type holds, in the type's own parameters.
     held :: Core.Data.Data scope' -> [Core.Type (Local ':+ scope')]
-    held Core.Data.Data {parameters = typeParameters, constructors} =
+    held Core.Data.Data {parameters = typeParameters, definition = Core.Data.Definition {constructors}} =
       [ found
       | Core.Constructor.Constructor {entries} <- toList constructors,
         Core.Entry.Entry {entry = Core.ForallOver {parameters, constraints = Core.Constraints.None, result}} <- toList entries,
@@ -511,7 +511,7 @@ checkBody position key Solve {solve} reflection information lookup members =
           Standard header ::: _ -> header
           DerivedInstance header ::: _ -> header
         let prerequisites = Inferred.get needed
-        Core.Class.Class {constraints, methods} <- do
+        Core.Class.Class {constraints, definition = Core.Class.Definition {methods}} <- do
           let get index = assumeClass <$> TypeBinding.content (typeEnvironment Table.Type.! index)
           Builtin.index pure get index
         extra <- do

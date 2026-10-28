@@ -2,7 +2,7 @@ module Semantic.Check.Temporary.Definition3 where
 
 import Control.Monad.ST (ST)
 import qualified Core.Tree.Constructor (ConstructorF (..), Shape (..))
-import qualified Core.Tree.Data (Data (..))
+import qualified Core.Tree.Data (Data (..), DefinitionF (..))
 import Core.Tree.TypeDeclaration (assumeData)
 import Data.Foldable (toList)
 import qualified Core.Builtin as Builtin
@@ -100,7 +100,7 @@ indexed Context {typeEnvironment} (Semantic.Label _ definition) = case definitio
       Nothing -> pure False
       Just typeIndex -> do
         let get index = assumeData <$> TypeBinding.content (typeEnvironment Type.! index)
-        Core.Tree.Data.Data {constructors = declared} <- Builtin.index pure get typeIndex
+        Core.Tree.Data.Data {definition = Core.Tree.Data.Definition {constructors = declared}} <- Builtin.index pure get typeIndex
         pure $ any telling declared
     telling Core.Tree.Constructor.Constructor {shape} = case shape of
       Core.Tree.Constructor.Ordinary -> False
