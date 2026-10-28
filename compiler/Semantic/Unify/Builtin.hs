@@ -112,6 +112,13 @@ constrain fallthough constrain classx head = table classx head
     table Type2.Functor (Type2.Tuple 2) [_] = single
     table Type2.Foldable (Type2.Tuple 2) [_] = single
     table Type2.Traversable (Type2.Tuple 2) [_] = single
+    table Type2.Applicative (Type2.Tuple 2) [first] = do
+      first <- constrain Type2.Monoid first
+      call [first]
+    table Type2.Monad (Type2.Tuple 2) [first] = do
+      first <- constrain Type2.Monoid first
+      call [first]
+    table Type2.Functor (Type2.Tuple 3) [_, _] = single
     table Type2.Foldable Type2.NonEmpty [] = single
     table Type2.Traversable Type2.List [] = single
     table Type2.Traversable Type2.NonEmpty [] = single

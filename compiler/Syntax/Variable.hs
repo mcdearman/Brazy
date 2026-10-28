@@ -28,6 +28,8 @@ module Syntax.Variable
     printOperator',
     prelude,
     prelude',
+    parseTypeOperator,
+    parseLocalTypeOperator,
   )
 where
 
@@ -43,6 +45,9 @@ import Syntax.Lexer
     VariableIdentifier,
     VariableSymbol,
     constructorIdentifier,
+    operatorType,
+    runConstructorSymbol,
+    runVariableSymbol,
     toQualifiers,
   )
 import qualified Syntax.Lexer as Lexer (FullQualifiers (..), Lexeme (..), Qualifiers (..))
@@ -189,6 +194,31 @@ instance CanonicalWrapped QualifiedVariableSymbol where
 
 data QualifiedConstructorIdentifier = !Qualifiers :=. !ConstructorIdentifier
   deriving (Show, Eq, Ord)
+
+-- |
+-- The name of a type operator, kept as the name of a type is: a symbol, of
+-- a constructor or a variable. The ones a type already means something by,
+-- a @forall@'s @.@, the kind @*@ and a strict field's @!@, are not.
+parseTypeOperator :: Parser QualifiedConstructorIdentifier
+parseTypeOperator = satifyBind Strings.typeOperator $ \case
+  Lex _ (qualifiers Lexer.:=: name) lexer _ -> Parse (qualifiers :=. operatorType (runConstructorSymbol name)) lexer
+  Lex _ (qualifiers Lexer.:-: name) lexer _
+    | runVariableSymbol name `notElem` reserved ->
+        Parse (qualifiers :=. operatorType (runVariableSymbol name)) lexer
+  _ -> Fail
+  where
+    reserved = map pack [".", "*", "!"]
+
+-- |
+-- The name of a type operator that is declared, which is not qualified.
+parseLocalTypeOperator :: Parser ConstructorIdentifier
+parseLocalTypeOperator = satifyBind Strings.typeOperator $ \case
+  Lex _ (Lexer.Local Lexer.:=: name) lexer _ -> Parse (operatorType (runConstructorSymbol name)) lexer
+  Lex _ (Lexer.Local Lexer.:-: name) lexer _
+    | runVariableSymbol name `notElem` reserved -> Parse (operatorType (runVariableSymbol name)) lexer
+  _ -> Fail
+  where
+    reserved = map pack [".", "*", "!"]
 
 infixl 5 :=.
 

@@ -1785,6 +1785,19 @@ Missing:
       the strictness analysis takes a throw, as it took an error, for
       something that does not come back (test `error-call`, which agrees
       with GHC)
+- [x] Exceptions that GHC throws and Hazy did not. Dividing by nothing, by
+      `div`, `mod`, `quot` or `rem` of an `Int` or an `Integer`, throws an
+      `ArithException` (`DivideByZero`), and a ratio over nothing throws
+      `RatioZeroDenominator`; both ended the program. A pattern that does
+      not match throws a `PatternMatchFail`; it ended the program saying
+      `bottom`. The compiler puts the throw where patterns run out last of
+      all, as the AxCut is made, so that until then a failure is known for
+      what it is. Nothing that catches them ends the program with how they
+      are shown, as `error` does (test `exceptions`, which agrees with GHC).
+      GHC says where the pattern was; Hazy does not
+- [ ] A value shared by more than one thing that throws while it is worked
+      out, and is caught, is left being worked out: asked for again, it
+      seems to loop, where GHC's throws again
 - [x] GADTs: see M6
 - [x] Polymorphic components: see M6
 - [x] Bang patterns, as GHC2021 has them on. A `!` written straight before
@@ -1802,7 +1815,17 @@ Missing:
       refused where it is checked. A strict field in a GADT constructor's
       type, `C :: !Int -> T`, works already. What a strict function type
       means is Freddy's strictness in types (Track B)
-- [ ] Remaining builtin instances
+- [x] Remaining builtin instances. Programs that use the standard classes
+      on the standard types (tuples to twelve, functions, `Maybe`,
+      `Either`, `Ordering`, `()`, the numbers, words and `Int`s of each
+      width, `Ratio`, `Complex`, `Identity`, `Const`, `Map` and `Set`) were
+      run against GHC a line at a time. What was missing is there now:
+      `Semigroup` and `Monoid` of `Maybe`, `Semigroup` of `Either`, the
+      monad of a pair whose first is a monoid, `Functor` of a triple,
+      `Alternative` and `MonadPlus` of `IO` (an error of input or output
+      gives way), and `Show` of `Identity` as GHC shows it, not as a record
+      (test `builtin-instances`, which agrees with GHC). An `Int` is 63 bits,
+      so its bounds are not GHC's
 - [x] Pattern type signatures for `ScopedTypeVariables`: `(x :: t)` in
       brackets, alone or in a tuple, wherever a pattern goes. The type is
       resolved as a signature's is: a type variable a `forall` brought into
@@ -1812,7 +1835,20 @@ Missing:
       signature. A type variable of the signature's own is not in scope in
       what follows, as GHC's is (test `pattern-signatures`, which agrees
       with GHC)
-- [ ] Proper type operators
+- [x] Proper type operators. A type may be named by an operator, a
+      constructor's symbol such as `:+:` or a variable's such as `+`, and is
+      declared with it between its two parameters or alone in brackets, as a
+      data type, a newtype or a synonym. Its name is kept as the name of a
+      type is, so nothing past parsing knows it is a symbol. Written between
+      two types it binds as a fixity declaration in its module says of the
+      operator written the same, and as `infixl 9` otherwise; such a
+      declaration that names no constructor or term the module declares is
+      the type operator's alone. In imports and exports it is written in
+      brackets, after `type` when it is a variable's symbol. The symbols a
+      type already means something by are not type operators: a `forall`'s
+      `.`, the kind `*` and a strict field's `!`. A class cannot be named by
+      one, since a class here has one parameter (test `type-operators`,
+      which agrees with GHC)
 
 Planned toggles and TODOs:
 

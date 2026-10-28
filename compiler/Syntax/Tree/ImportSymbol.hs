@@ -7,11 +7,16 @@ module Syntax.Tree.ImportSymbol where
 import Syntax.Parser
   ( Parser,
     asum,
+    betweenParens,
+    position,
+    token,
+    try,
   )
 import Syntax.Position (Position)
 import Syntax.Tree.ImportFields (Fields)
 import qualified Syntax.Tree.ImportFields as ImportFields
 import qualified Syntax.Tree.Marked as Marked
+import qualified Syntax.Variable as Variable (parseLocalTypeOperator)
 
 data Symbol
   = -- |
@@ -32,8 +37,11 @@ data Symbol
 parse :: Parser Symbol
 parse =
   asum
-    [ definition <$> Marked.parseLiteral,
-      datax <$> Marked.parse <*> ImportFields.parse
+    [ datax <$> (token "type" *> operator) <*> ImportFields.parse,
+      try (datax <$> operator <*> ImportFields.parseGiven),
+      definition <$> Marked.parseLiteral,
+      datax <$> Marked.parse <*> ImportFields.parse,
+      datax <$> operator <*> ImportFields.parse
     ]
   where
     definition variable =
@@ -45,3 +53,5 @@ parse =
         { typeVariable,
           fields
         }
+    -- A type operator, in brackets.
+    operator = try (betweenParens ((Marked.:@) <$> position <*> Variable.parseLocalTypeOperator))

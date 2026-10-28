@@ -32,12 +32,18 @@ import Semantic.Resolve.Temporary.Complete.TypeDeclaration (TypeDeclaration)
 import qualified Semantic.Resolve.Temporary.Complete.TypeDeclaration as Type
   ( bindings,
     indexes,
+    operatorFixities,
     merge,
     shrink,
     shrinkExtra,
   )
 import qualified Semantic.Resolve.Temporary.Partial.ConstructorDeclaration as Constructor (resolve)
-import Semantic.Resolve.Temporary.Partial.Declaration (Key (Unnamed))
+import Semantic.Resolve.Temporary.Partial.Declaration (Key (Named, Unnamed))
+import qualified Semantic.Resolve.Temporary.Partial.Declaration as PartialTerm (Declaration (Fixity))
+import qualified Semantic.Resolve.Temporary.Partial.ConstructorDeclaration as PartialConstructor (ConstructorDeclaration (Fixity))
+import qualified Data.Set as Set
+import Syntax.Lexer (operatorType, runConstructorSymbol, runVariableSymbol)
+import Syntax.Variable (Constructor (ConstructorSymbol), Variable (VariableSymbol))
 import qualified Semantic.Resolve.Temporary.Partial.Declaration as Term (resolve)
 import qualified Semantic.Resolve.Temporary.Partial.TypeDeclaration as Declaration.Type (resolve)
 import Semantic.Stage (Resolve)
@@ -48,12 +54,15 @@ import Syntax.Position (Position)
 import qualified Syntax.Tree.Declaration as Syntax (Declaration (..))
 import Syntax.Tree.InstanceHead (InstanceHead (..))
 import Syntax.Variable (ConstructorIdentifier, QualifiedConstructorIdentifier (..), Qualifiers (..))
+import Syntax.Tree.Fixity (Fixity)
 import Verbose (Debug)
 
 data Declarations scope = Declarations
   { terms :: !(Strict.Vector (Declaration scope)),
     constructors :: !(Strict.Vector ConstructorDeclaration),
     types :: !(Strict.Vector (TypeDeclaration scope)),
+    -- | How the type operators declared bind.
+    typeFixities :: !(Map ConstructorIdentifier Fixity),
     dataInstances :: !(Vector (Map (Type2.Index scope) (Instance Identity Identity Normal Resolve scope))),
     classInstances :: !(Vector (Map (Type2.Index scope) (Instance Identity Identity Normal Resolve scope)))
   }
@@ -84,7 +93,13 @@ resolve context extensions share declarations = do
           | Just index <- Map.lookup index typeIndexes =
               Just (index, types Strict.Vector.! index)
           | otherwise = Nothing
-    pure $ orderNonEmpty' (Constructor.merge extensions) $ foldMap (Constructor.resolve lookup) declarations
+    let entries = foldMap (Constructor.resolve lookup) declarations
+        declared = Set.fromList [name | (name, entry) <- entries, not (constructorFixity entry)]
+        typeOperator = \case
+          ConstructorSymbol symbol -> Map.member (operatorType (runConstructorSymbol symbol)) typeIndexes
+          _ -> False
+        wanted (name, entry) = not (constructorFixity entry) || Set.member name declared || not (typeOperator name)
+    pure $ orderNonEmpty' (Constructor.merge extensions) $ filter wanted entries
   classInstances <- do
     let instances = foldMap (ClassInstance.resolve context lookup) declarations
         lookup name
@@ -101,7 +116,13 @@ resolve context extensions share declarations = do
         unique instances = overlappingInstances (DataInstance.classPosition <$> toList instances)
     pure $ fmap (fmap unique) ordered
   terms <- mfix $ \terms -> do
-    let entries = Term.resolve context lookupTerm lookupType lookupShared declarations
+    let resolved = Term.resolve context lookupTerm lookupType lookupShared declarations
+        entries = filter wanted resolved
+        declared = Set.fromList [name | (name, entry) <- resolved, not (termFixity entry)]
+        typeOperator = \case
+          Named (VariableSymbol symbol) -> Map.member (operatorType (runVariableSymbol symbol)) typeIndexes
+          _ -> False
+        wanted (name, entry) = not (termFixity entry) || Set.member name declared || not (typeOperator name)
         lookupTerm name = terms Strict.Vector.! (termIndexes Map.! name)
         lookupType name = let index = typeIndexes Map.! name in (index, types Strict.Vector.! index)
         lookupShared temporary = shared Strict.Vector.! temporary
@@ -118,6 +139,7 @@ resolve context extensions share declarations = do
         { terms,
           constructors,
           types,
+          typeFixities = Type.operatorFixities declarations,
           dataInstances,
           classInstances
         }
@@ -149,14 +171,27 @@ bindings
   Declarations
     { terms,
       constructors,
-      types
+      types,
+      typeFixities
     } =
     Bindings
       { terms = Term.bindings termIndex typeIndex terms,
         constructors = ConstructorDeclaration.bindings typeIndex constructors,
-        types = Type.bindings typeIndex types,
+        types = Type.bindings typeFixities typeIndex types,
         stability = mempty
       }
+
+-- |
+-- Whether an entry is only a fixity declaration.
+constructorFixity :: PartialConstructor.ConstructorDeclaration -> Bool
+constructorFixity = \case
+  PartialConstructor.Fixity {} -> True
+  _ -> False
+
+termFixity :: PartialTerm.Declaration scope -> Bool
+termFixity = \case
+  PartialTerm.Fixity {} -> True
+  _ -> False
 
 shrink :: Declarations scope -> Real.Declarations Identity Void locality Identity Normal Resolve scope
 shrink Declarations {terms, types, dataInstances, classInstances} =

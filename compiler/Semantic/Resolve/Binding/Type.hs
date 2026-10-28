@@ -12,6 +12,7 @@ import Semantic.Resolve.Functor2 (Traversable2 (..))
 import qualified Semantic.Shift as Shift
 import qualified Semantic.Shift0 as Shift0
 import Syntax.Position (Position)
+import Syntax.Tree.Fixity (Fixity)
 import Syntax.Variable (Constructor, Variable)
 
 type Binding = BindingF Identity
@@ -64,7 +65,10 @@ data Header = Header
 
 data Detail scope = Binding
   { index :: !(Type3.Index scope),
-    methods :: !(Map Variable Int)
+    methods :: !(Map Variable Int),
+    -- | How the type binds when it is a type operator written between two
+    -- types.
+    fixity :: !Fixity
   }
   deriving (Show)
 
@@ -81,8 +85,9 @@ instance Shift0.Functor Detail where
   map = Shift.mapDefault
 
 instance Shift.Functor Detail where
-  map category Binding {index, methods} =
+  map category Binding {index, methods, fixity} =
     Binding
       { index = Shift.map category index,
-        methods
+        methods,
+        fixity
       }

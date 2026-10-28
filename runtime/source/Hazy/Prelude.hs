@@ -189,6 +189,15 @@ instance Traversable Maybe where
     Nothing -> pure Nothing
     Just a -> Just <$> f a
 
+-- What is there of either, put together if both.
+instance (Semigroup a) => Semigroup (Maybe a) where
+  Nothing <> b = b
+  a <> Nothing = a
+  Just a <> Just b = Just (a <> b)
+
+instance (Semigroup a) => Monoid (Maybe a) where
+  mempty = Nothing
+
 data Either a b = Left a | Right b
 
 instance (Eq a, Eq b) => Eq (Either a b) where
@@ -229,6 +238,11 @@ instance Applicative (Either a) where
 instance Monad (Either a) where
   Left a >>= _ = Left a
   Right a >>= f = f a
+
+-- The first that is a Right, or the last.
+instance Semigroup (Either a b) where
+  Left _ <> b = b
+  a <> _ = a
 
 instance Foldable (Either a) where
   foldr f z = foldr f z . toList

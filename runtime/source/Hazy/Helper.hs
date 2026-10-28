@@ -8,6 +8,8 @@ module Hazy.Helper where
 
 import Hazy
 import Hazy.Prelude
+import Hazy.PreludeIO (ArithException (..), arithmetic)
+import qualified Hazy.PreludeIO as PreludeIO (patternMatchFail)
 
 -- |
 -- A list made by a function given what puts an element before the rest and
@@ -65,6 +67,12 @@ derivedBind = bindRead
 
 data Strict a = Strict !a
 
+-- |
+-- What the compiler puts where patterns run out ("AxCut.Lower"): what GHC
+-- throws there is thrown.
+patternMatchFail :: b -> a
+patternMatchFail = PreludeIO.patternMatchFail
+
 enumEqual :: (Enum a) => a -> a -> Bool
 enumEqual l r = fromEnum l == fromEnum r
 
@@ -72,7 +80,7 @@ enumCompare :: (Enum a) => a -> a -> Ordering
 enumCompare l r = compare (fromEnum l) (fromEnum r)
 
 reduce :: (Integral a) => a -> a -> HelperRatio a
-reduce _ 0 = error "Data.Ratio.% : zero denominator"
+reduce _ 0 = arithmetic RatioZeroDenominator
 reduce x y = Ratio $ (x `quot` d) :% (y `quot` d)
   where
     d = gcd x y
@@ -359,11 +367,21 @@ instance Real HelperInt where
 -- go by way of a pair and of the class's own methods for the signs, and a
 -- compiler made by Hazy divided that way millions of times: a vector is a
 -- tree, and every step down it halves a number.
+--
+-- A division by nothing throws, as GHC's does.
 instance Integral HelperInt where
-  Int x `quot` Int y = Int (primIntQuot x y)
-  Int x `rem` Int y = Int (primIntRem x y)
-  Int x `div` Int y = Int (primIntDiv x y)
-  Int x `mod` Int y = Int (primIntMod x y)
+  Int x `quot` Int y
+    | primEqualInt y 0 = arithmetic DivideByZero
+    | otherwise = Int (primIntQuot x y)
+  Int x `rem` Int y
+    | primEqualInt y 0 = arithmetic DivideByZero
+    | otherwise = Int (primIntRem x y)
+  Int x `div` Int y
+    | primEqualInt y 0 = arithmetic DivideByZero
+    | otherwise = Int (primIntDiv x y)
+  Int x `mod` Int y
+    | primEqualInt y 0 = arithmetic DivideByZero
+    | otherwise = Int (primIntMod x y)
   quotRem x y = (x `quot` y, x `rem` y)
   divMod x y = (x `div` y, x `mod` y)
   toInteger (Int x) = primIntToInteger x
@@ -445,8 +463,12 @@ instance Real HelperInteger where
   toRational (Integer x) = x :% 1
 
 instance Integral HelperInteger where
-  Integer x `quot` Integer y = Integer (primIntegerQuot x y)
-  Integer x `rem` Integer y = Integer (primIntegerRem x y)
+  Integer x `quot` Integer y
+    | primEqualInteger y 0 = arithmetic DivideByZero
+    | otherwise = Integer (primIntegerQuot x y)
+  Integer x `rem` Integer y
+    | primEqualInteger y 0 = arithmetic DivideByZero
+    | otherwise = Integer (primIntegerRem x y)
   quotRem x y = (x `quot` y, x `rem` y)
   toInteger (Integer x) = x
 
@@ -1488,6 +1510,15 @@ instance Foldable (HelperTuple2 a) where
 instance Traversable (HelperTuple2 a) where
   traverse f (Tuple2 (a, b)) = fmap (\c -> Tuple2 (a, c)) (f b)
 
+-- A value with something put together alongside: the writer monad.
+instance (Monoid a) => Applicative (HelperTuple2 a) where
+  pure b = Tuple2 (mempty, b)
+  Tuple2 (a, f) <*> Tuple2 (a', b) = Tuple2 (a <> a', f b)
+
+instance (Monoid a) => Monad (HelperTuple2 a) where
+  Tuple2 (a, b) >>= f = case f b of
+    Tuple2 (a', c) -> Tuple2 (a <> a', c)
+
 -- What GHC says of an index that is not in its range.
 indexError :: (Show a) => String -> (a, a) -> a -> b
 indexError name bounds i =
@@ -1559,6 +1590,9 @@ instance (Ix a, Ix b) => Ix (HelperTuple2 a b) where
   inRange (Tuple2 (l1, l2), Tuple2 (u1, u2)) (Tuple2 (i1, i2)) = inRange (l1, u1) i1 && inRange (l2, u2) i2
 
 newtype HelperTuple3 a b c = Tuple3 (a, b, c)
+
+instance Functor (HelperTuple3 a b) where
+  fmap f (Tuple3 (a, b, c)) = Tuple3 (a, b, f c)
 
 instance (Eq a, Eq b, Eq c) => Eq (HelperTuple3 a b c) where
   Tuple3 x == Tuple3 y = x == y
