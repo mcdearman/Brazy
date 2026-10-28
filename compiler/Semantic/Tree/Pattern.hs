@@ -12,6 +12,7 @@ import qualified Semantic.Index.Constructor as Constructor (Index (..))
 import qualified Semantic.Shift as Shift
 import qualified Semantic.Shift0 as Shift0
 import Semantic.Tree.Combinators.Inferred (Inferred (..))
+import Semantic.Tree.Scheme (Scheme)
 import Semantic.Tree.PatternField (Field (..))
 import qualified Semantic.Tree.PatternField as Field (neverFails)
 import Syntax.Position (Position)
@@ -22,7 +23,10 @@ import qualified Prelude
 
 data Pattern stage scope
   = Wildcard
-      { names :: !(Map Variable Position)
+      { names :: !(Map Variable Position),
+        -- | Whether what it is matched against is evaluated: a bang
+        -- pattern, @!x@ or @!_@.
+        forced :: !Prelude.Bool
       }
   | Constructor
       { constructorPosition :: !Position,
@@ -76,6 +80,14 @@ data Pattern stage scope
         irrefutable :: !Prelude.Bool,
         items :: !(Strict.Vector1 (Pattern stage scope))
       }
+  | -- | A pattern that says its type, @(x :: t)@. The checker reads the
+    -- type and leaves the pattern inside, so only the resolver makes these.
+    Signature
+      { names :: !(Map Variable Position),
+        patternx :: !(Pattern stage scope),
+        signatureStart :: !Position,
+        signature :: !(Scheme Position stage scope)
+      }
   deriving (Show)
 
 instance Shift0.Functor (Pattern stage) where
@@ -83,7 +95,7 @@ instance Shift0.Functor (Pattern stage) where
 
 instance Shift.Functor (Pattern stage) where
   map category = \case
-    Wildcard {names} -> Wildcard {names}
+    Wildcard {names, forced} -> Wildcard {names, forced}
     Constructor {names, irrefutable, constructorPosition, constructor, patterns, single, constructorInfo} ->
       Constructor
         { names,
@@ -138,10 +150,17 @@ instance Shift.Functor (Pattern stage) where
           startPosition,
           items = fmap (Shift.map category) items
         }
+    Signature {names, patternx, signatureStart, signature} ->
+      Signature
+        { names,
+          patternx = Shift.map category patternx,
+          signatureStart,
+          signature = Shift.map category signature
+        }
 
 lazy :: Pattern stage scope -> Pattern stage scope
 lazy = \case
-  Wildcard {names} -> Wildcard {names}
+  Wildcard {names, forced} -> Wildcard {names, forced}
   Constructor {names, constructorPosition, constructor, patterns, single, constructorInfo} ->
     Constructor {names, irrefutable, constructorPosition, constructor, patterns, single, constructorInfo}
   Record {names, constructorPosition, constructor, fields, single, constructorInfo} ->
@@ -153,12 +172,14 @@ lazy = \case
   Character {names, startPosition, character} -> Character {names, irrefutable, startPosition, character}
   String {names, startPosition, string} -> String {names, irrefutable, startPosition, string}
   List {names, startPosition, items} -> List {names, irrefutable, startPosition, items}
+  Signature {names, patternx, signatureStart, signature} -> Signature {names, patternx = lazy patternx, signatureStart, signature}
   where
     irrefutable = Prelude.True
 
 neverFails :: Pattern stage scope -> Prelude.Bool
 neverFails = \case
   Wildcard {} -> Prelude.True
+  Signature {patternx} -> neverFails patternx
   patternx | irrefutable patternx -> Prelude.True
   Constructor {single, patterns} -> single && all neverFails patterns
   Record {single, fields} -> single && all Field.neverFails fields
@@ -169,4 +190,4 @@ neverFails = \case
   List {} -> Prelude.False
 
 variable :: Position -> Variable -> Pattern stage scope
-variable position name = Wildcard {names = Map.singleton name position}
+variable position name = Wildcard {names = Map.singleton name position, forced = Prelude.False}

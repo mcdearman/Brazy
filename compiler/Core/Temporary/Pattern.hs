@@ -15,6 +15,8 @@ import Syntax.StringLiteral (StringLiteral)
 
 data Pattern scope
   = Wildcard
+  | -- | A name, or nothing, for what is evaluated first: a bang pattern.
+    Forced
   | Match
       { match :: !(Bindings scope),
         irrefutable :: !Prelude.Bool
@@ -53,6 +55,7 @@ instance Shift0.Functor Pattern where
 instance Shift.Functor Pattern where
   map category = \case
     Wildcard -> Wildcard
+    Forced -> Forced
     Match {match, irrefutable} ->
       Match
         { match = Shift.map category match,
@@ -113,7 +116,12 @@ simplify = within False
 -- wanted, and that goes for the patterns inside it: they are lazy too.
 within :: Prelude.Bool -> Semantic.Pattern Check scope -> Pattern scope
 within outer = \case
-  Semantic.Wildcard {} -> Wildcard
+  Semantic.Signature {} -> error "a pattern the checker does not leave"
+  -- Inside a lazy pattern a bang only says what a name is when it is
+  -- wanted, and that is evaluated then anyway.
+  Semantic.Wildcard {forced}
+    | forced && not outer -> Forced
+    | otherwise -> Wildcard
   patternx ->
     Match
       { match = case patternx of
