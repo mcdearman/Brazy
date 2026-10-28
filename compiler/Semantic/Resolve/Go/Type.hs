@@ -135,6 +135,17 @@ resolve context = \case
               operator,
               right
             }
+  Syntax.Operator {startPosition, left, typeOperator, right} ->
+    Infix.fix operators
+    where
+      operators =
+        Infix.resolve context $
+          Syntax.TypeInfix.Operator
+            { startPosition,
+              left,
+              typeOperator,
+              right
+            }
   Syntax.InfixCons {startPosition, head, operatorPosition, tail} ->
     Infix.fix operators
     where

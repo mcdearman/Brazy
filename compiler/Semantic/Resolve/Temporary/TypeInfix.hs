@@ -7,6 +7,7 @@ import qualified Semantic.Index.Type2 as Type2
 import qualified Semantic.Resolve.Binding.Constructor as Constructor (BindingF (..), Detail (..))
 import Semantic.Resolve.Context
   ( Context (..),
+    typeFixity,
     (!=~),
   )
 import qualified Semantic.Resolve.Go.Type as Type (resolve)
@@ -30,20 +31,25 @@ import Syntax.Position (Position)
 import Syntax.Tree.Associativity (Associativity (..))
 import Syntax.Tree.Fixity (Fixity (..))
 import Syntax.Tree.Marked (Marked ((:@)))
+import qualified Syntax.Tree.Type as SyntaxType (Type (..))
 import qualified Syntax.Tree.TypeInfix as Syntax (Infix (..))
 import Prelude hiding (Either (Left, Right))
 
 data Index scope
   = Constructor !Position !(Constructor.Detail scope)
   | Cons !Position
+  | -- | A type operator: the type it names, and how it binds.
+    Operator !Position !(Type Position Resolve scope) !Fixity
 
 instance Infix.Token (Index scope) where
   position = \case
     Constructor position _ -> position
     Cons position -> position
+    Operator position _ _ -> position
   fixity = \case
     Constructor _ Constructor.Binding {fixity} -> fixity
     Cons _ -> Fixity {associativity = Right, precedence = 5}
+    Operator _ _ fixity -> fixity
 
 fixWith ::
   Maybe Associativity ->
@@ -67,6 +73,7 @@ fixWith = Infix.fixWith absurd operator
           }
           `call` left
           `call` right
+      Operator _ typex _ -> typex `call` left `call` right
       Cons constructorPosition ->
         Type.Constructor
           { startPosition = Type.startPosition left,
@@ -98,3 +105,10 @@ resolve context = \case
           (resolve context right)
   Syntax.InfixCons {head, operatorPosition, tail} ->
     Infix (Type.resolve context head) (Cons operatorPosition) (resolve context tail)
+  -- A type operator names a type, which is resolved as one written alone.
+  -- It binds as its fixity says.
+  Syntax.Operator {left, typeOperator = typeOperator@(operatorPosition :@ _), right} ->
+    Infix
+      (Type.resolve context left)
+      (Operator operatorPosition (Type.resolve context (SyntaxType.Constructor {startPosition = operatorPosition, constructor = typeOperator})) (typeFixity context typeOperator))
+      (resolve context right)

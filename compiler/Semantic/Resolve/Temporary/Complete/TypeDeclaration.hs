@@ -45,7 +45,12 @@ import qualified Semantic.Tree.TypeDeclarationExtra as Real.Extra
 import qualified Semantic.Tree.TypeDefinition as Real (TypeDefinition (..))
 import qualified Semantic.Tree.TypeDefinition2 as Real (Annotation (..), TypeDefinition2 (..))
 import Syntax.Position (Position)
+import qualified Syntax.Tree.Associativity as Associativity
 import qualified Syntax.Tree.Brand as Brand
+import qualified Syntax.Tree.Declaration as Syntax (Declaration (..))
+import Syntax.Tree.Fixity (Fixity (..))
+import Syntax.Tree.Marked (Marked ((:@)))
+import Syntax.Lexer (operatorType, runConstructorSymbol, runVariableSymbol)
 import Syntax.Variable (ConstructorIdentifier)
 import qualified Syntax.Variable as Variable
 import Verbose (Debug (resolving))
@@ -338,13 +343,31 @@ merge entries@(entry :| _) =
 indexes :: Strict.Vector (TypeDeclaration scope) -> Map ConstructorIdentifier Int
 indexes types = Map.fromList $ zip [name typex | typex <- toList types] [0 ..]
 
+-- |
+-- How the type operators a module declares bind: as a fixity declaration in
+-- the module says of the operator written the same.
+operatorFixities :: [Syntax.Declaration Position] -> Map ConstructorIdentifier Fixity
+operatorFixities declarations =
+  Map.fromList
+    [ (operatorType symbol, fixity)
+      | Syntax.Infix {fixity, termNames'} <- declarations,
+        _ :@ name <- toList termNames',
+        Just symbol <- [symbolOf name]
+    ]
+  where
+    symbolOf = \case
+      Variable.Variable (Variable.VariableSymbol symbol) -> Just (runVariableSymbol symbol)
+      Variable.Constructor (Variable.ConstructorSymbol symbol) -> Just (runConstructorSymbol symbol)
+      _ -> Nothing
+
 bindings ::
+  Map ConstructorIdentifier Fixity ->
   (Int -> Type0.Index scope) ->
   Strict.Vector (TypeDeclaration scope) ->
   Map ConstructorIdentifier (Type.Binding scope)
-bindings index types = Map.map typeIndex (indexes types)
+bindings fixities index types = Map.mapWithKey typeIndex (indexes types)
   where
-    typeIndex vectorIndex =
+    typeIndex typeName vectorIndex =
       Type.Header
         { position,
           constructors =
@@ -368,7 +391,8 @@ bindings index types = Map.map typeIndex (indexes types)
               methods =
                 case fields of
                   Methods methods -> Map.fromList (zipWith (\(Method {name}) i -> (name, i)) (toList methods) [0 ..])
-                  _ -> Map.empty
+                  _ -> Map.empty,
+              fixity = Map.findWithDefault Fixity {associativity = Associativity.Left, precedence = 9} typeName fixities
             }
       where
         TypeDeclaration {position, fields, constructors} =

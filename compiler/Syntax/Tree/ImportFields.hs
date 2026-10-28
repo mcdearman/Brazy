@@ -28,11 +28,15 @@ data Fields
   deriving (Show)
 
 parse :: Parser Fields
-parse =
+parse = asum [parseGiven, pure Fields {picks = Strict.Vector.empty}]
+
+-- |
+-- What of a type is named, when something is written for it.
+parseGiven :: Parser Fields
+parseGiven =
   asum
     [ AllFields <$ try (betweenParens (token "..")),
-      fields <$> betweenParens (Strict.Vector.fromList <$> sepByComma Marked.parseLiteral),
-      pure (fields Strict.Vector.empty)
+      fields <$> betweenParens (Strict.Vector.fromList <$> sepByComma Marked.parseLiteral)
     ]
   where
     fields picks = Fields {picks}

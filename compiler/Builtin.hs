@@ -109,7 +109,8 @@ overrideType
       Type.:@ Identity
                 Type.Binding
                   { index,
-                    methods
+                    methods,
+                    fixity
                   } ->
         header
           Type.:@ Identity
@@ -117,7 +118,8 @@ overrideType
               { index = case index of
                   Type3.Index (Type2.Index (Type.Global 0 0)) -> Type3.Index typeIndex
                   _ -> abort,
-                methods
+                methods,
+                fixity
               }
 
 overrideBinding :: Type2.Index scope -> Bindings stability Global -> Bindings stability scope

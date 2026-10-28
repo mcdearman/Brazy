@@ -1,5 +1,6 @@
 module Semantic.Resolve.Context
   ( Context (..),
+    typeFixity,
     empty,
     core,
     updateCore,
@@ -53,6 +54,7 @@ import Semantic.Tree.TypePattern (TypePattern)
 import qualified Semantic.Tree.TypePattern as TypePattern
 import Syntax.Extensions (Extensions)
 import Syntax.Position (Position)
+import Syntax.Tree.Fixity (Fixity)
 import Syntax.Tree.Marked (Marked (..))
 import Syntax.Variable
   ( FullQualifiers (..),
@@ -150,6 +152,12 @@ context !=* index = case context != index of
 (!=*~) :: Context scope -> Marked QualifiedConstructor Position -> Constructor.Index scope
 context !=*~ index = case context !=~ index of
   _ Constructor.:@ Identity Constructor.Binding {index} -> index
+
+-- |
+-- How a type binds when it is a type operator written between two types.
+typeFixity :: Context scope -> Marked QualifiedConstructorIdentifier Position -> Fixity
+typeFixity context index = case context !=. index of
+  _ Type.:@ Identity Type.Binding {fixity} -> fixity
 
 (!=.*) :: Context scope -> Marked QualifiedConstructorIdentifier Position -> Type3.Index scope
 context !=.* index = case context !=. index of
