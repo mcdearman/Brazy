@@ -86,7 +86,8 @@ import qualified Prelude
 
 data Expression s scope
   = CallHead
-      { callHead :: !(CallHead s scope)
+      { callHead :: !(CallHead s scope),
+        arguments :: !(Strict.Vector (Expression s scope))
       }
   | Integer
       { startPosition :: !Position,
@@ -234,8 +235,8 @@ construction ::
   Maybe (Position, Constructor.Index scope, [Semantic.Expression Group Resolve scope])
 construction expression arguments = case expression of
   Semantic.Call {function, argument} -> construction function (argument : arguments)
-  Semantic.CallHead {callHead = Head.Constructor {constructorPosition, constructor}} ->
-    Just (constructorPosition, constructor, arguments)
+  Semantic.CallHead {callHead = Head.Constructor {constructorPosition, constructor}, arguments = given} ->
+    Just (constructorPosition, constructor, toList given ++ arguments)
   _ -> Nothing
 
 -- |
@@ -287,12 +288,12 @@ holding
         arguments <- zipWithM (fill context) filled arguments
         constructorInfo <- ConstructorInstance.built context instancex
         let callHead = CallHead.Constructor {constructorPosition, constructor, constructorInfo}
-            made = CallHead {callHead}
+            made given = CallHead {callHead, arguments = Strict.Vector.fromList given}
         pure $ Just $ case (through, reverse arguments) of
           (Just (variablePosition, variable), final : before) ->
             let apply = CallHead.Variable {variablePosition, variable, instanciation = Mono {levity = Levity.lazy}}
-             in Call (Call CallHead {callHead = apply} (foldl Call made (reverse before))) final
-          _ -> foldl Call made arguments
+             in CallHead {callHead = apply, arguments = Strict.Vector.fromList [made (reverse before), final]}
+          _ -> made arguments
       else pure Nothing
 
 -- |
@@ -318,9 +319,35 @@ data Field s scope
   }
 
 check :: Context s scope -> Unify.Type s scope -> Semantic.Expression Group Resolve scope -> ST s (Expression s scope)
-check context typex Semantic.CallHead {callHead} = do
-  callHead <- CallHead.check context typex callHead
-  pure CallHead {callHead}
+check context@Context {termEnvironment} typex call@Semantic.CallHead {callHead, arguments} = do
+  special <- case (callHead, toList arguments) of
+    -- An action given to runST through a function that only applies, as in
+    -- @runST $ do ...@. Running the action is all that is left of it: what
+    -- such a function could evaluate first is the action, and running it
+    -- evaluates that.
+    (Head.Variable {variable}, [Semantic.RunSTAlone {startPosition}, imperative]) -> do
+      let TermBinding.TermBinding binding = termEnvironment Term.! variable
+      applies <- applying <$> binding
+      if applies
+        then Just <$> check context typex Semantic.RunST {startPosition, imperative}
+        else badRunSTCall startPosition
+    -- A constructor given the last thing it is given through a function
+    -- that only applies, as in @C $ x@.
+    (Head.Variable {variablePosition, variable}, [left, right])
+      | Just (position, constructor, given) <- construction left [] ->
+          holding context typex position constructor (given ++ [right]) (Just (variablePosition, variable))
+    _
+      | Just (position, constructor, given) <- construction call [] ->
+          holding context typex position constructor given Nothing
+      | otherwise -> pure Nothing
+  case special of
+    Just expression -> pure expression
+    Nothing -> do
+      types <- sequence $ Strict.Vector.replicate (length arguments) $ Unify.fresh Core.typex
+      let function = foldr (-#>) typex types
+      callHead <- CallHead.check context function callHead
+      arguments <- sequence $ Strict.Vector.zipWith (check context) types arguments
+      pure CallHead {callHead, arguments}
 check
   context@Context {typeEnvironment}
   typex
@@ -353,37 +380,8 @@ check context typex Semantic.List {startPosition, items} = do
   Unify.unify context startPosition typex (Core.list inner)
   items <- traverse (check context inner) items
   pure List {startPosition, items}
-check context@Context {termEnvironment} resultType call@Semantic.Call {function, argument} = do
+check context resultType call@Semantic.Call {function, argument} = do
   special <- case call of
-    -- An action given to runST through a function that only applies, as in
-    -- @runST $ do ...@. Running the action is all that is left of it: what
-    -- such a function could evaluate first is the action, and running it
-    -- evaluates that.
-    Semantic.Call
-      { function =
-          Semantic.Call
-            { function = Semantic.CallHead {callHead = Head.Variable {variable}},
-              argument = Semantic.RunSTAlone {startPosition}
-            },
-        argument = imperative
-      } -> do
-        let TermBinding.TermBinding binding = termEnvironment Term.! variable
-        applies <- applying <$> binding
-        if applies
-          then Just <$> check context resultType Semantic.RunST {startPosition, imperative}
-          else badRunSTCall startPosition
-    -- A constructor given the last thing it is given through a function
-    -- that only applies, as in @C $ x@.
-    Semantic.Call
-      { function =
-          Semantic.Call
-            { function = Semantic.CallHead {callHead = Head.Variable {variablePosition, variable}},
-              argument = left
-            },
-        argument = right
-      }
-        | Just (position, constructor, arguments) <- construction left [] ->
-            holding context resultType position constructor (arguments ++ [right]) (Just (variablePosition, variable))
     _
       | Just (position, constructor, arguments) <- construction call [] ->
           holding context resultType position constructor arguments Nothing
@@ -541,9 +539,10 @@ check context typex Semantic.Negate {startPosition, negative} = do
 
 solve :: Expression s scope -> Unify.Solve s (Solved.Expression Group Check scope)
 solve = \case
-  CallHead {callHead} -> do
+  CallHead {callHead, arguments} -> do
     callHead <- CallHead.solve callHead
-    pure Solved.CallHead {callHead}
+    arguments <- traverse solve arguments
+    pure Solved.CallHead {callHead, arguments}
   Record {constructorPosition, constructor, constructorInfo, fields} -> do
     let solveField Field {index, field} = do
           field <- solve field
