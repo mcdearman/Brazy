@@ -13,7 +13,6 @@ import Semantic.Check.Context (Context (..))
 import Semantic.Check.DataInstance (DataInstance (..))
 import qualified Semantic.Check.DataInstance as DataInstance
 import qualified Semantic.Check.EntryInstance as EntryInstance (taken)
-import qualified Semantic.Check.Simple.Class as Simple.Class
 import qualified Semantic.Check.Simple.Data as Simple.Data
 import Semantic.Check.Simple.MethodInfo (MethodInfo)
 import Semantic.Check.Simple.Scheme (instanciate)
@@ -110,7 +109,7 @@ check
         classx <- do
           let get index = assumeClass <$> TypeBinding.content (typeEnvironment Type.! index)
           Builtin.index pure get typeIndex
-        instancex <- Simple.Class.instanciate context methodPosition typeIndex classx
+        instancex <- ClassInstance.instanciate context methodPosition typeIndex classx
         let function = ClassInstance.methodFunction instancex methodIndex
             methodInfo = ClassInstance.info instancex
             Delay evidence = Class.evidence instancex
