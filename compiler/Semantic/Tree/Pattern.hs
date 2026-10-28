@@ -29,57 +29,10 @@ data Pattern stage scope
         -- pattern, @!x@ or @!_@.
         forced :: !Prelude.Bool
       }
-  | Constructor
-      { constructorPosition :: !Position,
-        names :: !(Map Variable Position),
+  | Match
+      { names :: !(Map Variable Position),
         irrefutable :: !Prelude.Bool,
-        constructor :: !(Constructor.Index scope),
-        patterns :: !(Strict.Vector (Pattern stage scope)),
-        single :: !Prelude.Bool,
-        constructorInfo :: !(Inferred ConstructorInfo stage scope)
-      }
-  | Record
-      { constructorPosition :: !Position,
-        names :: !(Map Variable Position),
-        irrefutable :: !Prelude.Bool,
-        constructor :: !(Constructor.Index scope),
-        fields :: !(Strict.Vector (Field stage scope)),
-        single :: !Prelude.Bool,
-        constructorInfo :: !(Inferred ConstructorInfo stage scope)
-      }
-  | Integer
-      { startPosition :: !Position,
-        names :: !(Map Variable Position),
-        irrefutable :: !Prelude.Bool,
-        integer :: !Integer,
-        evidence :: !(Inferred Simple.Evidence stage scope),
-        equal :: !(Inferred Simple.Evidence stage scope)
-      }
-  | Float
-      { startPosition :: !Position,
-        names :: !(Map Variable Position),
-        irrefutable :: !Prelude.Bool,
-        float :: !Rational,
-        evidence :: !(Inferred Simple.Evidence stage scope),
-        equal :: !(Inferred Simple.Evidence stage scope)
-      }
-  | Character
-      { startPosition :: !Position,
-        names :: !(Map Variable Position),
-        irrefutable :: !Prelude.Bool,
-        character :: !Char
-      }
-  | String
-      { startPosition :: !Position,
-        names :: !(Map Variable Position),
-        irrefutable :: !Prelude.Bool,
-        string :: !StringLiteral
-      }
-  | List
-      { startPosition :: !Position,
-        names :: !(Map Variable Position),
-        irrefutable :: !Prelude.Bool,
-        items :: !(Strict.Vector1 (Pattern stage scope))
+        match :: !(Bindings stage scope)
       }
   | -- | A pattern that says its type, @(x :: t)@. The checker reads the
     -- type and leaves the pattern inside, so only the resolver makes these.
@@ -97,59 +50,11 @@ instance Shift0.Functor (Pattern stage) where
 instance Shift.Functor (Pattern stage) where
   map category = \case
     Wildcard {names, forced} -> Wildcard {names, forced}
-    Constructor {names, irrefutable, constructorPosition, constructor, patterns, single, constructorInfo} ->
-      Constructor
+    Match {names, irrefutable, match} ->
+      Match
         { names,
           irrefutable,
-          constructorPosition,
-          constructor = Shift.map category constructor,
-          patterns = fmap (Shift.map category) patterns,
-          single,
-          constructorInfo = Shift.map category constructorInfo
-        }
-    Record {names, irrefutable, constructorPosition, constructor, fields, single, constructorInfo} ->
-      Record
-        { names,
-          irrefutable,
-          constructorPosition,
-          constructor = Shift.map category constructor,
-          fields = fmap (Shift.map category) fields,
-          single,
-          constructorInfo = Shift.map category constructorInfo
-        }
-    Integer {names, irrefutable, startPosition, integer, evidence, equal} ->
-      Integer
-        { names,
-          irrefutable,
-          startPosition,
-          integer,
-          evidence = Shift.map category evidence,
-          equal = Shift.map category equal
-        }
-    Float {names, irrefutable, startPosition, float, evidence, equal} ->
-      Float
-        { names,
-          irrefutable,
-          startPosition,
-          float,
-          evidence = Shift.map category evidence,
-          equal = Shift.map category equal
-        }
-    Character {names, irrefutable, startPosition, character} ->
-      Character {names, irrefutable, startPosition, character}
-    String {names, irrefutable, startPosition, string} ->
-      String
-        { names,
-          irrefutable,
-          startPosition,
-          string
-        }
-    List {names, irrefutable, startPosition, items} ->
-      List
-        { names,
-          irrefutable,
-          startPosition,
-          items = fmap (Shift.map category) items
+          match = Shift.map category match
         }
     Signature {names, patternx, signatureStart, signature} ->
       Signature
@@ -157,6 +62,95 @@ instance Shift.Functor (Pattern stage) where
           patternx = Shift.map category patternx,
           signatureStart,
           signature = Shift.map category signature
+        }
+
+data Bindings stage scope
+  = Constructor
+      { constructorPosition :: !Position,
+        constructor :: !(Constructor.Index scope),
+        patterns :: !(Strict.Vector (Pattern stage scope)),
+        single :: !Prelude.Bool,
+        constructorInfo :: !(Inferred ConstructorInfo stage scope)
+      }
+  | Record
+      { constructorPosition :: !Position,
+        constructor :: !(Constructor.Index scope),
+        fields :: !(Strict.Vector (Field stage scope)),
+        single :: !Prelude.Bool,
+        constructorInfo :: !(Inferred ConstructorInfo stage scope)
+      }
+  | Integer
+      { startPosition :: !Position,
+        integer :: !Integer,
+        evidence :: !(Inferred Simple.Evidence stage scope),
+        equal :: !(Inferred Simple.Evidence stage scope)
+      }
+  | Float
+      { startPosition :: !Position,
+        float :: !Rational,
+        evidence :: !(Inferred Simple.Evidence stage scope),
+        equal :: !(Inferred Simple.Evidence stage scope)
+      }
+  | Character
+      { startPosition :: !Position,
+        character :: !Char
+      }
+  | String
+      { startPosition :: !Position,
+        string :: !StringLiteral
+      }
+  | List
+      { startPosition :: !Position,
+        items :: !(Strict.Vector1 (Pattern stage scope))
+      }
+  deriving (Show)
+
+instance Shift0.Functor (Bindings stage) where
+  map = Shift.mapDefault
+
+instance Shift.Functor (Bindings stage) where
+  map category = \case
+    Constructor {constructorPosition, constructor, patterns, single, constructorInfo} ->
+      Constructor
+        { constructorPosition,
+          constructor = Shift.map category constructor,
+          patterns = fmap (Shift.map category) patterns,
+          single,
+          constructorInfo = Shift.map category constructorInfo
+        }
+    Record {constructorPosition, constructor, fields, single, constructorInfo} ->
+      Record
+        { constructorPosition,
+          constructor = Shift.map category constructor,
+          fields = fmap (Shift.map category) fields,
+          single,
+          constructorInfo = Shift.map category constructorInfo
+        }
+    Integer {startPosition, integer, evidence, equal} ->
+      Integer
+        { startPosition,
+          integer,
+          evidence = Shift.map category evidence,
+          equal = Shift.map category equal
+        }
+    Float {startPosition, float, evidence, equal} ->
+      Float
+        { startPosition,
+          float,
+          evidence = Shift.map category evidence,
+          equal = Shift.map category equal
+        }
+    Character {startPosition, character} ->
+      Character {startPosition, character}
+    String {startPosition, string} ->
+      String
+        { startPosition,
+          string
+        }
+    List {startPosition, items} ->
+      List
+        { startPosition,
+          items = fmap (Shift.map category) items
         }
 
 data Field stage scope = Field
@@ -175,20 +169,8 @@ instance Shift.Functor (Field stage) where
 lazy :: Pattern stage scope -> Pattern stage scope
 lazy = \case
   Wildcard {names, forced} -> Wildcard {names, forced}
-  Constructor {names, constructorPosition, constructor, patterns, single, constructorInfo} ->
-    Constructor {names, irrefutable, constructorPosition, constructor, patterns, single, constructorInfo}
-  Record {names, constructorPosition, constructor, fields, single, constructorInfo} ->
-    Record {names, irrefutable, constructorPosition, constructor, fields, single, constructorInfo}
-  Integer {names, startPosition, integer, evidence, equal} ->
-    Integer {names, irrefutable, startPosition, integer, evidence, equal}
-  Float {names, startPosition, float, evidence, equal} ->
-    Float {names, irrefutable, startPosition, float, evidence, equal}
-  Character {names, startPosition, character} -> Character {names, irrefutable, startPosition, character}
-  String {names, startPosition, string} -> String {names, irrefutable, startPosition, string}
-  List {names, startPosition, items} -> List {names, irrefutable, startPosition, items}
+  Match {names, match} -> Match {names, irrefutable = Prelude.True, match}
   Signature {names, patternx, signatureStart, signature} -> Signature {names, patternx = lazy patternx, signatureStart, signature}
-  where
-    irrefutable = Prelude.True
 
 type NeverFails :: (Stage -> Environment -> Type) -> Constraint
 class NeverFails patternx where
@@ -198,7 +180,12 @@ instance NeverFails Pattern where
   neverFails = \case
     Wildcard {} -> Prelude.True
     Signature {patternx} -> neverFails patternx
-    patternx | irrefutable patternx -> Prelude.True
+    Match {irrefutable, match}
+      | irrefutable -> Prelude.True
+      | otherwise -> neverFails match
+
+instance NeverFails Bindings where
+  neverFails = \case
     Constructor {single, patterns} -> single && all neverFails patterns
     Record {single, fields} -> single && all neverFails fields
     Integer {} -> Prelude.False

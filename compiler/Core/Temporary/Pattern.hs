@@ -124,9 +124,10 @@ within outer = \case
   Semantic.Wildcard {forced}
     | forced && not outer -> Forced
     | otherwise -> Wildcard
-  patternx ->
+  Semantic.Match {irrefutable = inner, match} ->
     Match
-      { match = case patternx of
+      { irrefutable,
+        match = case match of
           Semantic.Constructor {constructor, patterns, constructorInfo = Solved constructorInfo} ->
             Constructor
               { constructor,
@@ -156,11 +157,10 @@ within outer = \case
                 equal
               }
           Semantic.Character {character} -> Character {character}
-          Semantic.String {string} -> String {string},
-        irrefutable
+          Semantic.String {string} -> String {string}
       }
     where
-      irrefutable = outer || Semantic.irrefutable patternx
+      irrefutable = outer || inner
 
 resolveField :: Prelude.Bool -> Semantic.Field Check scope -> Field scope
 resolveField irrefutable Semantic.Field {index, field} = Field index (within irrefutable field)
