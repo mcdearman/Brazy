@@ -7,6 +7,9 @@ import qualified Core.Tree.Class as Class (Class (..))
 import qualified Core.Tree.Constraint as Constraint (ConstraintF (..))
 import qualified Core.Tree.Evidence as Evidence (EvidenceF (..))
 import qualified Core.Tree.Forall as Core (mono)
+import qualified Core.Tree.Forall as Forall (simplify)
+import Semantic.Check.Simple.Scheme (instanciate)
+import qualified Semantic.Check.TypeAnnotation as Annotation
 import qualified Core.Tree.Type as Core (char, list, typex)
 import Core.Tree.TypeDeclaration (assumeClass, assumeData)
 import Core.Type.Functor (shiftLogical)
@@ -389,6 +392,14 @@ inOrder context = \case
 
 check :: Context s scope -> Unify.Type s scope -> Semantic.Pattern Resolve scope -> ST s (Pattern s scope)
 check context@Context {typeEnvironment} typex = \case
+  -- The type a pattern says is what it is matched against, a type variable
+  -- of its own being any type, and the pattern inside is matched as it is.
+  Semantic.Signature {names = outer, patternx, signatureStart, signature} -> do
+    annotation <- Annotation.checkAnnotation context signature
+    (said, _) <- instanciate context signatureStart (Forall.simplify annotation)
+    Unify.unify context signatureStart typex said
+    patternx <- check context typex patternx
+    pure patternx {names = outer <> names patternx}
   Semantic.Wildcard {names} -> pure Wildcard {typex, names}
   Semantic.Constructor
     { irrefutable,

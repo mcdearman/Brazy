@@ -113,6 +113,7 @@ simplify = within False
 -- wanted, and that goes for the patterns inside it: they are lazy too.
 within :: Prelude.Bool -> Semantic.Pattern Check scope -> Pattern scope
 within outer = \case
+  Semantic.Signature {} -> error "a pattern the checker does not leave"
   Semantic.Wildcard {} -> Wildcard
   patternx ->
     Match
