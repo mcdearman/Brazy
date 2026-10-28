@@ -15,16 +15,13 @@ import Core.Temporary.Function (Function (Bound))
 import qualified Core.Temporary.Function as Function
 import qualified Core.Temporary.RightHandSide as RightHandSide
 import qualified Core.Tree.Class as Class
-import Core.Tree.ConstructorInfo (ConstructorInfo (..))
 import {-# SOURCE #-} qualified Core.Tree.Declaration as Declaration
 import {-# SOURCE #-} Core.Tree.Declarations (Declarations)
 import {-# SOURCE #-} qualified Core.Tree.Declarations as Declarations
-import Core.Tree.EntryInfo (EntryInfo (..))
 import Core.Tree.Evidence (Evidence)
 import qualified Core.Tree.Evidence as Evidence
 import Core.Tree.Instanciation (Instanciation (..))
 import qualified Core.Tree.Instanciation as Instanciation
-import Core.Tree.MethodInfo (MethodInfo)
 import Core.Tree.Statements (Statements)
 import qualified Core.Tree.Statements as Statements
 import Core.Tree.Type (Type)
@@ -43,6 +40,8 @@ import qualified Data.Vector.Strict as Strict (Vector)
 import qualified Data.Vector.Strict as Strict.Vector
 import qualified Semantic.Check.Info.Constructor as Semantic (ConstructorInfo (..))
 import qualified Semantic.Check.Info.Constructor as Semantic.ConstructorInfo
+import Semantic.Check.Info.Entry (EntryInfo (..))
+import Semantic.Check.Info.Method (MethodInfo (..))
 import Semantic.Check.Info.Selector (Select (..), SelectorInfo (..))
 import Semantic.Check.Info.Update (Update (..))
 import qualified Semantic.Check.Info.Update as Semantic (UpdateInfo (..))
@@ -85,13 +84,13 @@ data Expression scope
   | Selector
       { selector :: !(Selector.Index scope),
         argument :: !(Expression scope),
-        selectorInfo :: !(EntryInfo scope)
+        instanciation :: !(Instanciation scope)
       }
   | Method
       { method :: !(Method.Index scope),
         evidence :: !(Evidence scope),
         instanciation :: !(Instanciation scope),
-        methodInfo :: !(MethodInfo scope)
+        constraintCount :: !Int
       }
   | Integer
       { integer :: !Integer
@@ -171,23 +170,23 @@ instance Substitute.Functor Expression where
         { variable = Substitute.map category variable,
           instanciation = Substitute.map category instanciation
         }
-    Selector {selector, argument, selectorInfo} ->
+    Selector {selector, argument, instanciation} ->
       Selector
         { selector = Substitute.map category selector,
           argument = Substitute.map category argument,
-          selectorInfo = Substitute.map category selectorInfo
+          instanciation = Substitute.map category instanciation
         }
     Constructor {constructor, arguments} ->
       Constructor
         { constructor = Substitute.map category constructor,
           arguments = Substitute.map category <$> arguments
         }
-    Method {method, evidence, instanciation, methodInfo} ->
+    Method {method, evidence, instanciation, constraintCount} ->
       Method
         { method = Substitute.map category method,
           evidence = Substitute.map category evidence,
           instanciation = Substitute.map category instanciation,
-          methodInfo = Substitute.map category methodInfo
+          constraintCount
         }
     Integer {integer} ->
       Integer
@@ -286,7 +285,7 @@ eq evidence left right =
     { method = Method.equal,
       evidence,
       instanciation = Instanciation.monoLazy,
-      methodInfo = Class.info Eq.definition
+      constraintCount = Class.info Eq.definition
     }
     `call` left
     `call` right
@@ -297,7 +296,7 @@ lessThenEqual evidence left right =
     { method = Method.lessThenEqual,
       evidence,
       instanciation = Instanciation.monoLazy,
-      methodInfo = Class.info Ord.definition
+      constraintCount = Class.info Ord.definition
     }
     `call` left
     `call` right
@@ -316,7 +315,7 @@ compare evidence left right =
     { method = Method.compare,
       evidence,
       instanciation = Instanciation.monoLazy,
-      methodInfo = Class.info Ord.definition
+      constraintCount = Class.info Ord.definition
     }
     `call` left
     `call` right
@@ -346,7 +345,7 @@ orderingCombine left right =
             instanciation = Instanciation.monoLazy
           },
       instanciation = Instanciation.monoLazy,
-      methodInfo = Class.info Semigroup.definition
+      constraintCount = Class.info Semigroup.definition
     }
     `call` left
     `call` right
@@ -357,14 +356,14 @@ minBound evidence =
     { method = Method.minBound,
       evidence,
       instanciation = Instanciation.monoLazy,
-      methodInfo = Class.info Eq.definition
+      constraintCount = Class.info Eq.definition
     }
 maxBound evidence =
   Method
     { method = Method.maxBound,
       evidence,
       instanciation = Instanciation.monoLazy,
-      methodInfo = Class.info Eq.definition
+      constraintCount = Class.info Eq.definition
     }
 
 purex :: Evidence scope -> Expression scope -> Expression scope
@@ -373,7 +372,7 @@ purex evidence value =
     { method = Method.pure,
       evidence,
       instanciation = Instanciation.monoLazy,
-      methodInfo = Class.info Applicative.definition
+      constraintCount = Class.info Applicative.definition
     }
     `call` value
 
@@ -383,7 +382,7 @@ run evidence ignore thenx =
     { method = Method.thenx,
       evidence,
       instanciation = Instanciation.monoLazy,
-      methodInfo = Class.info Monad.definition
+      constraintCount = Class.info Monad.definition
     }
     `call` ignore
     `call` thenx
@@ -397,7 +396,7 @@ bind fail evidence input output =
           then Evidence.Super {base = evidence, index = 0}
           else evidence,
       instanciation = Instanciation.monoLazy,
-      methodInfo = Class.info Monad.definition
+      constraintCount = Class.info Monad.definition
     }
     `call` input
     `call` output
@@ -408,7 +407,7 @@ failx evidence =
     { method = Method.fail,
       evidence,
       instanciation = Instanciation.monoLazy,
-      methodInfo = Class.info MonadFail.definition
+      constraintCount = Class.info MonadFail.definition
     }
     `call` nil
 
@@ -429,7 +428,7 @@ integer_ integer evidence =
           { method = Method.fromInteger,
             evidence,
             instanciation = Instanciation.monoLazy,
-            methodInfo = Class.info Num.definition
+            constraintCount = Class.info Num.definition
           },
       argument = Integer {integer}
     }
@@ -442,7 +441,7 @@ float_ float evidence =
           { method = Method.fromRational,
             evidence,
             instanciation = Instanciation.monoLazy,
-            methodInfo = Class.info Fractional.definition
+            constraintCount = Class.info Fractional.definition
           },
       argument =
         Constructor
@@ -531,13 +530,13 @@ simplifyCallHead = \case
     { method,
       evidence = Solved evidence,
       instanciation = Solved instanciation,
-      methodInfo = Solved methodInfo
+      methodInfo = Solved MethodInfo {constraintCount}
     } ->
       Method
         { method,
           evidence,
           instanciation,
-          methodInfo
+          constraintCount
         }
   Semantic.Constructor {constructor, constructorInfo = Solved constructorInfo} ->
     simplifyConstructor constructor constructorInfo 0 Reverse.Nil
@@ -688,7 +687,7 @@ simplifySelector selector Uniform {levity} argument =
   Selector
     { selector,
       argument,
-      selectorInfo = EntryInfo {levity}
+      instanciation = Instanciation.Mono {levity}
     }
 simplifySelector (Selector.Index typeIndex _) Disjoint {select} argument =
   Join {statements = mconcat statements}
@@ -698,7 +697,7 @@ simplifySelector (Selector.Index typeIndex _) Disjoint {select} argument =
         Semantic.ConstructorInfo {entries} ->
           Statements.Bind
             { constructor = Constructor.Index typeIndex index,
-              constructorInfo = ConstructorInfo {entries},
+              entryCount = length entries,
               check = argument,
               thenx = case selectIndex of
                 Strict.Just index
@@ -767,7 +766,7 @@ instance Simplify Semantic.Expression where
               Semantic.ConstructorInfo {entries} ->
                 Statements.Bind
                   { constructor,
-                    constructorInfo = shift ConstructorInfo {entries},
+                    entryCount = length entries,
                     check = lambdaVariable,
                     thenx =
                       Statements.Done
@@ -929,7 +928,7 @@ instance Simplify Semantic.Expression where
               { method = Method.negate,
                 evidence,
                 instanciation = Instanciation.monoLazy,
-                methodInfo = Class.info Num.definition
+                constraintCount = Class.info Num.definition
               },
           argument = simplify negative
         }

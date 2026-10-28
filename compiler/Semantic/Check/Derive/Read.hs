@@ -145,7 +145,7 @@ chain (step : steps) held constructor info rest =
             { method = Method.readsPrec,
               evidence,
               instanciation = Mono {levity = Levity.lazy},
-              methodInfo = Class.info Read.definition
+              constraintCount = Class.info Read.definition
             }
             `Expression.call` Expression.int precedence
             `Expression.call` rest,
@@ -242,7 +242,7 @@ readsPrec context position typeIndex datax = do
             { method = Method.combine,
               evidence = Variable {variable = Index.Evidence.Direct Type2.Semigroup Type2.List, instanciation = Mono {levity = Levity.lazy}},
               instanciation = Mono {levity = Levity.lazy},
-              methodInfo = Class.info Semigroup.definition
+              constraintCount = Class.info Semigroup.definition
             }
             `Expression.call` left
             `Expression.call` right

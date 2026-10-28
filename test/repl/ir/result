@@ -40,9 +40,7 @@ TypeLambdaOver {
                   instanciation = Mono {
                     levity = Constructor Lazy
                   },
-                  methodInfo = MethodInfo {
-                    constraintCount = 0
-                  }
+                  constraintCount = 0
                 },
                 argument = Variable {
                   variable = Shift SimpleDeclaration,

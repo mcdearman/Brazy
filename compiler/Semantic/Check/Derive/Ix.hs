@@ -25,7 +25,7 @@ import qualified Data.Map as Map
 import Core.Temporary.RightHandSide (RightHandSide (..))
 import qualified Core.Tree.Class as Class
 import Core.Tree.Data (Data)
-import Core.Tree.EntryInfo (EntryInfo (..))
+import Semantic.Check.Info.Entry (EntryInfo (..))
 import Core.Tree.Evidence (Evidence, EvidenceF (Variable, instanciation, variable))
 import Core.Tree.Expression (Expression)
 import qualified Core.Tree.Expression as Expression
@@ -190,7 +190,7 @@ method methodIndex evidence =
     { method = methodIndex,
       evidence,
       instanciation = Mono {levity = Levity.lazy},
-      methodInfo = Class.info Ix.definition
+      constraintCount = Class.info Ix.definition
     }
 
 -- |
@@ -212,7 +212,7 @@ range context position typeIndex datax = do
             { method = Method.fmap,
               evidence = Variable {variable = Index.Evidence.Direct Type2.Functor Type2.List, instanciation = Mono {levity = Levity.lazy}},
               instanciation = Mono {levity = Levity.lazy},
-              methodInfo = Class.info Functor.definition
+              constraintCount = Class.info Functor.definition
             }
             `Expression.call` shift back
             `Expression.call` ( method Method.ixRange (shift evidence)

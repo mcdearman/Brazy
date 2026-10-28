@@ -200,7 +200,7 @@ method index classx evidence instanciation =
     { method = index,
       evidence,
       instanciation,
-      methodInfo = Class.info classx
+      constraintCount = Class.info classx
     }
 
 -- |

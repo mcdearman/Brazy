@@ -4,7 +4,6 @@ import qualified Core.Tree.Type as Levity (lazy)
 import {-# SOURCE #-} qualified Builtin.Enum as Enum
 import Control.Monad.ST (ST)
 import qualified Core.Tree.Class as Class
-import qualified Core.Tree.ConstructorInfo as Core
 import Core.Tree.Data (Data)
 import Core.Tree.Evidence (Evidence)
 import qualified Core.Tree.Evidence as Evidence
@@ -54,18 +53,17 @@ fromEnum' typeIndex constructors = do
                     constructorIndex
                   }
           case info of
-            ConstructorInfo {entries}
-              | info <- Core.ConstructorInfo {entries} ->
-                  pure
-                    Statements.Bind
-                      { constructor = shift index,
-                        constructorInfo = shift info,
-                        check = lambdaVariable,
-                        thenx =
-                          Statements.Done
-                            { done = Expression.int constructorIndex
-                            }
-                      }
+            ConstructorInfo {entries} ->
+              pure
+                Statements.Bind
+                  { constructor = shift index,
+                    entryCount = length entries,
+                    check = lambdaVariable,
+                    thenx =
+                      Statements.Done
+                        { done = Expression.int constructorIndex
+                        }
+                  }
             Holding {} -> error "a derived instance of a constructor that holds evidence"
             Newtype {} ->
               pure
@@ -175,7 +173,7 @@ enumFrom context position evidence typeIndex datax = do
                   { method = Method.enumFromTo,
                     evidence = shift evidence,
                     instanciation = Instanciation.Mono {levity = Levity.lazy},
-                    methodInfo = Class.info $ Enum.definition
+                    constraintCount = Class.info $ Enum.definition
                   }
                   `Expression.call` Expression.lambdaVariable
                   `Expression.call` max
@@ -230,7 +228,7 @@ enumFromThen context position evidence typeIndex datax = do
                         { method = Method.enumFromThenTo,
                           evidence = shift $ shift evidence,
                           instanciation = Instanciation.monoLazy,
-                          methodInfo = Class.info $ Enum.definition
+                          constraintCount = Class.info $ Enum.definition
                         }
                         `Expression.call` shift Expression.lambdaVariable
                         `Expression.call` Expression.lambdaVariable

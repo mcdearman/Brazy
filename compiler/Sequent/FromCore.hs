@@ -14,12 +14,9 @@ import Control.Monad (replicateM)
 import Control.Monad.ST (ST, runST)
 import qualified Core.Foreign as Foreign
 import Core.Tree.Constraints (ConstraintsF (..))
-import Core.Tree.ConstructorInfo (ConstructorInfo (..))
 import Core.Tree.Declaration (Declaration (..))
 import Core.Tree.Declarations (Declarations (..))
 import qualified Core.Tree.Declarations as Declarations (none)
-import Core.Tree.EntryInfo (EntryInfo (EntryInfo))
-import qualified Core.Tree.EntryInfo
 import Core.Tree.Evidence (Evidence)
 import qualified Core.Tree.Evidence as Evidence (EvidenceF (..))
 import Core.Tree.EvidenceSet (EvidenceSet (..))
@@ -29,7 +26,6 @@ import Core.Tree.Instance (Instance (..))
 import Core.Tree.Instanciation (Instanciation, InstanciationF (Instanciation))
 import qualified Core.Tree.Instanciation as Instanciation
 import Core.Tree.MethodConcrete (MethodConcrete (..))
-import Core.Tree.MethodInfo (MethodInfo (..))
 import qualified Core.Tree.Module as Core (Module (..))
 import Core.Tree.Statements (Statements)
 import qualified Core.Tree.Statements as Statements (Statements (..))
@@ -716,7 +712,7 @@ evaluate context expression consumer = case expression of
     { method = Method.Index {methodIndex},
       evidence = dictionary,
       instanciation,
-      methodInfo = MethodInfo {constraintCount}
+      constraintCount
     } -> generateEvidence context dictionary $ \dictionary -> do
       name <- fresh context
       body <- implicit context False (Variable name) instanciation consumer
@@ -724,12 +720,13 @@ evaluate context expression consumer = case expression of
   Core.Selector
     { selector = Selector.Index {selectorIndex},
       argument,
-      selectorInfo = EntryInfo {levity = strict}
+      instanciation
     } -> do
       name <- fresh context
-      let field
-            | Info.strict strict = consumer
-            | otherwise = Force consumer
+      let field = case instanciation of
+            Instanciation.Mono {levity}
+              | Info.strict levity -> consumer
+            _ -> Force consumer
       evaluate context argument $
         MuTilde (byValue name) (Primitive (Field selectorIndex) [Variable name] field)
   Core.Constructor
@@ -877,7 +874,7 @@ headed name = \case
 -- |
 -- Whether each field of the constructor a clause tests for holds a value.
 fields :: Head s -> [Bool]
-fields (Head _ _ _ ConstructorInfo {entries} _ _) = [Info.strict strict | EntryInfo {levity = strict} <- toList entries]
+fields (Head _ _ _ stricts _ _) = stricts
 
 -- |
 -- What a clause goes on to do when its test has matched, given the names of
@@ -895,7 +892,7 @@ data Head s where
     !Text ->
     !Bool ->
     !Int ->
-    ConstructorInfo scope ->
+    [Bool] ->
     Context s scope ->
     Statements (Scope.SimplePattern ':+ scope) ->
     Head s
@@ -911,13 +908,13 @@ peel context = \case
     }
       | (Variable name, _) <- variable context index -> peel (singleBinding name context) body
   Statements.Bind
-    { constructor = Constructor.Index {constructorIndex},
-      constructorInfo,
+    { constructor = constructor@Constructor.Index {constructorIndex},
+      entryCount,
       check = Core.Variable {variable = index, instanciation = Instanciation.Mono {}},
       thenx
     }
       | (Variable name, strict) <- variable context index ->
-          Just (Head name strict constructorIndex constructorInfo context thenx)
+          Just (Head name strict constructorIndex (Context.held context constructor entryCount) context thenx)
   _ -> Nothing
 
 -- |
@@ -937,19 +934,20 @@ attemptOne :: Context s scope -> Statements scope -> Consumer -> Statement -> ST
 attemptOne context statements success failure = case statements of
   Statements.Done {done} -> evaluate context done success
   Statements.Bind
-    { constructor = Constructor.Index {constructorIndex},
-      constructorInfo = constructorInfo@ConstructorInfo {entries},
+    { constructor = constructor@Constructor.Index {constructorIndex},
+      entryCount,
       check,
       thenx
     } -> do
-      names <- replicateM (length entries) (fresh context)
-      let binders = zipWith binder names (toList entries)
-          binder name EntryInfo {levity = strict}
-            | Info.strict strict = byValue name
+      names <- replicateM entryCount (fresh context)
+      let stricts = Context.held context constructor entryCount
+          binders = zipWith binder names stricts
+          binder name strict
+            | strict = byValue name
             | otherwise = byNeed name
       thenx <-
         attempt
-          (Context.patternBindings (Strict.Vector.fromList names) constructorInfo context)
+          (Context.patternBindings (Strict.Vector.fromList names) stricts context)
           thenx
           success
           failure

@@ -3,9 +3,7 @@ module Semantic.Check.Derive.Show where
 import {-# SOURCE #-} qualified Builtin.Show as Show
 import Control.Monad.ST (ST)
 import qualified Core.Tree.Class as Class
-import qualified Core.Tree.ConstructorInfo as Core
 import Core.Tree.Data (Data)
-import Core.Tree.EntryInfo (EntryInfo (..))
 import Core.Tree.Evidence (Evidence)
 import Core.Tree.Expression (Direction (..), Expression)
 import qualified Core.Tree.Expression as Expression
@@ -24,6 +22,7 @@ import Semantic.Check.Context (Context)
 import Semantic.Check.Info.Constructor (ConstructorInfo (..))
 import qualified Semantic.Check.Info.Constructor as Semantic
 import Semantic.Check.Instanciate.Constructor (ConstructorInstance (..))
+import Semantic.Check.Info.Entry (EntryInfo (..))
 import qualified Semantic.Check.Instanciate.Constructor as ConstructorInstance
 import Semantic.Check.Instanciate.Data (DataInstance (..))
 import Semantic.Check.Instanciate.Entry (entry)
@@ -137,7 +136,7 @@ showConstructor syntax name evidence numberVariable constructorVariable
         { method = Method.showsPrec,
           evidence,
           instanciation = Instanciation.monoLazy,
-          methodInfo = Class.info $ Show.definition
+          constraintCount = Class.info $ Show.definition
         }
         `Expression.call` Expression.int level
         `Expression.call` constructorVariable index
@@ -214,7 +213,7 @@ showsPrec context position typeIndex datax = do
             Semantic.ConstructorInfo {entries} ->
               Statements.Bind
                 { constructor = shift $ shift $ shift constructor,
-                  constructorInfo = Core.ConstructorInfo {entries = shift . shift <$> entries},
+                  entryCount = length entries,
                   check = Expression.lambdaVariable,
                   thenx =
                     Statements.Done

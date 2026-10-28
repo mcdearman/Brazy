@@ -4,6 +4,12 @@ import Core.Tree.Declarations (Declarations (..))
 import qualified Core.Tree.Declaration as Term (Declaration (..))
 import qualified Core.Tree.Module as Core (Module (..))
 import qualified Core.Tree.TypeDeclaration as Type (TypeDeclaration (..))
+import Core.Tree.Constructor (ConstructorF (..))
+import Core.Tree.Data (Data (..), DefinitionF (..))
+import Core.Tree.Entry (EntryF (..))
+import qualified Core.Tree.Type as Core (TypeF (Constructor))
+import qualified Core.Tree.TypeDefinition as TypeDefinition (TypeDefinition (..))
+import Data.Foldable (toList)
 import qualified Data.Map as Map
 import Data.Text (Text)
 import Data.Vector (Vector)
@@ -46,16 +52,24 @@ precontext modules =
         } = Vector.zipWith3 generate types classInstances dataInstances
         where
           global name = Global {path, name}
-          generate Type.TypeDeclaration {name} classInstances dataInstances =
+          generate Type.TypeDeclaration {name, definition} classInstances dataInstances =
             GlobalType
               { classInstances =
                   let go key _ = global $ single Mangle.Class key
                    in Map.mapWithKey go classInstances,
                 dataInstances =
                   let go key _ = global $ single Mangle.Data key
-                   in Map.mapWithKey go dataInstances
+                   in Map.mapWithKey go dataInstances,
+                strictness = case definition of
+                  TypeDefinition.Data Data {definition = Definition {constructors}} ->
+                    Vector.fromList [[strict levity | Entry {levity} <- toList entries] | Constructor {entries} <- toList constructors]
+                  _ -> Vector.empty
               }
             where
+              -- A field whose levity is a variable is taken to be lazy.
+              strict = \case
+                Core.Constructor Type2.Strict -> True
+                _ -> False
               single :: Mangle.Brand -> Type2.Index Scope.Global -> Text
               single brand = Mangle.mangleInstance target brand name
               target :: Type.Index Scope.Global -> FullyQualifiedConstructorIdentifier
