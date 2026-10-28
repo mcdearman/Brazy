@@ -220,7 +220,7 @@ ready = \case
 
 -- |
 -- Whether evidence is there already, and not made of other evidence.
-held :: Evidence.EvidenceF logical scope -> Bool
+held :: Evidence.EvidenceF logicalEvidence logicalType scope -> Bool
 held = \case
   Evidence.Variable {instanciation = Mono} -> True
   Evidence.Super {base} -> held base

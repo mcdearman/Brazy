@@ -3,6 +3,7 @@ module Semantic.Check.Binding.Local where
 import Control.Monad.ST (ST)
 import qualified Core.Tree.Evidence as Simple (Evidence)
 import Core.Tree.Type as Simple (Type)
+import qualified Core.Evidence.Functor as Core.Evidence
 import qualified Core.Type.Functor as Core
 import qualified Data.Kind (Type)
 import Data.Map (Map)
@@ -91,7 +92,7 @@ shiftEquality = \case
   Equality index typex -> Equality (Shift0.map Shift0.Shift index) (Core.shiftLogical typex)
   Hidden logical typex -> Hidden (Shift0.map Shift0.Shift logical) (Core.shiftLogical typex)
   Given classx subject evidence ->
-    Given (Shift0.map Shift0.Shift classx) (Core.shiftLogical subject) (Core.shiftLogical evidence)
+    Given (Shift0.map Shift0.Shift classx) (Core.shiftLogical subject) (Core.Evidence.shiftLogical evidence)
   Late waiting -> Late waiting
   Grouping members ->
     Grouping [(Shift0.map Shift0.Shift index, Core.shiftLogical kind) | (index, kind) <- members]

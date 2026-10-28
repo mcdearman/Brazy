@@ -1,7 +1,11 @@
 -- | This module exists purely to work around `.hs-boot` module limitations.
+-- Here, `constrain` returns evidence so it would make the `.hs-boot` modules
+-- of `Semantic.Unify.Type` and `Semantic.Unify.Evidence` mutually recursive,
+-- which GHC doesn't allow.
 module Semantic.Unify.Type1 where
 
 import Control.Monad.ST (ST)
+import Core.Evidence.Functor (shiftLogical)
 import Core.Substitute (logicalEvidence, logicalType, substituteType)
 import qualified Core.Tree.Constraint as Simple (argument)
 import qualified Core.Tree.Constraint as Simple.Constraint
@@ -10,7 +14,6 @@ import qualified Core.Tree.Evidence as Evidence (EvidenceF (..))
 import Core.Tree.Instanciation (InstanciationF (Instanciation))
 import qualified Core.Tree.Instanciation as Instanciation (InstanciationF (..))
 import Core.Tree.Type (TypeF (..), (#))
-import Core.Type.Functor (shiftLogical)
 import Data.Foldable (toList, traverse_)
 import qualified Data.Map as Map
 import Data.STRef (newSTRef, readSTRef, writeSTRef)
