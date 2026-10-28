@@ -16,6 +16,7 @@ module Control.Applicative
 where
 
 import Data.Foldable (asum)
+import qualified Hazy.PreludeIO as IO (catch, ioError, userError)
 
 class (Applicative f) => Alternative f where
   empty :: f a
@@ -34,6 +35,12 @@ instance Alternative Maybe where
 instance Alternative [] where
   empty = []
   (<|>) = (++)
+
+-- An action that fails with an error of input or output gives way to the
+-- other, as GHC's does; nothing is an error itself.
+instance Alternative IO where
+  empty = IO.ioError (IO.userError "mzero")
+  action <|> other = action `IO.catch` \_ -> other
 
 newtype Const a b = Const
   { getConst :: a
