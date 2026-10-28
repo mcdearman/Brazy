@@ -1,13 +1,14 @@
 module Control.Exception
   ( module Control.Exception,
     IOException,
+    ErrorCall (..),
   )
 where
 
 import Data.Text (Text, pack, unpack)
 import Hazy (primCatch, primThrow, primUnsafeCoerce)
 import Hazy.Prelude (IO (..), runIO)
-import Hazy.PreludeIO (Any, IOException, Thrown (..))
+import Hazy.PreludeIO (Any, ErrorCall (..), IOException, Thrown (..))
 
 -- What a type of exception is called, to tell it from the others.
 newtype Tag e = Tag String
@@ -114,6 +115,12 @@ data SomeException = SomeException String
 
 instance Show SomeException where
   showsPrec _ (SomeException shown) = showString shown
+
+-- What 'error' throws. One that nothing catches ends the program with its
+-- message, as an error does.
+instance Exception ErrorCall where
+  exceptionTag = Tag "ErrorCall"
+  exceptionStatus _ = -2
 
 instance Exception SomeException where
   exceptionTag = Tag "*"

@@ -1777,6 +1777,14 @@ Missing:
       was. `alloca` and its kin give back their memory with `bracket`
       (test `bracket`, which agrees with GHC). `mask_` does nothing, as
       nothing is thrown at a program from outside
+- [x] `error` throws an `ErrorCall`, as GHC's does, so `try`, `catch` and
+      `handle` catch it, as itself or as a `SomeException`, and a bang or
+      `evaluate` can be seen to reach it. It was a primitive that ended the
+      program. One that nothing catches still ends the program with its
+      message alone, and fails, in native code and on the AxCut machine;
+      the strictness analysis takes a throw, as it took an error, for
+      something that does not come back (test `error-call`, which agrees
+      with GHC)
 - [x] GADTs: see M6
 - [x] Polymorphic components: see M6
 - [x] Bang patterns, as GHC2021 has them on. A `!` written straight before
