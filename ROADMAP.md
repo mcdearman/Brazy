@@ -1808,6 +1808,9 @@ Planned toggles and TODOs:
       the restriction among the deviations
 - [ ] A pragma for postfix operators (eta-expanded left sections when off)
 - [ ] Use `UnorderedRecords` throughout the compiler (after M6)
+- [x] A module may be its body alone, as the report has it: it is then
+      `module Main (main) where`. Hazy asked for the header (test
+      `headerless-module`, which agrees with GHC)
 - [ ] Top-level documentation for every module
 
 ## Track B: further experiments
