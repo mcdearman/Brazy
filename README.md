@@ -581,8 +581,13 @@ However, #2 is a illegal because lists expect their elements to be `Type`s and
 * Pragma: `TypeOperators`
 * Toggleable: False
 
-Proper type operators are not implemented. Instead, only ticked infix constructors
-are supported for completeness for `DataKinds`.
+A type may be named by an operator, a constructor's symbol such as `:+:` or a
+variable's such as `+`, and declared with it written between its two parameters
+or alone in brackets: `data a :+: b`, `type (+) a b`. Written between two types,
+it binds as a fixity declaration in its module says of the operator written the
+same. Ticked infix constructors are supported too, for `DataKinds`. In an import
+or export list, a type operator named by a variable's symbol has `type` written
+before it, `type (+)`, as `ExplicitNamespaces` has it.
 
 ### NamedFieldPuns
 * Pragma: `NamedFieldPuns`

@@ -1782,7 +1782,20 @@ Missing:
 - [ ] Strict functions
 - [ ] Remaining builtin instances
 - [ ] Pattern type signatures for `ScopedTypeVariables`
-- [ ] Proper type operators
+- [x] Proper type operators. A type may be named by an operator, a
+      constructor's symbol such as `:+:` or a variable's such as `+`, and is
+      declared with it between its two parameters or alone in brackets, as a
+      data type, a newtype or a synonym. Its name is kept as the name of a
+      type is, so nothing past parsing knows it is a symbol. Written between
+      two types it binds as a fixity declaration in its module says of the
+      operator written the same, and as `infixl 9` otherwise; such a
+      declaration that names no constructor or term the module declares is
+      the type operator's alone. In imports and exports it is written in
+      brackets, after `type` when it is a variable's symbol. The symbols a
+      type already means something by are not type operators: a `forall`'s
+      `.`, the kind `*` and a strict field's `!`. A class cannot be named by
+      one, since a class here has one parameter (test `type-operators`,
+      which agrees with GHC)
 
 Planned toggles and TODOs:
 

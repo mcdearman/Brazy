@@ -14,6 +14,7 @@ module Syntax.Lexer
     runVariableIdentifier,
     ConstructorIdentifier,
     constructorIdentifier,
+    operatorType,
     runConstructorIdentifier,
     VariableSymbol,
     variableSymbol,
@@ -347,6 +348,12 @@ newtype ConstructorIdentifier = ConstructorIdentifier' Text
 
 runConstructorIdentifier :: ConstructorIdentifier -> Text
 runConstructorIdentifier (ConstructorIdentifier' name) = name
+
+-- |
+-- The name of a type operator, @:+:@ or @+@, kept as the name of a type is:
+-- what it is written as.
+operatorType :: Text -> ConstructorIdentifier
+operatorType = ConstructorIdentifier'
 
 constructorIdentifier :: Text -> ConstructorIdentifier
 constructorIdentifier = parse (flip seq <$> conid <*> eof) . startStream internal

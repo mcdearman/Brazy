@@ -27,6 +27,7 @@ module Error
     qualifiedVariableSymbol,
     constructorSymbol,
     qualifiedConstructorSymbol,
+    typeOperator,
     moduleIdentifier,
     braceIdentionError,
     parenIdentionError,
@@ -213,6 +214,8 @@ qualifiedVariableSymbol = fromString "qualified variable symbol"
 constructorSymbol = fromString "constructor symbol"
 
 qualifiedConstructorSymbol = fromString "qualified constructor symbol"
+
+typeOperator = fromString "type operator"
 
 moduleIdentifier = fromString "module identifier"
 

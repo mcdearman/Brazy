@@ -81,7 +81,8 @@ builtinType name index = (constructorIdentifier $ pack name, binding)
         Type.:@ Identity
           Type.Binding
             { index,
-              methods = Map.empty
+              methods = Map.empty,
+              fixity = Fixity {associativity = Left, precedence = 9}
             }
 
 builtin :: Bindings () scope

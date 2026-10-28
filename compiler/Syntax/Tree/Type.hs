@@ -27,6 +27,7 @@ import Syntax.Position (Position)
 import Syntax.Printer (Printed)
 import qualified Syntax.Printer as Printer
 import Syntax.Tree.Marked (Marked ((:@)))
+import qualified Syntax.Variable as Variable (parseTypeOperator)
 import qualified Syntax.Tree.Marked as Marked
 import {-# SOURCE #-} Syntax.Tree.TypeInfix (Infix)
 import {-# SOURCE #-} qualified Syntax.Tree.TypeInfix as TypeInfix
@@ -135,6 +136,15 @@ data Type position
         tail :: !(Infix position)
       }
   | -- |
+    -- > t :+: t
+    -- > t + t
+    Operator
+      { startPosition :: !position,
+        left :: !(Type position),
+        typeOperator :: !(Marked.QualifiedConstructorIdentifier position),
+        right :: !(Infix position)
+      }
+  | -- |
     -- > type t
     Type
       { startPosition :: !position,
@@ -164,6 +174,7 @@ instance FreeTypeVariables Type where
     LiftedCons {} -> mempty
     LiftedList {items} -> foldMap freeTypeVariables items
     Infix {left, right} -> freeTypeVariables left ++ freeTypeVariables right
+    Operator {left, right} -> freeTypeVariables left ++ freeTypeVariables right
     InfixCons {head, tail} -> freeTypeVariables head ++ freeTypeVariables tail
     Type {universe} -> freeTypeVariables universe
     Star {} -> []
@@ -200,6 +211,7 @@ parse1 = TypeInfix.toType <$> TypeInfix.parse
 print1 :: Type unit -> Printed
 print1 = \case
   Infix {left, operator, right} -> mconcat [print2 left, Marked.printOperator operator, TypeInfix.print right]
+  Operator {left, typeOperator, right} -> mconcat [print2 left, Marked.print typeOperator, TypeInfix.print right]
   InfixCons {head, tail} -> mconcat [print2 head, Printer.token ":", TypeInfix.print tail]
   typex -> print2 typex
 
@@ -222,6 +234,8 @@ parse3 =
   asum
     [ variable <$> Marked.parse,
       constructor <$> Marked.parse,
+      -- A type operator written alone, in brackets.
+      constructor <$> try (betweenParens ((:@) <$> position <*> Variable.parseTypeOperator)),
       unit <$> position <* try (betweenParens (pure ())),
       arrow <$> position <* try (betweenParens (token "->")),
       tuple <$> position <*> betweenParens (Left <$> some (token ",") <|> Right <$> sepByComma parse),

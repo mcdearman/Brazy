@@ -349,24 +349,37 @@ derived = \case
             }
   _ -> []
 
+-- |
+-- The head of a type's declaration: where its name is written, the name,
+-- and its parameters. The name is written first, or is a type operator
+-- written alone in brackets, or between two parameters.
+typeHead :: Parser (Position, ConstructorIdentifier, Strict.Vector (TypePattern Position))
+typeHead =
+  asum
+    [ try $ infixHead <$> TypePattern.parse <*> position <*> operator <*> TypePattern.parse,
+      (,,)
+        <$> position
+        <*> asum [Variable.parse, try (betweenParens operator)]
+        <*> (Strict.Vector.fromList <$> many TypePattern.parse)
+    ]
+  where
+    infixHead left typePosition name right = (typePosition, name, Strict.Vector.fromList [left, right])
+    operator = Variable.parseLocalTypeOperator
+
 parse :: Parser (Declaration Position)
 parse =
   asum
     [ datax
         <$> position
         <*> Brand.parse
-        <*> position
-        <*> Variable.parse
-        <*> (Strict.Vector.fromList <$> many TypePattern.parse)
+        <*> typeHead
         <*> Data.parse,
       kindAnnotation
         <$> try (token "type" *> (Strict.fromNonEmpty <$> sepBy1Comma Marked.parse) <* token "::")
         <*> Type.parse,
       synonym
         <$> position
-        <*> (token "type" *> position)
-        <*> Variable.parse
-        <*> (Strict.Vector.fromList <$> many TypePattern.parse)
+        <*> (token "type" *> typeHead)
         <*> (token "=" *> Type.parse),
       position <**> (token "class" *> parseClass),
       position <**> (token "foreign" *> parseForeign),
@@ -393,7 +406,7 @@ parse =
         { typeNames,
           kindAnnotation
         }
-    synonym startPosition typePosition typeName parameters typeDefinition =
+    synonym startPosition (typePosition, typeName, parameters) typeDefinition =
       Synonym
         { startPosition,
           typePosition,
@@ -401,7 +414,7 @@ parse =
           parameters,
           typeDefinition
         }
-    datax startPosition brand typePosition typeName parameters dataDefinition =
+    datax startPosition brand (typePosition, typeName, parameters) dataDefinition =
       Data
         { startPosition,
           brand,
