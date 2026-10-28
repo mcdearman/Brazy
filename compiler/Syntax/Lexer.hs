@@ -188,6 +188,7 @@ data Extension
   | ConstructorFields
   | LevityPolymorphicFields
   | PermissiveUpdates
+  | PostfixOperators
   | HygienicHiding
   deriving (Show, Bounded, Enum)
 
@@ -207,6 +208,7 @@ extend extension = \case
     UnorderedRecords -> extension {unorderedRecords = True}
     ConstructorFields -> extension {constructorFields = True}
     PermissiveUpdates -> extension {permissiveUpdates = True}
+    PostfixOperators -> extension {postfixOperators = True}
     HygienicHiding -> extension {hygienicHiding = True}
     _ -> extension
   NoExtension position removal -> case removal of
@@ -215,6 +217,7 @@ extend extension = \case
     UnorderedRecords -> extension {unorderedRecords = False}
     ConstructorFields -> extension {constructorFields = False}
     PermissiveUpdates -> extension {permissiveUpdates = False}
+    PostfixOperators -> extension {postfixOperators = False}
     HygienicHiding -> extension {hygienicHiding = False}
     extension -> cannotTurnoff extension
     where
