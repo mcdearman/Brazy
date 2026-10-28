@@ -76,7 +76,7 @@ augmentNamed name _ parameters constraints mask Context {termEnvironment, localE
             pure (head, entail)
       collected <- case constraints of
         Constraints constraints -> zipWithM collect [0 ..] $ toList constraints
-        None {} -> pure []
+        Value {} -> pure []
       let ordered = orderWithInt (++) [] (length parameters) collected
           constraints = Vector.map (Map.fromListWith $ flip LocalBinding.combine) ordered
           rigid index typex constraints =

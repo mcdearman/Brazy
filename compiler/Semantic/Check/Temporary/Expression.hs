@@ -7,7 +7,7 @@ import qualified Core.Builtin as Builtin
 import qualified Core.Tree.Constructor (ConstructorF (..))
 import qualified Core.Tree.Data (Data (..), DefinitionF (..))
 import qualified Core.Tree.Entry (quantified)
-import Core.Tree.Constraints (ConstraintsF (None, levity))
+import Core.Tree.Constraints (ConstraintsF (Value, levity))
 import Core.Tree.Forall (ForallOver (..))
 import Core.Tree.Instanciation (InstanciationF (Mono, levity))
 import qualified Core.Tree.Data as Data
@@ -308,7 +308,7 @@ applying = \case
   TermBinding.Rigid
     ForallOver
       { parameters,
-        constraints = None {},
+        constraints = Value {},
         result =
           Core.Function
             (Core.Function (Core.Variable from) (Core.Variable to))
@@ -521,7 +521,7 @@ check context typex Semantic.RunST {startPosition, imperative} = do
       scheme =
         ForallOver
           { parameters = Strict.Vector.singleton Core.typex,
-            constraints = None {levity = Levity.lazy},
+            constraints = Value {levity = Levity.lazy},
             result = Core.Constructor Type2.ST # state # Shift0.map Shift0.Shift typex
           }
   imperative <- generalize context startPosition scheme imperative

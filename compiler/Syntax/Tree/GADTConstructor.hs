@@ -117,5 +117,5 @@ parse =
       Entry.Polymorphic {startPosition} -> unsupportedFeaturePolymorphicComponents startPosition
     plain :: Position -> Scheme Position -> Type Position
     plain startPosition = \case
-      Scheme.Implicit {constraints = Constraints.None, result} -> result
+      Scheme.Implicit {constraints = Constraints.Value, result} -> result
       _ -> unsupportedFeaturePolymorphicComponents startPosition

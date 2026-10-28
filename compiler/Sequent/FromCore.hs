@@ -406,7 +406,7 @@ moduleDefinitions
       -- An instance, and its methods as definitions of their own if it
       -- needs nothing.
       instanceDefinitions global instancex@Instance {prerequisites, members} = case prerequisites of
-        None {} ->
+        Value {} ->
           (global, runST (globalInstance pre (Just global) instancex)) : do
             (index, method) <- zip [0 ..] (toList members)
             pure (Runtime.member global index, runST (globalMember pre method))
@@ -430,7 +430,7 @@ globalDeclaration :: Precontext -> Global.Global -> TypeLambda Scope.Global -> S
 globalDeclaration pre global definition = do
   context <- Context.start pre
   case definition of
-    TypeLambdaOver {constraints = None {}, result = Core.ForeignExport {foreignCall, exported}} ->
+    TypeLambdaOver {constraints = Value {}, result = Core.ForeignExport {foreignCall, exported}} ->
       exportOf (Context.evidenceBindings Vector.empty context) global foreignCall exported
     _ -> declaration context definition
 
@@ -780,7 +780,7 @@ evaluate context expression consumer = case expression of
   -- evaluated.
   Core.Run {imperative} -> evaluate context imperative (Apply [] (Force consumer))
   Core.Generalized {definition = definition@TypeLambdaOver {constraints, result}} -> case constraints of
-    None {} -> evaluate (Context.evidenceBindings Vector.empty context) result consumer
+    Value {} -> evaluate (Context.evidenceBindings Vector.empty context) result consumer
     Constraints {} -> do
       function <- declaration context definition
       pure $ Cut function consumer
@@ -980,11 +980,11 @@ declaration :: Context s scope -> TypeLambda scope -> ST s Producer
 declaration context TypeLambdaOver {constraints, result = expression} = do
   let count = case constraints of
         Constraints constraints -> length constraints
-        None {} -> 0
+        Value {} -> 0
   names <- Vector.replicateM count (fresh context)
   context <- pure $ Context.evidenceBindings names context
   case constraints of
-    None {} -> object context expression
+    Value {} -> object context expression
     Constraints {} -> do
       result <- fresh context
       body <- evaluate context expression (Covariable result)
@@ -1026,7 +1026,7 @@ generateInstance :: Context s scope -> Maybe Global.Global -> Instance scope -> 
 generateInstance context lifted Instance {evidence = EvidenceSet supers, prerequisites, members} = do
   let count = case prerequisites of
         Constraints count -> length count
-        None {} -> 0
+        Value {} -> 0
   names <- Vector.replicateM count (fresh context)
   context <- pure $ Context.evidenceBindings names context
   result <- fresh context
@@ -1038,5 +1038,5 @@ generateInstance context lifted Instance {evidence = EvidenceSet supers, prerequ
         declaration context definition
     pure $ Cut (Constructor 0 (supers ++ members)) (Covariable result)
   pure $ case prerequisites of
-    None {} -> Thunk result body
+    Value {} -> Thunk result body
     Constraints {} -> Function (byValue <$> toList names) result body

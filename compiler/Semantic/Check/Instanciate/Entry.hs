@@ -36,7 +36,7 @@ data EntryInstance s scope = EntryInstance
 instanciate :: Position -> Strict.Vector (Unify.Type s scope) -> Entry (Local ':+ scope) -> EntryInstance s scope
 instanciate position fresh Entry {entry = scheme@ForallOver {parameters, constraints, result}, levity}
   | null parameters,
-    None {} <- constraints,
+    Value {} <- constraints,
     entry <- substituteType types (Shift.map (Shift.Unshift $ error "a type variable that nothing binds") result) =
       EntryInstance
         { position,
@@ -56,7 +56,7 @@ instanciate position fresh Entry {entry = scheme@ForallOver {parameters, constra
           -- be worked out to be it, so that it can be given the evidence
           -- wherever it is taken out.
           levity = case constraints of
-            None {} -> substituteType types levity
+            Value {} -> substituteType types levity
             Constraints {} -> Constructor Type2.Strict
         }
   where

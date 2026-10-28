@@ -14,7 +14,7 @@ import qualified Semantic.Check.Temporary.Type as Type
 import Semantic.Shift (shift)
 import qualified Semantic.Shift as Shift
 import Semantic.Stage (Check, Resolve)
-import qualified Semantic.Tree.Constraints as Semantic (Constraints (None))
+import qualified Semantic.Tree.Constraints as Semantic (Constraints (Value))
 import qualified Semantic.Tree.Entry as Semantic (Entry (..), Restricted (..))
 import qualified Semantic.Tree.Entry as Solved
 import qualified Semantic.Tree.Scheme as Semantic (Scheme (..))
@@ -36,7 +36,7 @@ data Entry s scope = Entry
 check :: Context s scope -> Semantic.Entry Position Resolve scope -> ST s (Entry s scope)
 check context Semantic.Entry {startPosition, entry = Semantic.Canonical scheme, strict} = do
   entry <- case scheme of
-    Semantic.Scheme {parameters, constraints = Semantic.None, result}
+    Semantic.Scheme {parameters, constraints = Semantic.Value, result}
       | null parameters -> do
           let plain = Shift.map (Shift.Unshift $ error "a type variable that nothing binds") result
           Plain <$> Type.check context Core.typex plain
@@ -59,7 +59,7 @@ solve context Entry {startPosition, entry, strict} = do
           { startPosition,
             implicit = True,
             parameters = Strict.Vector.empty,
-            constraints = Semantic.None,
+            constraints = Semantic.Value,
             result = shift typex
           }
     Quantified scheme -> Scheme.solve context scheme

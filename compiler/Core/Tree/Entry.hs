@@ -30,7 +30,7 @@ data EntryF instanciate logical scope = Entry
 -- Whether the type of what is held has a @forall@ of its own.
 quantified :: EntryF instanciate logical scope -> Bool
 quantified Entry {entry = ForallOver {parameters, constraints}} = case constraints of
-  None {} -> not (null parameters)
+  Value {} -> not (null parameters)
   Constraints {} -> True
 
 instance Shift0.Functor (EntryF instanciate logical) where

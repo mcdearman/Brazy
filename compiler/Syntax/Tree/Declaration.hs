@@ -335,7 +335,7 @@ derived = \case
             { startPosition,
               prerequisites =
                 if null parameters
-                  then Constraints.None
+                  then Constraints.Value
                   else Constraints.Constraints (fmap requires parameters),
               classPosition = startPosition,
               className,

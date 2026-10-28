@@ -2,7 +2,7 @@
 double =
 TypeLambdaOver {
   parameters = [],
-  constraints = None {
+  constraints = Value {
     levity = Constructor Lazy
   },
   result = Lambda {

@@ -43,7 +43,7 @@ measure TypeLambdaOver {constraints, result} =
   Arity
     { evidences = case constraints of
         Constraints required -> length required
-        None {} -> 0,
+        Value {} -> 0,
       lambdas = depth result
     }
   where

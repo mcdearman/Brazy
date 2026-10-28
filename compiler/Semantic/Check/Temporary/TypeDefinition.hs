@@ -162,10 +162,10 @@ own context Semantic.GADTConstructor {position, name, syntax, typex} = do
   -- required with evidence, which a value it makes holds. That two types
   -- are the same needs none.
   let (classes, equalities) = case constraints of
-        Semantic.None -> (Semantic.None, [])
+        Semantic.Value -> (Semantic.Value, [])
         Semantic.Constraints constraints ->
           ( case [constraint | constraint@Asking.Constraint {} <- toList constraints] of
-              [] -> Semantic.None
+              [] -> Semantic.Value
               classes -> Semantic.Constraints (Strict.Vector.fromList classes),
             [(left, right) | Asking.Equality {left, right} <- toList constraints]
           )
@@ -226,7 +226,7 @@ requiring required constructor@Made.Constructor {shape} = case shape of
     constructor {Made.shape = Made.Indexed {variables, asked, equated, arguments}}
   where
     asked = case required of
-      Semantic.None -> Strict.Vector.empty
+      Semantic.Value -> Strict.Vector.empty
       Semantic.Constraints constraints -> fmap ask constraints
 
 ask :: Asking.Constraint Position Check scope -> Made.Asked Check (Scope.Local ':+ scope)

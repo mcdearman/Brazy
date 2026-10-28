@@ -88,7 +88,7 @@ instanciate context position ForallOver {parameters, constraints, result} = do
         arguments <- pure $ toList $ fmap (substitute fresh) arguments
         constrainWith context position classx head arguments
       pure $ Instanciation evidence
-    None {levity} -> do
+    Value {levity} -> do
       mark context position Known levity
       pure Mono {levity}
   pure $ (substitute fresh result, instanciation)
@@ -165,7 +165,7 @@ generalizeBody position context requiring varying (Generalize run) = do
     arguments <- traverse (zonk Zonker Shift0.Id) arguments
     pure Constraint {classx = Type2.unlocal classx, head, arguments = Strict.Vector.fromList arguments}
   let constraints
-        | null assumed = Constraints.None {levity = Type.lazy}
+        | null assumed = Constraints.Value {levity = Type.lazy}
         | otherwise = Constraints.Constraints (Strict.Vector.fromList assumed)
   pure $
     ForallOver
