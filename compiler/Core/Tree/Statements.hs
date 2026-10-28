@@ -47,6 +47,12 @@ data Statements scope
       { declaration :: !(Expression scope),
         body :: !(Statements (Scope.SimpleDeclaration ':+ scope))
       }
+  | -- | A name for what something is once it is evaluated, which it is
+    -- before what follows: what a bang pattern on a name makes.
+    LetStrict
+      { declaration :: !(Expression scope),
+        body :: !(Statements (Scope.SimpleDeclaration ':+ scope))
+      }
   | Branch
       { left :: !(Statements scope),
         right :: !(Statements scope)
@@ -84,6 +90,11 @@ instance Substitute.Functor Statements where
         { declaration = Substitute.map category declaration,
           body = Substitute.map (Substitute.Over category) body
         }
+    LetStrict {declaration, body} ->
+      LetStrict
+        { declaration = Substitute.map category declaration,
+          body = Substitute.map (Substitute.Over category) body
+        }
     Let {declarations, letBody} ->
       Let
         { declarations = Substitute.map (Substitute.Over category) declarations,
@@ -99,6 +110,11 @@ instance Substitute.Functor Statements where
 bind :: Pattern scope -> Expression scope -> Statements (Scope.Pattern ':+ scope) -> Statements scope
 bind Pattern.Wildcard check thenx =
   LetOne
+    { declaration = check,
+      body = Shift.map Shift.ReplaceWildcard thenx
+    }
+bind Pattern.Forced check thenx =
+  LetStrict
     { declaration = check,
       body = Shift.map Shift.ReplaceWildcard thenx
     }
@@ -329,6 +345,11 @@ call statements argument = case statements of
       }
   LetOne {declaration, body} ->
     LetOne
+      { declaration,
+        body = call body (shift argument)
+      }
+  LetStrict {declaration, body} ->
+    LetStrict
       { declaration,
         body = call body (shift argument)
       }

@@ -23,7 +23,10 @@ import qualified Prelude
 
 data Pattern stage scope
   = Wildcard
-      { names :: !(Map Variable Position)
+      { names :: !(Map Variable Position),
+        -- | Whether what it is matched against is evaluated: a bang
+        -- pattern, @!x@ or @!_@.
+        forced :: !Prelude.Bool
       }
   | Constructor
       { constructorPosition :: !Position,
@@ -92,7 +95,7 @@ instance Shift0.Functor (Pattern stage) where
 
 instance Shift.Functor (Pattern stage) where
   map category = \case
-    Wildcard {names} -> Wildcard {names}
+    Wildcard {names, forced} -> Wildcard {names, forced}
     Constructor {names, irrefutable, constructorPosition, constructor, patterns, single, constructorInfo} ->
       Constructor
         { names,
@@ -157,7 +160,7 @@ instance Shift.Functor (Pattern stage) where
 
 lazy :: Pattern stage scope -> Pattern stage scope
 lazy = \case
-  Wildcard {names} -> Wildcard {names}
+  Wildcard {names, forced} -> Wildcard {names, forced}
   Constructor {names, constructorPosition, constructor, patterns, single, constructorInfo} ->
     Constructor {names, irrefutable, constructorPosition, constructor, patterns, single, constructorInfo}
   Record {names, constructorPosition, constructor, fields, single, constructorInfo} ->
@@ -187,4 +190,4 @@ neverFails = \case
   List {} -> Prelude.False
 
 variable :: Position -> Variable -> Pattern stage scope
-variable position name = Wildcard {names = Map.singleton name position}
+variable position name = Wildcard {names = Map.singleton name position, forced = Prelude.False}

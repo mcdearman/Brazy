@@ -103,7 +103,14 @@ resolve context = \case
   Syntax.At {variable = position :@ variable, patternx} ->
     let pre = resolve context patternx
      in pre {names = Map.insert variable position (names pre)}
-  Syntax.Wildcard {} -> Wildcard {names = Map.empty}
+  Syntax.Wildcard {} -> Wildcard {names = Map.empty, forced = Prelude.False}
+  -- A bang pattern. Matching anything but a name, or nothing, evaluates
+  -- what is matched already, so a bang only changes those. A bang on a
+  -- lazy pattern is only the lazy pattern, which does not evaluate what it
+  -- is matched against first, as GHC's does.
+  Syntax.Strict {patternx} -> case resolve context patternx of
+    Wildcard {names} -> Wildcard {names, forced = Prelude.True}
+    patternx -> patternx
   Syntax.Infix {startPosition, left, operator, operatorPosition, right} ->
     Infix.fix $
       Infix.resolve
