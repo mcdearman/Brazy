@@ -62,7 +62,10 @@ import qualified Prelude
 data Pattern s scope
   = Wildcard
       { typex :: !(Unify.Type s scope),
-        names :: !(Map Variable Position)
+        names :: !(Map Variable Position),
+        -- | Whether what it is matched against is evaluated first: a bang
+        -- pattern.
+        forced :: !Prelude.Bool
       }
   | -- | A name for something a constructor holds whose type has a @forall@
     -- of its own. Nothing else can be matched against such a thing.
@@ -389,7 +392,7 @@ inOrder context = \case
 
 check :: Context s scope -> Unify.Type s scope -> Semantic.Pattern Resolve scope -> ST s (Pattern s scope)
 check context@Context {typeEnvironment} typex = \case
-  Semantic.Wildcard {names} -> pure Wildcard {typex, names}
+  Semantic.Wildcard {names, forced} -> pure Wildcard {typex, names, forced}
   Semantic.Constructor
     { irrefutable,
       constructorPosition,
@@ -496,12 +499,12 @@ check context@Context {typeEnvironment} typex = \case
 -- A match on something a value holds that the pattern does not say: the
 -- evidence, which is held after everything else.
 unnamed :: Int -> Padding.Field Check scope
-unnamed index = Padding.Field index Solved.Wildcard {names = Map.empty}
+unnamed index = Padding.Field index Solved.Wildcard {names = Map.empty, forced = Prelude.False}
 
 solve :: Pattern s scope -> Unify.Solve s (Solved.Pattern Check scope)
 solve = \case
-  Wildcard {names} -> pure Solved.Wildcard {names}
-  Polymorphic {names} -> pure Solved.Wildcard {names}
+  Wildcard {names, forced} -> pure Solved.Wildcard {names, forced}
+  Polymorphic {names} -> pure Solved.Wildcard {names, forced = Prelude.False}
   Constructor
     { irrefutable,
       names,
@@ -515,7 +518,7 @@ solve = \case
       patterns <- traverse solve patterns
       -- The evidence the value holds is matched as well, so that it has a
       -- name: it comes after everything the pattern says.
-      patterns <- pure (patterns <> Strict.Vector.replicate evident Solved.Wildcard {names = Map.empty})
+      patterns <- pure (patterns <> Strict.Vector.replicate evident Solved.Wildcard {names = Map.empty, forced = Prelude.False})
       constructorInfo <- ConstructorInfo.solve constructorInfo
       pure
         Solved.Constructor

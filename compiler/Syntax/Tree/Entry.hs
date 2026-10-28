@@ -6,6 +6,7 @@ module Syntax.Tree.Entry where
 
 import Syntax.Parser
   ( Parser,
+    bang,
     asum,
     betweenParens,
     position,
@@ -46,7 +47,7 @@ parse scheme =
     [ try $ lazy <$> scheme,
       lazy <$> betweenParens Scheme.parse,
       strict
-        <$> (position <* token "!")
+        <$> (position <* bang)
         <*> asum
           [ -- A tuple is in brackets as well, and is a type.
             try $ betweenParens Scheme.parse,

@@ -1779,7 +1779,21 @@ Missing:
       nothing is thrown at a program from outside
 - [x] GADTs: see M6
 - [x] Polymorphic components: see M6
-- [ ] Strict functions
+- [x] Bang patterns, as GHC2021 has them on. A `!` written straight before
+      what follows it, and not straight after what comes before it, is a
+      bang (the lexer tells them apart by where tokens start and end); any
+      other is the operator, so `a ! b` and `a!b` are still `(!)`. A bang on
+      a name or on `_` evaluates what it is matched against first: Core has
+      a strict let for it, which the sequent calculus evaluates and names by
+      value. A bang on any other pattern, which evaluates already, changes
+      nothing; one on a lazy pattern is only the lazy pattern, where GHC
+      evaluates first, and one inside a lazy pattern does nothing (test
+      `bang-patterns`, which agrees with GHC)
+- [ ] Strict functions. In Hazy's README this is the type `!a -> b`, a
+      function that is given its argument evaluated: it is parsed, and
+      refused where it is checked. A strict field in a GADT constructor's
+      type, `C :: !Int -> T`, works already. What a strict function type
+      means is Freddy's strictness in types (Track B)
 - [x] Remaining builtin instances. Programs that use the standard classes
       on the standard types (tuples to twelve, functions, `Maybe`,
       `Either`, `Ordering`, `()`, the numbers, words and `Int`s of each

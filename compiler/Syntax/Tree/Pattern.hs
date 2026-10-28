@@ -24,6 +24,7 @@ import Syntax.Parser
     try,
     (<**>),
   )
+import qualified Syntax.Lexer as Lexer (Lexeme (Bang))
 import qualified Syntax.Parser as Parser
 import Syntax.Position (Position)
 import Syntax.Tree.Marked (Marked (..))
@@ -129,6 +130,12 @@ data Pattern position
         patternx :: !(Pattern position)
       }
   | -- |
+    -- > !x
+    Strict
+      { startPosition :: !position,
+        patternx :: !(Pattern position)
+      }
+  | -- |
     -- > (:) x x
     Cons
       { startPosition :: !position,
@@ -171,6 +178,7 @@ instance TermBindingVariables Pattern where
     Tuple {elements} -> foldMap termBindingVariables elements
     List {items} -> foldMap termBindingVariables items
     Irrefutable {patternx} -> termBindingVariables patternx
+    Strict {patternx} -> termBindingVariables patternx
     Cons {head, tail} -> termBindingVariables head ++ termBindingVariables tail
     Infix {left, right} -> termBindingVariables left ++ termBindingVariables right
     InfixCons {left, right} -> termBindingVariables left ++ termBindingVariables right
@@ -234,7 +242,8 @@ parse2 =
       character <$> position <*> char,
       string <$> position <*> text,
       wildcard <$> position <* token "_",
-      irrefutable <$> position <*> (token "~" *> parse2)
+      irrefutable <$> position <*> (token "~" *> parse2),
+      strict <$> position <*> (Parser.token' Lexer.Bang *> parse2)
     ]
   where
     variable variable@(startPosition :@ _) =
@@ -280,6 +289,7 @@ parse2 =
     string startPosition string = String {startPosition, string}
     wildcard startPosition = Wildcard {startPosition}
     irrefutable startPosition patternx = Irrefutable {startPosition, patternx}
+    strict startPosition patternx = Strict {startPosition, patternx}
 
     parseConstructor =
       asum
