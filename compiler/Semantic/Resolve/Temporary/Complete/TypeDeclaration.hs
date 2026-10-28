@@ -45,7 +45,7 @@ import qualified Semantic.Tree.TypeDeclarationExtra as Real.Extra
 import qualified Semantic.Tree.TypeDefinition as Real (TypeDefinition (..))
 import qualified Semantic.Tree.TypeDefinition2 as Real (Annotation (..), TypeDefinition2 (..))
 import Syntax.Position (Position)
-import qualified Syntax.Tree.Associativity as Associativity
+import qualified Syntax.Tree.Fixity as Associativity (Associativity (..))
 import qualified Syntax.Tree.Brand as Brand
 import qualified Syntax.Tree.Declaration as Syntax (Declaration (..))
 import Syntax.Tree.Fixity (Fixity (..))
