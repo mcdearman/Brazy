@@ -21,6 +21,7 @@ import Syntax.Parser
     betweenFieldPragma,
     betweenParens,
     betweenUnorderedPragma,
+    empty,
     many,
     optional,
     position,
@@ -335,7 +336,7 @@ derived = \case
             { startPosition,
               prerequisites =
                 if null parameters
-                  then Constraints.Value
+                  then Constraints.Lazy
                   else Constraints.Constraints (fmap requires parameters),
               classPosition = startPosition,
               className,
@@ -500,7 +501,9 @@ parse =
       Scheme.parseWith
         instancex
         (pure ())
+        ()
         ((,,) <$> position <*> Variable.parse <*> InstanceHead.parse)
+        empty
         <*> if manual
           then InstanceDeclarations.parse
           else pure InstanceDeclarations._derivingInstance

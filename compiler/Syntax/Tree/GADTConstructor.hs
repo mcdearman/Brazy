@@ -66,11 +66,13 @@ parse =
             *> Scheme.parseWith
               (\startPosition parameters constraints body names -> gadtConstructor names startPosition parameters constraints body)
               (optional forallx)
+              Nothing
               ( asum
                   [ Left <$> record,
                     Right <$> Type.parse
                   ]
               )
+              (Right <$> Type.parse3)
         )
   where
     forallx = token "forall" *> (Strict.Vector.fromList <$> many TypePattern.parse) <* token "."
@@ -119,5 +121,5 @@ parse =
       Entry.Polymorphic {startPosition} -> unsupportedFeaturePolymorphicComponents startPosition
     plain :: Position -> Scheme Position -> Type Position
     plain startPosition = \case
-      Scheme.Implicit {constraints = Constraints.Value, result} -> result
+      Scheme.Implicit {constraints = Constraints.Lazy, result} -> result
       _ -> unsupportedFeaturePolymorphicComponents startPosition

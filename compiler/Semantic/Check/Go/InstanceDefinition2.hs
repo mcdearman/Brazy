@@ -80,7 +80,7 @@ import qualified Semantic.Tree.Combinators.Implicit as Implicit
 import Semantic.Tree.Combinators.Inferred (Inferred (Solved))
 import qualified Semantic.Tree.Combinators.Inferred as Inferred (get)
 import qualified Semantic.Tree.Constraint as Semantic (Constraint (..))
-import Semantic.Tree.Constraints (Constraints (Constraints, Value))
+import Semantic.Tree.Constraints (Constraints (Constraints, Lazy))
 import Semantic.Tree.InstanceDefinition (InstanceDefinition (..))
 import Semantic.Tree.InstanceDefinition2 (Annotation (..), Header (..), InstanceDefinition2 (..))
 import Semantic.Tree.MethodConcrete (Auto, MethodConcrete (..))
@@ -307,20 +307,21 @@ checkHeader position key information Header {parameters, prerequisites, lenient}
                   Semantic.Equality {} -> pure True
             kept <- filterM fits (toList wanted)
             pure $ case kept of
-              [] -> Value
+              [] -> Lazy
               _ -> Constraints (Strict.Vector.fromList kept)
           _ -> pure prerequisites
         -- A parameter that is required to be a type is taken out of what
         -- is required: it needs no evidence. It has to be a parameter that
         -- is said to be a type, on either side.
         let (classes, equalities) = case prerequisites of
-              Value -> (Value, [])
+              Lazy -> (Lazy, [])
               Constraints wanted ->
                 ( case [constraint | constraint@Semantic.Constraint {} <- toList wanted] of
-                    [] -> Value
+                    [] -> Lazy
                     classes -> Constraints (Strict.Vector.fromList classes),
                   [equality left right startPosition | Semantic.Equality {startPosition, left, right} <- toList wanted]
                 )
+              levity -> (levity, [])
         prerequisites <- Unsolved.Constraints.check context classes
         equated <- for equalities $ \(index, typex) -> do
           let kind = shiftLogical (Unsolved.typex (parameters Strict.Vector.! index))
