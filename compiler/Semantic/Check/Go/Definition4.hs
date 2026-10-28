@@ -15,7 +15,7 @@ import Data.Functor.Identity (Identity (..))
 import qualified Data.Vector as Vector
 import qualified Data.Vector.Strict as Strict.Vector
 import Data.Void (Void)
-import Error (cyclicalTypeChecking)
+import Error (cyclicalTypeChecking, strictDeclaration)
 import qualified Graph.Topological as Topological
 import qualified Core.Builtin as Builtin
 import Core.Tree.TypeDeclaration (assumeData)
@@ -35,6 +35,7 @@ import qualified Semantic.Tree.Combinators.Implicit as Implicit
 import Semantic.Tree.Combinators.Inferred (Inferred (Solved))
 import qualified Semantic.Tree.Definition2 as Definition2 (Definition2 (..), ForeignCall (..))
 import qualified Semantic.Tree.Definition3 as Tree.Definition3 (Definition3 (..))
+import qualified Semantic.Tree.Constraints as Constraints
 import Semantic.Tree.Definition4 (Annotation (..), Definition4 (..))
 import Semantic.Tree.Group (Element (..), Group (..), Set (..), Types (..))
 import Semantic.Tree.Scheme as Solved (Scheme (..))
@@ -125,6 +126,11 @@ check position Solve {solve, logical} reflection information = \case
             case self of
               Annotated annotation ::: _ -> do
                 scheme <- annotation
+                case scheme of
+                  Scheme {constraints} -> case constraints of
+                    Constraints.Constraints {} -> pure ()
+                    Constraints.Lazy -> pure ()
+                    _ -> strictDeclaration position
                 -- What a function of C is given and gives has to be what C
                 -- has, which is known from its type, and from the
                 -- definitions of the newtypes in it.

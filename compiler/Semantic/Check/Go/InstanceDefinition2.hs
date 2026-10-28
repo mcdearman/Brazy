@@ -39,7 +39,7 @@ import qualified Data.Vector as Vector
 import qualified Data.Vector.Strict as Strict
 import qualified Data.Vector.Strict as Strict.Vector
 import Data.Void (Void)
-import Error (cannotDerive, cyclicalTypeChecking, unsupportedFeatureEqualityConstraints)
+import Error (cannotDerive, cyclicalTypeChecking, strictDeclaration, unsupportedFeatureEqualityConstraints)
 import qualified Graph.Topological as Topological
 import qualified Semantic.Check.Binding.Type as TypeBinding
 import Semantic.Check.Context (Context (..))
@@ -313,6 +313,10 @@ checkHeader position key information Header {parameters, prerequisites, lenient}
         -- A parameter that is required to be a type is taken out of what
         -- is required: it needs no evidence. It has to be a parameter that
         -- is said to be a type, on either side.
+        case prerequisites of
+          Constraints {} -> pure ()
+          Lazy -> pure ()
+          _ -> strictDeclaration position
         let (classes, equalities) = case prerequisites of
               Lazy -> (Lazy, [])
               Constraints wanted ->
