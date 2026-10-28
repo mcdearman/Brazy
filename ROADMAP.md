@@ -1828,6 +1828,9 @@ Planned toggles and TODOs:
       what is on its left worked out once, as GHC has it (test
       `postfix-operators`, which agrees with GHC)
 - [ ] Use `UnorderedRecords` throughout the compiler (after M6)
+- [x] A module may be its body alone, as the report has it: it is then
+      `module Main (main) where`. Hazy asked for the header (test
+      `headerless-module`, which agrees with GHC)
 - [ ] Top-level documentation for every module
 
 ## Track B: further experiments
