@@ -1777,6 +1777,14 @@ Missing:
       was. `alloca` and its kin give back their memory with `bracket`
       (test `bracket`, which agrees with GHC). `mask_` does nothing, as
       nothing is thrown at a program from outside
+- [x] `error` throws an `ErrorCall`, as GHC's does, so `try`, `catch` and
+      `handle` catch it, as itself or as a `SomeException`, and a bang or
+      `evaluate` can be seen to reach it. It was a primitive that ended the
+      program. One that nothing catches still ends the program with its
+      message alone, and fails, in native code and on the AxCut machine;
+      the strictness analysis takes a throw, as it took an error, for
+      something that does not come back (test `error-call`, which agrees
+      with GHC)
 - [x] GADTs: see M6
 - [x] Polymorphic components: see M6
 - [x] Bang patterns, as GHC2021 has them on. A `!` written straight before
@@ -1795,7 +1803,15 @@ Missing:
       type, `C :: !Int -> T`, works already. What a strict function type
       means is Freddy's strictness in types (Track B)
 - [ ] Remaining builtin instances
-- [ ] Pattern type signatures for `ScopedTypeVariables`
+- [x] Pattern type signatures for `ScopedTypeVariables`: `(x :: t)` in
+      brackets, alone or in a tuple, wherever a pattern goes. The type is
+      resolved as a signature's is: a type variable a `forall` brought into
+      scope is that one, and any other is one of the signature's own, so a
+      pattern may say part of its type. The checker makes the type the
+      pattern's and leaves the pattern inside, so nothing after it sees the
+      signature. A type variable of the signature's own is not in scope in
+      what follows, as GHC's is (test `pattern-signatures`, which agrees
+      with GHC)
 - [ ] Proper type operators
 
 Planned toggles and TODOs:
@@ -1806,7 +1822,11 @@ Planned toggles and TODOs:
       calls itself through another, as the report has it (test
       `generalisation`, which agrees with GHC). The README no longer lists
       the restriction among the deviations
-- [ ] A pragma for postfix operators (eta-expanded left sections when off)
+- [x] A pragma for postfix operators. `PostfixOperators` is on unless
+      turned off, as before; with `NoPostfixOperators` (or `Haskell2010`) a
+      left section is a function of the operator's second argument, with
+      what is on its left worked out once, as GHC has it (test
+      `postfix-operators`, which agrees with GHC)
 - [ ] Use `UnorderedRecords` throughout the compiler (after M6)
 - [x] A module may be its body alone, as the report has it: it is then
       `module Main (main) where`. Hazy asked for the header (test

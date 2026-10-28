@@ -146,6 +146,21 @@ data Any
 data Thrown = Thrown String Int Text Any
 
 -- |
+-- What 'error' throws: its message. Nothing that catches it says, and a
+-- program that does not catch it ends with the message alone, and fails.
+data ErrorCall = ErrorCall String
+
+instance Show ErrorCall where
+  showsPrec _ (ErrorCall message) = showString message
+
+-- |
+-- Throw what 'error' throws. What nothing catches is said as it is, and the
+-- program fails: the status says so.
+errorCall :: String -> a
+errorCall message =
+  primThrow (Thrown "ErrorCall" (-2) (pack message) (primUnsafeCoerce (ErrorCall message)))
+
+-- |
 -- Throw an error of input or output from anywhere.
 throwIOError :: IOError -> a
 throwIOError problem =

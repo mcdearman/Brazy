@@ -46,6 +46,7 @@ extensions =
       unorderedRecords = False,
       constructorFields = False,
       permissiveUpdates = False,
+      postfixOperators = True,
       hygienicHiding = False
     }
 
