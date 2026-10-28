@@ -11,6 +11,7 @@ import qualified Data.Vector.Strict as Strict.Vector
 import Syntax.FreeVariables (FreeTypeVariables (..))
 import Syntax.Parser
   ( Parser,
+    bang,
     asum,
     betweenBrackets,
     betweenParens,
@@ -183,7 +184,7 @@ instance FreeTypeVariables Type where
 parse :: Parser (Type Position)
 parse =
   asum
-    [ position <**> try (strictFunction <$ token "!" <*> parse3 <*> position <* token "->") <*> parse,
+    [ position <**> try (strictFunction <$ bang <*> parse3 <*> position <* token "->") <*> parse,
       arrow <$> parse1 <*> position <*> optional (token "->" *> parse)
     ]
   where

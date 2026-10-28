@@ -88,6 +88,17 @@ singleBinding name Context {terms, evidence, types, unique} =
       unique
     }
 
+-- |
+-- A name for a value that is evaluated: what a bang pattern names.
+strictBinding :: Text -> Context s scope -> Context s (Scope.SimpleDeclaration ':+ scope)
+strictBinding name Context {terms, evidence, types, unique} =
+  Context
+    { terms = Term.SimpleDeclaration Term.Binding {name = Local name, strict = True, delayed = False} terms,
+      evidence = Evidence0.SimpleDeclaration evidence,
+      types = Type.SimpleDeclaration types,
+      unique
+    }
+
 patternBindings ::
   Strict.Vector Text ->
   ConstructorInfo scope ->

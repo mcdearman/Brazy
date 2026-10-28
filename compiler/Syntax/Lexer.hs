@@ -146,6 +146,8 @@ data Lexeme
   | RightArrow
   | At
   | Tilde
+  | -- | A @!@ written before what it is of, as in a bang pattern.
+    Bang
   | ThickArrow
   | Unordered
   | Fields
@@ -158,7 +160,8 @@ data Language
   deriving (Show, Bounded, Enum)
 
 data Extension
-  = DataKinds
+  = BangPatterns
+  | DataKinds
   | DoAndIfThenElse
   | EmptyCase
   | EmptyDataDecls
@@ -304,6 +307,7 @@ instance Format Lexeme where
     RightArrow -> pack "->"
     At -> pack "@"
     Tilde -> pack "~"
+    Bang -> pack "!"
     ThickArrow -> pack "=>"
     value -> toStrict $ Builder.toLazyText $ format value
 
@@ -864,6 +868,37 @@ data Premarked
   | Predone !Position
   deriving (Show)
 
+-- |
+-- The @!@s that are bangs, as GHC tells them apart: one that is written
+-- straight before what follows it, and not straight after what comes before
+-- it, unless that opens something or comes between things. Any other is
+-- the operator. So @f !x = x@ has a bang pattern, and @a ! b@ and @a!b@ are
+-- the operator.
+bangs :: Premarked -> Premarked
+bangs = go Nothing
+  where
+    go before = \case
+      Predone position -> Predone position
+      Premark start lexeme end rest ->
+        let bang =
+              lexeme == operator
+                && spaced before start
+                && tight end rest
+         in Premark start (if bang then Bang else lexeme) end (go (Just (end, lexeme)) rest)
+    operator = Local :-: VariableSymbol' (pack "!")
+    -- Whether nothing is written just before, or what is opens something.
+    spaced before start = case before of
+      Nothing -> True
+      Just (end, lexeme) ->
+        not (same end start)
+          || lexeme `elem` [OpenParen, OpenBracket, OpenBrace, Comma, Semicolon]
+    -- Whether what follows is written straight after, and is not closing.
+    tight end = \case
+      Premark start next _ _ ->
+        same end start && next `notElem` [CloseParen, CloseBracket, CloseBrace, Comma, Semicolon]
+      Predone _ -> False
+    same one other = line one == line other && column one == column other
+
 comment, ncomment, ncommentBody :: Parser Stream ()
 comment = try (dashes *> body)
   where
@@ -1109,6 +1144,6 @@ lexer :: Extensions -> Parser Stream (Lexer, Extensions)
 lexer baseline = do
   extensions <- header
   premark <- premarked
-  let marked = mark premark
+  let marked = mark (bangs premark)
       rendered = layout [] marked
   pure (rendered, foldl extend baseline extensions)

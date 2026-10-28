@@ -1779,9 +1779,31 @@ Missing:
       nothing is thrown at a program from outside
 - [x] GADTs: see M6
 - [x] Polymorphic components: see M6
-- [ ] Strict functions
+- [x] Bang patterns, as GHC2021 has them on. A `!` written straight before
+      what follows it, and not straight after what comes before it, is a
+      bang (the lexer tells them apart by where tokens start and end); any
+      other is the operator, so `a ! b` and `a!b` are still `(!)`. A bang on
+      a name or on `_` evaluates what it is matched against first: Core has
+      a strict let for it, which the sequent calculus evaluates and names by
+      value. A bang on any other pattern, which evaluates already, changes
+      nothing; one on a lazy pattern is only the lazy pattern, where GHC
+      evaluates first, and one inside a lazy pattern does nothing (test
+      `bang-patterns`, which agrees with GHC)
+- [ ] Strict functions. In Hazy's README this is the type `!a -> b`, a
+      function that is given its argument evaluated: it is parsed, and
+      refused where it is checked. A strict field in a GADT constructor's
+      type, `C :: !Int -> T`, works already. What a strict function type
+      means is Freddy's strictness in types (Track B)
 - [ ] Remaining builtin instances
-- [ ] Pattern type signatures for `ScopedTypeVariables`
+- [x] Pattern type signatures for `ScopedTypeVariables`: `(x :: t)` in
+      brackets, alone or in a tuple, wherever a pattern goes. The type is
+      resolved as a signature's is: a type variable a `forall` brought into
+      scope is that one, and any other is one of the signature's own, so a
+      pattern may say part of its type. The checker makes the type the
+      pattern's and leaves the pattern inside, so nothing after it sees the
+      signature. A type variable of the signature's own is not in scope in
+      what follows, as GHC's is (test `pattern-signatures`, which agrees
+      with GHC)
 - [x] Proper type operators. A type may be named by an operator, a
       constructor's symbol such as `:+:` or a variable's such as `+`, and is
       declared with it between its two parameters or alone in brackets, as a
