@@ -1785,6 +1785,19 @@ Missing:
       the strictness analysis takes a throw, as it took an error, for
       something that does not come back (test `error-call`, which agrees
       with GHC)
+- [x] Exceptions that GHC throws and Hazy did not. Dividing by nothing, by
+      `div`, `mod`, `quot` or `rem` of an `Int` or an `Integer`, throws an
+      `ArithException` (`DivideByZero`), and a ratio over nothing throws
+      `RatioZeroDenominator`; both ended the program. A pattern that does
+      not match throws a `PatternMatchFail`; it ended the program saying
+      `bottom`. The compiler puts the throw where patterns run out last of
+      all, as the AxCut is made, so that until then a failure is known for
+      what it is. Nothing that catches them ends the program with how they
+      are shown, as `error` does (test `exceptions`, which agrees with GHC).
+      GHC says where the pattern was; Hazy does not
+- [ ] A value shared by more than one thing that throws while it is worked
+      out, and is caught, is left being worked out: asked for again, it
+      seems to loop, where GHC's throws again
 - [x] GADTs: see M6
 - [x] Polymorphic components: see M6
 - [x] Bang patterns, as GHC2021 has them on. A `!` written straight before
