@@ -3,10 +3,10 @@ module Semantic.Check.Simple.Data where
 import Control.Monad.ST (ST)
 import Core.Substitute (logicalType)
 import Core.Tree.Data (Data (..), DefinitionF (..))
-import Semantic.Check.ConstructorInstance (Use (..))
+import Semantic.Check.Instanciate.Constructor (Use (..))
 import {-# SOURCE #-} Semantic.Check.Context (Context)
-import Semantic.Check.DataInstance (DataInstance (DataInstance))
-import qualified Semantic.Check.DataInstance as DataInstance
+import Semantic.Check.Instanciate.Data (DataInstance (DataInstance))
+import qualified Semantic.Check.Instanciate.Data as DataInstance
 import qualified Semantic.Check.Simple.Constructor as Constructor
 import qualified Semantic.Unify as Unify
 import Syntax.Position (Position)

@@ -1,4 +1,4 @@
-module Semantic.Check.ConstructorInstance where
+module Semantic.Check.Instanciate.Constructor where
 
 import Control.Monad.ST (ST)
 import Core.Tree.Type ((-#>))
@@ -8,8 +8,8 @@ import Data.Traversable (for)
 import qualified Data.Vector.Strict as Strict
 import qualified Data.Vector.Strict as Strict.Vector (fromList)
 import {-# SOURCE #-} Semantic.Check.Context (Context)
-import Semantic.Check.EntryInstance (EntryInstance, entry)
-import qualified Semantic.Check.EntryInstance as EntryInstance
+import Semantic.Check.Instanciate.Entry (EntryInstance, entry)
+import qualified Semantic.Check.Instanciate.Entry as EntryInstance
 import Semantic.Check.Temporary.ConstructorInfo (ConstructorInfo (..))
 import Semantic.Check.Temporary.EntryInfo (EntryInfo (..))
 import qualified Semantic.Index.Type2 as Type2

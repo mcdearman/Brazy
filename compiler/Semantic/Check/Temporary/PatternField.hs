@@ -2,7 +2,7 @@ module Semantic.Check.Temporary.PatternField where
 
 import Control.Monad.ST (ST)
 import Semantic.Check.Context (Context)
-import Semantic.Check.EntryInstance (EntryInstance)
+import Semantic.Check.Instanciate.Entry (EntryInstance)
 import Semantic.Check.LocalBinding (Equality)
 import {-# SOURCE #-} Semantic.Check.Temporary.Pattern (Pattern)
 import {-# SOURCE #-} qualified Semantic.Check.Temporary.Pattern as Pattern

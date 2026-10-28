@@ -44,11 +44,11 @@ import Data.Text.Lazy.Builder (fromString)
 import qualified Data.Vector.Strict as Strict.Vector
 import Data.Void (Void)
 import Error (cannotDerive)
-import Semantic.Check.ConstructorInstance (ConstructorInstance (..))
-import qualified Semantic.Check.ConstructorInstance as ConstructorInstance
+import Semantic.Check.Instanciate.Constructor (ConstructorInstance (..))
+import qualified Semantic.Check.Instanciate.Constructor as ConstructorInstance
 import Semantic.Check.Context (Context)
-import Semantic.Check.DataInstance (DataInstance (..))
-import Semantic.Check.EntryInstance (EntryInstance (..))
+import Semantic.Check.Instanciate.Data (DataInstance (..))
+import Semantic.Check.Instanciate.Entry (EntryInstance (..))
 import Semantic.Check.Info.Constructor (ConstructorInfo)
 import Semantic.Check.Simple.Data (instanciateApart)
 import qualified Semantic.Check.Temporary.ConstructorInfo as ConstructorInfo

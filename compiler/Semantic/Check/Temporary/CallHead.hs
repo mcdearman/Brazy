@@ -7,12 +7,12 @@ import Core.Tree.Combinators.Delay (Delay (..))
 import Core.Tree.Type ((-#>))
 import Core.Tree.TypeDeclaration (assumeClass, assumeData)
 import qualified Data.Vector.Strict as Strict.Vector
-import qualified Semantic.Check.ClassInstance as ClassInstance
-import qualified Semantic.Check.ConstructorInstance as ConstructorInstance
+import qualified Semantic.Check.Instanciate.Class as ClassInstance
+import qualified Semantic.Check.Instanciate.Constructor as ConstructorInstance
 import Semantic.Check.Context (Context (..))
-import Semantic.Check.DataInstance (DataInstance (..))
-import qualified Semantic.Check.DataInstance as DataInstance
-import qualified Semantic.Check.EntryInstance as EntryInstance (taken)
+import Semantic.Check.Instanciate.Data (DataInstance (..))
+import qualified Semantic.Check.Instanciate.Data as DataInstance
+import qualified Semantic.Check.Instanciate.Entry as EntryInstance (taken)
 import qualified Semantic.Check.Simple.Data as Simple.Data
 import Semantic.Check.Info.Method (MethodInfo)
 import Semantic.Check.Scheme (instanciate)

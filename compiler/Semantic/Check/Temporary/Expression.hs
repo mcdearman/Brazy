@@ -23,12 +23,12 @@ import Data.Traversable (for)
 import qualified Data.Vector.Strict as Strict (Vector)
 import qualified Data.Vector.Strict as Strict.Vector
 import Error (badRunSTCall, mismatchedConstructorArguments)
-import qualified Semantic.Check.ConstructorInstance as ConstructorInstance
+import qualified Semantic.Check.Instanciate.Constructor as ConstructorInstance
 import Semantic.Check.Context (Context (..))
-import Semantic.Check.DataInstance (DataInstance (DataInstance))
-import qualified Semantic.Check.DataInstance as DataInstance
-import Semantic.Check.EntryInstance (EntryInstance (..))
-import qualified Semantic.Check.EntryInstance as EntryInstance (entry)
+import Semantic.Check.Instanciate.Data (DataInstance (DataInstance))
+import qualified Semantic.Check.Instanciate.Data as DataInstance
+import Semantic.Check.Instanciate.Entry (EntryInstance (..))
+import qualified Semantic.Check.Instanciate.Entry as EntryInstance (entry)
 import qualified Semantic.Check.Go.Declarations as Declarations
 import qualified Semantic.Check.Go.Definition4 as Definition4
 import Semantic.Check.Go.Scheme (Scheme)

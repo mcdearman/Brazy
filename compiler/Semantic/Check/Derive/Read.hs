@@ -24,12 +24,12 @@ import Data.Text.Lazy (toStrict)
 import Data.Text.Lazy.Builder (fromString, toLazyText)
 import qualified Data.Vector.Strict as Strict.Vector
 import Error (cannotDerive)
-import Semantic.Check.ConstructorInstance (ConstructorInstance (..))
-import qualified Semantic.Check.ConstructorInstance as ConstructorInstance
+import Semantic.Check.Instanciate.Constructor (ConstructorInstance (..))
+import qualified Semantic.Check.Instanciate.Constructor as ConstructorInstance
 import Semantic.Check.Context (Context)
-import Semantic.Check.DataInstance (DataInstance (..))
+import Semantic.Check.Instanciate.Data (DataInstance (..))
 import Semantic.Check.Derive.Show (printConstructor, printField)
-import Semantic.Check.EntryInstance (entry)
+import Semantic.Check.Instanciate.Entry (entry)
 import Semantic.Check.Info.Constructor (ConstructorInfo)
 import Semantic.Check.Simple.Data (instanciateApart)
 import qualified Semantic.Check.Temporary.ConstructorInfo as ConstructorInfo

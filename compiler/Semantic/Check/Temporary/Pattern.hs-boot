@@ -5,7 +5,7 @@ module Semantic.Check.Temporary.Pattern where
 import Control.Monad.ST (ST)
 import Data.Kind (Type)
 import Semantic.Check.Context (Context)
-import Semantic.Check.EntryInstance (EntryInstance)
+import Semantic.Check.Instanciate.Entry (EntryInstance)
 import Semantic.Check.LocalBinding (Equality)
 import Semantic.Check.TermBinding (TermBinding)
 import qualified Semantic.Index.Table.Term as Term

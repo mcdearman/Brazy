@@ -12,7 +12,7 @@ import Data.Maybe (mapMaybe)
 import Data.STRef (STRef, newSTRef, readSTRef, writeSTRef)
 import Data.Vector (Vector)
 import qualified Data.Vector as Vector
-import qualified Semantic.Check.DataInstance as DataInstance
+import qualified Semantic.Check.Instanciate.Data as DataInstance
 import Semantic.Check.LocalBinding (Equality (Expanding, Grouping, Late), LocalBinding, shiftEquality)
 import qualified Semantic.Check.LocalBinding as LocalBinding
 import Semantic.Check.Simple.Data as Simple.Data (instanciateMark)

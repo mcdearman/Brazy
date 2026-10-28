@@ -26,11 +26,11 @@ import Error
     refiningBinding,
     unsupportedFeaturePolymorphicComponents,
   )
-import qualified Semantic.Check.ConstructorInstance as ConstructorInstance
+import qualified Semantic.Check.Instanciate.Constructor as ConstructorInstance
 import Semantic.Check.Context (Context (..))
-import Semantic.Check.DataInstance (DataInstance (DataInstance))
-import qualified Semantic.Check.DataInstance as DataInstance
-import Semantic.Check.EntryInstance (EntryInstance (..))
+import Semantic.Check.Instanciate.Data (DataInstance (DataInstance))
+import qualified Semantic.Check.Instanciate.Data as DataInstance
+import Semantic.Check.Instanciate.Entry (EntryInstance (..))
 import qualified Semantic.Check.Simple.Data as Simple.Data
 import Semantic.Check.Temporary.ConstructorInfo (ConstructorInfo)
 import qualified Semantic.Check.Temporary.ConstructorInfo as ConstructorInfo

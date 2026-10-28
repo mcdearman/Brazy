@@ -173,10 +173,10 @@ executable hazy
     Package
     Repl
     Repl.Entry
-    Semantic.Check.ClassInstance
-    Semantic.Check.ConstructorInstance
+    Semantic.Check.Instanciate.Class
+    Semantic.Check.Instanciate.Constructor
     Semantic.Check.Context
-    Semantic.Check.DataInstance
+    Semantic.Check.Instanciate.Data
     Semantic.Check.Derive.Bounded
     Semantic.Check.Derive.Enum
     Semantic.Check.Derive.Eq
@@ -186,7 +186,7 @@ executable hazy
     Semantic.Check.Derive.Read
     Semantic.Check.Derive.Show
     Semantic.Default
-    Semantic.Check.EntryInstance
+    Semantic.Check.Instanciate.Entry
     Semantic.Check.Go.Declaration
     Semantic.Check.Go.Declarations
     Semantic.Check.Go.Definition4

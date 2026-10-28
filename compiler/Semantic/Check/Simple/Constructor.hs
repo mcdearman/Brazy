@@ -10,11 +10,11 @@ import qualified Data.Vector.Strict as Strict.Vector
 import Core.Tree.Type (TypeF (Variable))
 import Data.Foldable (toList)
 import Data.Maybe (catMaybes, isNothing)
-import Semantic.Check.ConstructorInstance (ConstructorInstance (ConstructorInstance), Use (..))
+import Semantic.Check.Instanciate.Constructor (ConstructorInstance (ConstructorInstance), Use (..))
 import qualified Semantic.Index.Local as Local
 import qualified Semantic.Index.Type2 as Type2
-import qualified Semantic.Check.ConstructorInstance as ConstructorInstance
-import qualified Semantic.Check.EntryInstance as EntryInstance
+import qualified Semantic.Check.Instanciate.Constructor as ConstructorInstance
+import qualified Semantic.Check.Instanciate.Entry as EntryInstance
 import Semantic.Scope (Environment ((:+)), Local)
 import qualified Semantic.Unify as Unify
 import Syntax.Position (Position)
