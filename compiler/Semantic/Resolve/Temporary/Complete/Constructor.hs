@@ -1,7 +1,6 @@
 module Semantic.Resolve.Temporary.Complete.Constructor where
 
 import Data.Foldable (toList)
-import Data.Functor.Identity (Identity (..))
 import qualified Data.Map as Map
 import qualified Data.Strict.Maybe as Strict (Maybe (..))
 import qualified Data.Vector.Strict as Strict (Vector)
@@ -59,8 +58,8 @@ resolve context selectorNames constructor = case constructor of
           Real.Constructor
             { position,
               name,
-              syntax = Real.Infix $ case context != position :@ Local := name of
-                _ Constructor.:@ Identity Constructor.Binding {fixity} -> fixity,
+              syntax = Real.Infix $ case Constructor.get $ context != position :@ Local := name of
+                Constructor.Binding {fixity} -> fixity,
               shape = Real.Ordinary,
               entries = Strict.Vector.fromList (Entry.resolve context <$> [left, right])
             }
