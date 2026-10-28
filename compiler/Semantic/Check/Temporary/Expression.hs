@@ -49,8 +49,6 @@ import Semantic.Check.Temporary.ConstructorInfo (ConstructorInfo)
 import qualified Semantic.Check.Temporary.ConstructorInfo as ConstructorInfo
 import Semantic.Check.Temporary.Do (Do)
 import qualified Semantic.Check.Temporary.Do as Do
-import Semantic.Check.Temporary.ExpressionField (Field)
-import qualified Semantic.Check.Temporary.ExpressionField as Field
 import Semantic.Check.Temporary.Lambda (Lambda)
 import qualified Semantic.Check.Temporary.Lambda as Lambda
 import Semantic.Check.Temporary.Pattern (Pattern)
@@ -80,7 +78,7 @@ import qualified Semantic.Tree.CallHead as Head (CallHead (..))
 import Semantic.Tree.Combinators.Inferred (Inferred (Solved))
 import qualified Semantic.Tree.Declarations as Proper.Declarations
 import Semantic.Tree.Expression (Explicit (..))
-import qualified Semantic.Tree.Expression as Semantic (Expression (..))
+import qualified Semantic.Tree.Expression as Semantic (Expression (..), Field (..))
 import qualified Semantic.Tree.Expression as Solved
 import qualified Semantic.Tree.Select as Semantic (Select (..))
 import qualified Semantic.Unify as Unify
@@ -316,6 +314,12 @@ applying = \case
       } -> length parameters == 2 && from == from' && to == to' && from /= to
   _ -> Prelude.False
 
+data Field s scope
+  = Field
+  { index :: !Int,
+    field :: !(Expression s scope)
+  }
+
 check :: Context s scope -> Unify.Type s scope -> Semantic.Expression Group Resolve scope -> ST s (Expression s scope)
 check context typex Semantic.CallHead {callHead} = do
   callHead <- CallHead.check context typex callHead
@@ -342,7 +346,10 @@ check
       ConstructorInstance.mark context instancex
       Unify.unify context constructorPosition typex base
       constructorInfo <- ConstructorInstance.built context instancex
-      fields <- traverse (Field.check lookup) fields
+      let checkField Semantic.Field {index, field} = do
+            field <- lookup index field
+            pure Field {index, field}
+      fields <- traverse checkField fields
       pure $ Record {constructorPosition, constructor, fields, constructorInfo}
 check context typex Semantic.List {startPosition, items} = do
   inner <- Unify.fresh Core.typex
@@ -539,7 +546,10 @@ solve = \case
     callHead <- CallHead.solve callHead
     pure Solved.CallHead {callHead}
   Record {constructorPosition, constructor, constructorInfo, fields} -> do
-    fields <- traverse Field.solve fields
+    let solveField Field {index, field} = do
+          field <- solve field
+          pure $ Solved.Field {index, field}
+    fields <- traverse solveField fields
     constructorInfo <- ConstructorInfo.solve constructorInfo
     pure
       Solved.Record
