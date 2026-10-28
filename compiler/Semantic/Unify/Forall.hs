@@ -128,15 +128,16 @@ generalizeBody ::
   Generalize (Body typex term) s scope ->
   ST s (Body (ForallOver typex) (Simple.TypeLambdaOver term) s scope)
 generalizeBody position context requiring varying (Generalize run) = do
-  typex ::: term <- run $ case context of
-    Context {termEnvironment, localEnvironment, typeEnvironment, equalities, defaulting} ->
-      Context
-        { termEnvironment = Table.Term.Local termEnvironment,
-          localEnvironment = Table.Local.Local Vector.empty localEnvironment,
-          typeEnvironment = Table.Type.Local typeEnvironment,
-          equalities = shiftEquality <$> equalities,
-          defaulting
-        }
+  let inner = case context of
+        Context {termEnvironment, localEnvironment, typeEnvironment, equalities, defaulting} ->
+          Context
+            { termEnvironment = Table.Term.Local termEnvironment,
+              localEnvironment = Table.Local.Local Vector.empty localEnvironment,
+              typeEnvironment = Table.Type.Local typeEnvironment,
+              equalities = shiftEquality <$> equalities,
+              defaulting
+            }
+  typex ::: term <- run inner
   allowed <- requiring
   direct <- collect (Collector Mask.Runtime) typex
   -- Only what is required of a type by itself is made part of the type that
@@ -152,7 +153,7 @@ generalizeBody position context requiring varying (Generalize run) = do
   zipWithM_ writeVariable [0 ..] boxes
   result <- zonk Zonker Shift0.Id typex
   assumed <- for (zip [0 ..] required) $ \(index, (classx, head, Delay {arguments, evidence})) -> do
-    Evidence.unify evidence $
+    Evidence.unify inner position evidence $
       Evidence.Variable
         { variable = Index.Evidence.assumed index,
           instanciation = Mono

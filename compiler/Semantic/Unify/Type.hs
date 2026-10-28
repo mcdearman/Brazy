@@ -12,6 +12,7 @@ import qualified Data.Map as Map
 import Data.STRef (STRef, newSTRef, readSTRef, writeSTRef)
 import Data.Traversable (for)
 import Core.Type.Functor (shiftLogical)
+import Data.Void (Void)
 import Error (unsupportedFeatureConstraintedTypeDefaulting)
 import qualified Semantic.Check.Binding.Local as Local (LocalBinding (..))
 import Semantic.Check.Context (Context (..))
@@ -189,7 +190,7 @@ unify context_ position term1_ term2_ = unifyWith context_ term1_ term2_
                               found <- firstM (\Delay {arguments = arguments1} -> sameAll arguments1 arguments2) known
                               case found of
                                 Just Delay {evidence = evidence1} -> do
-                                  Evidence.unify evidence1 evidence2
+                                  Evidence.unify context position evidence1 evidence2
                                   pure known
                                 Nothing -> pure (known ++ [delay])
                         foldM add left right =
@@ -640,7 +641,7 @@ reconstrain context position constraints term =
   for_ (Map.toList constraints) $ \(classx, delays) ->
     for_ delays $ \Delay {arguments, evidence} -> do
       evidence' <- constrainWith context position classx term arguments
-      Evidence.unify evidence evidence'
+      Evidence.unify context position evidence evidence'
 
 -- |
 -- The first of some things that passes a test.
@@ -751,12 +752,22 @@ compared open = go
       Logical (Shift _) -> pure open
       _ -> pure False
 
-unshiftBox misshift unshift reference kind constraints erasure = do
+unshiftBox ::
+  Context s (scope1 ':+ scopes) ->
+  Position ->
+  ST s Void ->
+  (Type s (scope1 ':+ scopes) -> ST s (Type s scopes)) ->
+  STRef s (Box s (scope2 ':+ scopes)) ->
+  TypeF (Logical s (scope1 ':+ scopes)) (scope1 ':+ scopes) ->
+  Map (Type2.Index (scope3 ':+ scopes)) [Delay s (scope1 ':+ scopes)] ->
+  Mask.Erasure ->
+  ST s (Logical s scopes)
+unshiftBox context position misshift unshift reference kind constraints erasure = do
   let unshiftDelay (key, delays) = do
         key <- Shift.partialUnshift misshift key
         delays <- for delays $ \Delay {arguments, evidence} -> do
           arguments <- traverse unshift arguments
-          evidence <- Evidence.unshift evidence
+          evidence <- Evidence.unshift context position evidence
           pure Delay {arguments, evidence}
         pure (key, delays)
   kind <- unshift kind
@@ -782,7 +793,7 @@ unshift context position typex = unshift typex
       Logical (Box reference) ->
         readSTRef reference >>= \case
           Unsolved {kind, constraints, erasure} -> do
-            box <- unshiftBox misshift unshift reference kind constraints erasure
+            box <- unshiftBox context position misshift unshift reference kind constraints erasure
             pure $ Logical box
           Solved term -> unshift term
           -- It is of this scope, and cannot be said further out.

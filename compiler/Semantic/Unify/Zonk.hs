@@ -43,7 +43,7 @@ instance Zonk TypeF where
         Solved solved -> Shift0.map category <$> zonk zonker Shift0.Id solved
         Unsolved {kind, constraints, erasure} -> do
           let fail = error "zonk can't fail"
-          box <- unshiftBox (pure fail) (unshift fail fail) reference kind constraints erasure
+          box <- unshiftBox fail fail fail (unshift fail fail) reference kind constraints erasure
           pure $ Type.Logical $ box
         -- A match is checked not to let one out before anything is zonked.
         Skolem {} -> error "zonk of a type that stands for itself"
