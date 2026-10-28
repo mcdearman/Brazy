@@ -24,7 +24,7 @@ import qualified Semantic.Check.Binding.Type as TypeBinding
 import qualified Semantic.Index.Table.Type as Table.Type
 import qualified Semantic.Check.Go.Scheme as Solved.Scheme
 import qualified Semantic.Check.Mask as Mask
-import qualified Semantic.Check.Temporary.Definition3 as Definition3
+import qualified Semantic.Check.Go.Definition3 as Definition3
 import qualified Semantic.Check.Temporary.Scheme as Scheme
 import qualified Semantic.Layout as Layout
 import Semantic.Scope (Environment (..), Local)
@@ -146,10 +146,8 @@ check position Solve {solve, logical} reflection information = \case
                     marshalled <- Foreign.callThrough (Builtin.index pure content) foreignPosition target symbol (Forall.simplify scheme)
                     marshalled `seq` pure (Tree.Definition3.Label info (Definition2.Exported call {Definition2.marshalled = Just marshalled} exported))
                   _ -> pure definition
-                definition <- checkAnnotation context position scheme $ \context typex -> do
-                  definition <- Definition3.checkManual context typex definition
-                  definition <- pure $ Definition3.solve position definition
-                  pure definition
+                definition <- checkAnnotation context position scheme $ \context typex ->
+                  Definition3.checkManual position context typex definition
                 definition <- solve definition
                 pure $ Implicit.Check <$> definition
               _ -> error "bad self annotation"
@@ -190,9 +188,9 @@ check position Solve {solve, logical} reflection information = \case
                     let element' = Shift.map (Shift.Over Shift) element
                         typex = fresh Vector.! index
                         used = writeSTRef recursive True
-                    element <- Definition3.checkAuto (groupTermBindings used fresh context) (shiftLogical typex) element'
+                    element <- Definition3.checkAuto position (groupTermBindings used fresh context) (shiftLogical typex) element'
                     pure $ do
-                      element <- Definition3.solve position element
+                      element <- element
                       pure Element {element, link}
                   types = Types (Strict.Vector.fromLazy fresh)
               case waiting of

@@ -58,7 +58,7 @@ import qualified Semantic.Check.Go.Scheme as Scheme
 import qualified Semantic.Check.Mask as Mask
 import qualified Semantic.Check.Scheme as Core.Scheme
 import qualified Semantic.Check.Temporary.Constraints as Unsolved.Constraints (check, solve)
-import qualified Semantic.Check.Temporary.Definition as Definition
+import qualified Semantic.Check.Go.Definition as Definition
 import qualified Semantic.Check.Temporary.Scheme as Unsolved (augment)
 import qualified Semantic.Check.Temporary.Type as Unsolved.Type (check, solve)
 import qualified Semantic.Check.Temporary.TypePattern as Unsolved (TypePattern (..), solve)
@@ -393,7 +393,7 @@ checkMethod Method {position, context} Manual _ scheme (Definition (Resolve memb
   context <- Core.Scheme.augmentForall position scheme Mask.Runtime context
   definition <- Definition.check context result member
   pure $ do
-    result <- Definition.solve definition
+    result <- definition
     pure $
       Definition $
         Implicit.Check

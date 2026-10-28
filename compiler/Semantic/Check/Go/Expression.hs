@@ -1,4 +1,4 @@
-module Semantic.Check.Temporary.Expression where
+module Semantic.Check.Go.Expression where
 
 import qualified Core.Tree.Type as Levity (lazy)
 import Control.Monad (when, zipWithM)
@@ -20,10 +20,7 @@ import qualified Core.Tree.TypeLambda as Simple
 import Core.Type.Functor (shiftLogical)
 import qualified Core.Type.Functor as Core.Functor (map)
 import Data.Foldable (toList)
-import qualified Data.Strict.Vector1 as Strict (Vector1)
-import qualified Data.Strict.Vector2 as Strict (Vector2)
 import Data.Traversable (for)
-import qualified Data.Vector.Strict as Strict (Vector)
 import qualified Data.Vector.Strict as Strict.Vector
 import Error (badRunSTCall, mismatchedConstructorArguments)
 import qualified Semantic.Check.Instanciate.Constructor as ConstructorInstance
@@ -32,30 +29,20 @@ import Semantic.Check.Instanciate.Data (DataInstance (DataInstance))
 import qualified Semantic.Check.Instanciate.Data as DataInstance
 import Semantic.Check.Instanciate.Entry (EntryInstance (..))
 import qualified Semantic.Check.Instanciate.Entry as EntryInstance (entry)
+import qualified Semantic.Check.Go.Alternative as Alternative
+import qualified Semantic.Check.Go.CallHead as CallHead
+import qualified Semantic.Check.Go.Comprehension as Comprehension
 import qualified Semantic.Check.Go.Declarations as Declarations
 import qualified Semantic.Check.Go.Definition4 as Definition4
-import Semantic.Check.Go.Scheme (Scheme)
+import qualified Semantic.Check.Go.Do as Do
+import qualified Semantic.Check.Go.Lambda as Lambda
+import qualified Semantic.Check.Go.RightHandSide as RightHandSide
 import qualified Semantic.Check.Mask as Mask
 import qualified Semantic.Check.Simple.Data as Simple.Data
 import Semantic.Check.Scheme (instanciate)
 import qualified Semantic.Check.Scheme as Rigid (augment)
-import Semantic.Check.Temporary.Alternative (Alternative)
-import qualified Semantic.Check.Temporary.Alternative as Alternative
-import Semantic.Check.Temporary.CallHead (CallHead)
-import qualified Semantic.Check.Temporary.CallHead as CallHead
-import Semantic.Check.Temporary.Comprehension (Comprehension)
-import qualified Semantic.Check.Temporary.Comprehension as Comprehension
-import Semantic.Check.Temporary.ConstructorInfo (ConstructorInfo)
 import qualified Semantic.Check.Temporary.ConstructorInfo as ConstructorInfo
-import Semantic.Check.Temporary.Do (Do)
-import qualified Semantic.Check.Temporary.Do as Do
-import Semantic.Check.Temporary.Lambda (Lambda)
-import qualified Semantic.Check.Temporary.Lambda as Lambda
-import Semantic.Check.Temporary.Pattern (Pattern)
 import qualified Semantic.Check.Temporary.Pattern as Pattern
-import Semantic.Check.Temporary.RightHandSide (RightHandSide)
-import qualified Semantic.Check.Temporary.RightHandSide as RightHandSide
-import Semantic.Check.Temporary.UpdateInfo (UpdateInfo)
 import qualified Semantic.Check.Temporary.UpdateInfo as UpdateInfo
 import qualified Semantic.Check.Binding.Term as TermBinding (TermBinding (..), Type (..))
 import qualified Semantic.Check.TypeAnnotation as Annotation
@@ -67,140 +54,27 @@ import qualified Semantic.Index.Table.Type as Type ((!))
 import qualified Semantic.Index.Term as Term.Index (Index)
 import qualified Semantic.Index.Type2 as Type2
 import Semantic.Layout (Group)
-import Semantic.Scope (Environment (..))
-import qualified Semantic.Scope as Scope
 import Semantic.Stage (Check, Resolve)
 import Semantic.Shift (shift)
 import qualified Semantic.Shift0 as Shift0
 import qualified Semantic.Tree.CallHead as Head (CallHead (..))
 import Semantic.Tree.Combinators.Inferred (Inferred (Solved))
-import qualified Semantic.Tree.Declarations as Proper.Declarations
 import Semantic.Tree.Expression (Explicit (..))
 import qualified Semantic.Tree.Expression as Semantic (Expression (..), Field (..))
 import qualified Semantic.Tree.Expression as Solved
 import qualified Semantic.Unify as Unify
 import Syntax.Position (Position)
-import Syntax.StringLiteral (StringLiteral)
 import Prelude hiding (Bool (False, True))
 import qualified Prelude
 
-data Expression s scope
-  = CallHead
-      { callHead :: !(CallHead s scope),
-        arguments :: !(Strict.Vector (Expression s scope))
-      }
-  | Integer
-      { startPosition :: !Position,
-        integer :: !Integer,
-        evidence :: !(Unify.Evidence s scope)
-      }
-  | Float
-      { startPosition :: !Position,
-        float :: !Rational,
-        evidence :: !(Unify.Evidence s scope)
-      }
-  | Character
-      { startPosition :: !Position,
-        character :: !Char
-      }
-  | String
-      { startPosition :: !Position,
-        string :: !StringLiteral
-      }
-  | Tuple
-      { startPosition :: !Position,
-        elements :: !(Strict.Vector2 (Expression s scope))
-      }
-  | List
-      { startPosition :: !Position,
-        items :: !(Strict.Vector (Expression s scope))
-      }
-  | Comprehension
-      { startPosition :: !Position,
-        statements :: !(Comprehension s scope)
-      }
-  | Record
-      { constructorPosition :: !Position,
-        constructor :: !(Constructor.Index scope),
-        constructorInfo :: !(ConstructorInfo s scope),
-        fields :: !(Strict.Vector (Field s scope))
-      }
-  | Update
-      { base :: !(Expression s scope),
-        updatePosition :: !Position,
-        updateType :: !(Type2.Index scope),
-        updates :: !(Strict.Vector1 (Field s scope)),
-        updateInfo :: !(UpdateInfo s scope),
-        permissive :: !Prelude.Bool
-      }
-  | Call
-      { function :: !(Expression s scope),
-        argument :: !(Expression s scope)
-      }
-  | Let
-      { declarations :: !(Unify.Solve s (Proper.Declarations.Local Group Check scope)),
-        letBody :: !(Expression s (Scope.Declaration ':+ scope))
-      }
-  | If
-      { conditionx :: !(Expression s scope),
-        thenx :: !(Expression s scope),
-        elsex :: !(Expression s scope)
-      }
-  | Case
-      { startPosition :: !Position,
-        scrutinee :: !(Expression s scope),
-        cases :: !(Strict.Vector (Alternative s scope))
-      }
-  | Lambda
-      { startPosition :: !Position,
-        parameter :: !(Pattern s scope),
-        body :: !(Lambda s (Scope.Pattern ':+ scope))
-      }
-  | LambdaCase
-      { startPosition :: !Position,
-        cases :: !(Strict.Vector (Alternative s scope))
-      }
-  | MultiwayIf
-      { branches :: !(Strict.Vector1 (RightHandSide s scope))
-      }
-  | Do
-      { startPosition :: !Position,
-        dox :: !(Do s scope)
-      }
-  | RunST
-      { startPosition :: !Position,
-        imperative :: !(Expression s scope)
-      }
-  | -- | An expression of a type with a @forall@ of its own, for a
-    -- constructor to hold.
-    Generalized
-      { expression :: !(Unify.Solve s (Simple.TypeLambdaOver (Solved.Expression Group Check) scope))
-      }
-  | Annotation
-      { expression :: !(Unify.Solve s (Simple.TypeLambdaOver (Solved.Expression Group Check) scope)),
-        operatorPosition :: !Position,
-        annotation :: !(Scheme Position Check scope),
-        instanciation :: !(Unify.Instanciation s scope)
-      }
-  | RightSection
-      { operatorPosition :: !Position,
-        left :: !(CallHead s scope),
-        right :: !(Expression s scope)
-      }
-  | LeftSection
-      { operatorPosition :: !Position,
-        operator :: !(CallHead s scope),
-        operand :: !(Expression s scope)
-      }
-  | Negate
-      { startPosition :: !Position,
-        evidence :: !(Unify.Evidence s scope),
-        negative :: !(Expression s scope)
-      }
+-- |
+-- What an expression is, once what is worked out of it while it is checked
+-- is known.
+type Solve s scope = Unify.Solve s (Solved.Expression Group Check scope)
 
 -- |
 -- Check an expression that is to be something a constructor holds.
-fill :: Context s scope -> EntryInstance s scope -> Semantic.Expression Group Resolve scope -> ST s (Expression s scope)
+fill :: Context s scope -> EntryInstance s scope -> Semantic.Expression Group Resolve scope -> ST s (Solve s scope)
 fill context EntryInstance {quantified = Prelude.False, entry} expression = check context entry expression
 fill context EntryInstance {position, scheme} expression = generalize context position scheme expression
 
@@ -214,18 +88,15 @@ generalize ::
   Position ->
   Unify.Forall s scope ->
   Semantic.Expression Group Resolve scope ->
-  ST s (Expression s scope)
+  ST s (Solve s scope)
 generalize context position ForallOver {parameters, constraints, result} expression = do
   parameters <- Unify.runSolve $ traverse (Unify.solve position) parameters
   constraints <- Unify.runSolve $ Unify.solve position constraints
   inner <- Rigid.augment position parameters constraints Mask.Runtime context
   body <- check inner (Core.Functor.map shift result) (shift expression)
-  pure
-    Generalized
-      { expression = do
-          result <- solve body
-          pure Simple.TypeLambdaOver {parameters, constraints, result}
-      }
+  pure $ do
+    result <- body
+    pure Solved.Generalized {expression = Known Simple.TypeLambdaOver {parameters, constraints, result}}
 
 -- |
 -- A constructor and what it is given, if an expression is that.
@@ -256,7 +127,7 @@ holding ::
   Constructor.Index scope ->
   [Semantic.Expression Group Resolve scope] ->
   Maybe (Position, Term.Index.Index scope) ->
-  ST s (Maybe (Expression s scope))
+  ST s (Maybe (Solve s scope))
 holding
   context@Context {typeEnvironment, termEnvironment}
   resultType
@@ -287,12 +158,16 @@ holding
         Unify.unify context constructorPosition resultType (foldr ((-#>) . EntryInstance.entry) base rest)
         arguments <- zipWithM (fill context) filled arguments
         constructorInfo <- ConstructorInstance.built context instancex
-        let callHead = CallHead.Constructor {constructorPosition, constructor, constructorInfo}
-            made given = CallHead {callHead, arguments = Strict.Vector.fromList given}
+        let made given = do
+              callHead <- CallHead.constructor constructorPosition constructor constructorInfo
+              given <- sequence given
+              pure Solved.CallHead {callHead, arguments = Strict.Vector.fromList given}
         pure $ Just $ case (through, reverse arguments) of
-          (Just (variablePosition, variable), final : before) ->
-            let apply = CallHead.Variable {variablePosition, variable, instanciation = Mono {levity = Levity.lazy}}
-             in CallHead {callHead = apply, arguments = Strict.Vector.fromList [made (reverse before), final]}
+          (Just (variablePosition, variable), final : before) -> do
+            callHead <- CallHead.variable variablePosition variable Mono {levity = Levity.lazy}
+            made <- made (reverse before)
+            final <- final
+            pure Solved.CallHead {callHead, arguments = Strict.Vector.fromList [made, final]}
           _ -> made arguments
       else pure Nothing
 
@@ -312,13 +187,7 @@ applying = \case
       } -> length parameters == 2 && from == from' && to == to' && from /= to
   _ -> Prelude.False
 
-data Field s scope
-  = Field
-  { index :: !Int,
-    field :: !(Expression s scope)
-  }
-
-check :: Context s scope -> Unify.Type s scope -> Semantic.Expression Group Resolve scope -> ST s (Expression s scope)
+check :: Context s scope -> Unify.Type s scope -> Semantic.Expression Group Resolve scope -> ST s (Solve s scope)
 check context@Context {termEnvironment} typex call@Semantic.CallHead {callHead, arguments} = do
   special <- case (callHead, toList arguments) of
     -- An action given to runST through a function that only applies, as in
@@ -347,7 +216,10 @@ check context@Context {termEnvironment} typex call@Semantic.CallHead {callHead, 
       let function = foldr (-#>) typex types
       callHead <- CallHead.check context function callHead
       arguments <- sequence $ Strict.Vector.zipWith (check context) types arguments
-      pure CallHead {callHead, arguments}
+      pure $ do
+        callHead <- callHead
+        arguments <- sequence arguments
+        pure Solved.CallHead {callHead, arguments}
 check
   context@Context {typeEnvironment}
   typex
@@ -372,14 +244,27 @@ check
       constructorInfo <- ConstructorInstance.built context instancex
       let checkField Semantic.Field {index, field} = do
             field <- lookup index field
-            pure Field {index, field}
+            pure $ do
+              field <- field
+              pure Solved.Field {index, field}
       fields <- traverse checkField fields
-      pure $ Record {constructorPosition, constructor, fields, constructorInfo}
+      pure $ do
+        fields <- sequence fields
+        constructorInfo <- ConstructorInfo.solve constructorInfo
+        pure
+          Solved.Record
+            { constructorPosition,
+              constructor,
+              constructorInfo = Solved constructorInfo,
+              fields
+            }
 check context typex Semantic.List {startPosition, items} = do
   inner <- Unify.fresh Core.typex
   Unify.unify context startPosition typex (Core.list inner)
   items <- traverse (check context inner) items
-  pure List {startPosition, items}
+  pure $ do
+    items <- sequence items
+    pure Solved.List {startPosition, items}
 check context resultType call@Semantic.Call {function, argument} = do
   special <- case call of
     _
@@ -390,33 +275,49 @@ check context resultType call@Semantic.Call {function, argument} = do
     Just expression -> pure expression
     Nothing -> do
       argumentType <- Unify.fresh Core.typex
-      function1 <- check context (argumentType -#> resultType) function
+      function <- check context (argumentType -#> resultType) function
       argument <- check context argumentType argument
-      pure (Call function1 argument)
+      pure $ do
+        function <- function
+        argument <- argument
+        pure Solved.Call {function, argument}
 check context typex Semantic.Let {declarations, letBody} = do
   context Declarations.:& declarations <- Declarations.check context declarations
   letBody <- check context (shiftLogical typex) letBody
-  pure (Let declarations letBody)
+  pure $ do
+    declarations <- declarations
+    letBody <- letBody
+    pure Solved.Let {declarations, letBody}
 check context typex Semantic.If {condition, thenx, elsex} = do
   condition <- check context Core.bool condition
   thenx <- check context typex thenx
   elsex <- check context typex elsex
-  pure (If condition thenx elsex)
+  pure $ do
+    condition <- condition
+    thenx <- thenx
+    elsex <- elsex
+    pure Solved.If {condition, thenx, elsex}
 check context typex Semantic.MultiwayIf {branches} = do
   branches <- traverse (RightHandSide.check context typex) branches
-  pure (MultiwayIf branches)
+  pure $ do
+    branches <- sequence branches
+    pure Solved.MultiwayIf {branches}
 check context typex Semantic.Integer {startPosition, integer} = do
   evidence <- Unify.constrain context startPosition Type2.Num typex
-  pure $ Integer {startPosition, integer, evidence}
+  pure $ do
+    evidence <- Unify.solveEvidence startPosition evidence
+    pure Solved.Integer {startPosition, integer, evidence = Solved evidence}
 check context typex Semantic.Float {startPosition, float} = do
   evidence <- Unify.constrain context startPosition Type2.Fractional typex
-  pure $ Float {startPosition, float, evidence}
+  pure $ do
+    evidence <- Unify.solveEvidence startPosition evidence
+    pure Solved.Float {startPosition, float, evidence = Solved evidence}
 check context typex Semantic.String {startPosition, string} = do
   Unify.unify context startPosition typex (Core.list Core.char)
-  pure $ String {startPosition, string}
+  pure $ pure Solved.String {startPosition, string}
 check context typex Semantic.Character {startPosition, character} = do
   Unify.unify context startPosition typex Core.char
-  pure $ Character {startPosition, character}
+  pure $ pure Solved.Character {startPosition, character}
 check context typex Semantic.Tuple {startPosition, elements} = do
   items <- for elements $ \element -> do
     typex <- Unify.fresh Core.typex
@@ -425,10 +326,14 @@ check context typex Semantic.Tuple {startPosition, elements} = do
   let (types, elements) = Strict.Vector.unzip items
   let target = foldl (#) (Core.tupling $ length elements) types
   Unify.unify context startPosition typex target
-  pure $ Tuple {startPosition, elements}
+  pure $ do
+    elements <- sequence elements
+    pure Solved.Tuple {startPosition, elements}
 check context typex Semantic.Comprehension {startPosition, statements} = do
   statements <- Comprehension.check context typex statements
-  pure Comprehension {startPosition, statements}
+  pure $ do
+    statements <- statements
+    pure Solved.Comprehension {startPosition, statements}
 check
   context@Context {typeEnvironment}
   typex
@@ -449,27 +354,38 @@ check
           -- What is put in has the type that the value holds there.
           Unify.unify context updatePosition typex (DataInstance.selected instancex updateType index)
           field <- fill context (DataInstance.selectorEntry instancex index) field
-          pure Field {index, field}
+          pure $ do
+            field <- field
+            pure Solved.Field {index, field}
     Unify.unify context updatePosition typex typex'
     base <- check context typex base
     updates <- sequence $ flip fmap updates checkSelect
-    pure
-      Update
-        { base,
-          updatePosition,
-          updateType,
-          updates,
-          updateInfo,
-          permissive
-        }
+    pure $ do
+      base <- base
+      updates <- sequence updates
+      updateInfo <- UpdateInfo.solve updateInfo
+      pure
+        Solved.Update
+          { base,
+            updatePosition,
+            updateType,
+            updates,
+            updateInfo = Solved updateInfo,
+            permissive
+          }
 check context typex Semantic.Case {startPosition, scrutinee, cases} = do
   binder <- Unify.fresh Core.typex
   scrutinee <- check context binder scrutinee
   cases <- traverse (Alternative.check context typex binder) cases
-  pure Case {startPosition, scrutinee, cases}
+  pure $ do
+    scrutinee <- scrutinee
+    cases <- sequence cases
+    pure Solved.Case {startPosition, scrutinee, cases}
 check context typex Semantic.Do {startPosition, dox} = do
   dox <- Do.check context typex dox
-  pure Do {startPosition, dox}
+  pure $ do
+    dox <- dox
+    pure Solved.Do {startPosition, dox}
 check context typex Semantic.Lambda {startPosition, parameter, body} = do
   parameterType <- Unify.fresh Core.typex
   resultType <- Unify.fresh Core.typex
@@ -480,13 +396,18 @@ check context typex Semantic.Lambda {startPosition, parameter, body} = do
   parameter <- Pattern.check context Type.lazy parameterType parameter
   body <- Lambda.check (Pattern.augment parameter context) (shiftLogical resultType) body
   Pattern.sealed context parameter [parameterType, resultType]
-  pure Lambda {startPosition, parameter, body}
+  pure $ do
+    parameter <- Pattern.solve parameter
+    body <- body
+    pure Solved.Lambda {startPosition, parameter, body}
 check context typex Semantic.LambdaCase {startPosition, cases} = do
   parameterType <- Unify.fresh Core.typex
   resultType <- Unify.fresh Core.typex
   Unify.unify context startPosition typex (parameterType -#> resultType)
   cases <- traverse (Alternative.check context resultType parameterType) cases
-  pure LambdaCase {startPosition, cases}
+  pure $ do
+    cases <- sequence cases
+    pure Solved.LambdaCase {startPosition, cases}
 check context typex Semantic.RightSection {left, operatorPosition, right} = do
   argumentType1 <- Unify.fresh Core.typex
   argumentType2 <- Unify.fresh Core.typex
@@ -495,7 +416,10 @@ check context typex Semantic.RightSection {left, operatorPosition, right} = do
   left <- CallHead.check context target left
   right <- check context argumentType2 right
   Unify.unify context operatorPosition typex (argumentType1 -#> result)
-  pure RightSection {operatorPosition, left, right}
+  pure $ do
+    left <- left
+    right <- right
+    pure Solved.RightSection {operatorPosition, left, right}
 check context typex Semantic.LeftSection {operator, operatorPosition, operand} = do
   argumentType1 <- Unify.fresh Core.typex
   argumentType2 <- Unify.fresh Core.typex
@@ -504,15 +428,27 @@ check context typex Semantic.LeftSection {operator, operatorPosition, operand} =
   operator <- CallHead.check context target operator
   operand <- check context argumentType1 operand
   Unify.unify context operatorPosition typex (argumentType2 -#> result)
-  pure LeftSection {operatorPosition, operator, operand}
+  pure $ do
+    operator <- operator
+    operand <- operand
+    pure Solved.LeftSection {operatorPosition, operator, operand}
 check context typex Semantic.Annotation {expression = Explicit expression, operatorPosition, annotation} = do
   annotation <- Annotation.checkAnnotation context annotation
   let annotation' = Forall.simplify annotation
   expression <- Definition4.checkAnnotation context operatorPosition annotation $
-    \context typex -> solve <$> check context typex expression
+    \context typex -> check context typex expression
   (typex', instanciation) <- instanciate context operatorPosition annotation'
   Unify.unify context operatorPosition typex typex'
-  pure Annotation {expression, operatorPosition, annotation, instanciation}
+  pure $ do
+    expression <- expression
+    instanciation <- Unify.solveEvidence operatorPosition instanciation
+    pure
+      Solved.Annotation
+        { operatorPosition,
+          expression = Known expression,
+          annotation,
+          instanciation = Solved instanciation
+        }
 -- What is run has to be an action whatever its state is, so that nothing of
 -- the state can be part of what it gives: its type is one with a forall,
 --
@@ -529,123 +465,17 @@ check context typex Semantic.RunST {startPosition, imperative} = do
             result = Core.Constructor Type2.ST # state # Shift0.map Shift0.Shift typex
           }
   imperative <- generalize context startPosition scheme imperative
-  pure RunST {startPosition, imperative}
+  pure $ do
+    imperative <- imperative
+    pure Solved.RunST {startPosition, imperative}
 -- Only the checker makes these.
 check _ _ Semantic.Generalized {} = error "an expression the resolver does not make"
 check context typex Semantic.Negate {startPosition, negative} = do
   evidence <- Unify.constrain context startPosition Type2.Num typex
   negative <- check context typex negative
-  pure Negate {startPosition, evidence, negative}
-
-solve :: Expression s scope -> Unify.Solve s (Solved.Expression Group Check scope)
-solve = \case
-  CallHead {callHead, arguments} -> do
-    callHead <- CallHead.solve callHead
-    arguments <- traverse solve arguments
-    pure Solved.CallHead {callHead, arguments}
-  Record {constructorPosition, constructor, constructorInfo, fields} -> do
-    let solveField Field {index, field} = do
-          field <- solve field
-          pure $ Solved.Field {index, field}
-    fields <- traverse solveField fields
-    constructorInfo <- ConstructorInfo.solve constructorInfo
-    pure
-      Solved.Record
-        { constructorPosition,
-          constructor,
-          constructorInfo = Solved constructorInfo,
-          fields
-        }
-  Update {base, updatePosition, updateType, updates, updateInfo, permissive} -> do
-    base <- solve base
-    let solveField Field {index, field} = do
-          field <- solve field
-          pure $ Solved.Field {index, field}
-    updates <- traverse solveField updates
-    updateInfo <- UpdateInfo.solve updateInfo
-    pure
-      Solved.Update
-        { base,
-          updatePosition,
-          updateType,
-          updates,
-          updateInfo = Solved updateInfo,
-          permissive
-        }
-  List {startPosition, items} -> do
-    items <- traverse solve items
-    pure $ Solved.List {startPosition, items}
-  Comprehension {startPosition, statements} -> do
-    statements <- Comprehension.solve statements
-    pure Solved.Comprehension {startPosition, statements}
-  Call function argument -> do
-    function <- solve function
-    argument <- solve argument
-    pure $ Solved.Call {function, argument}
-  Let declarations body -> do
-    declarations <- declarations
-    body <- solve body
-    pure $ Solved.Let {declarations, letBody = body}
-  If condition true false -> do
-    condition <- solve condition
-    true <- solve true
-    false <- solve false
-    pure $ Solved.If {condition, thenx = true, elsex = false}
-  Case {startPosition, scrutinee, cases} -> do
-    scrutinee <- solve scrutinee
-    cases <- traverse Alternative.solve cases
-    pure Solved.Case {startPosition, scrutinee, cases}
-  Lambda {startPosition, parameter, body} -> do
-    parameter <- Pattern.solve parameter
-    body <- Lambda.solve body
-    pure $ Solved.Lambda {startPosition, parameter, body}
-  LambdaCase {startPosition, cases} -> do
-    cases <- traverse Alternative.solve cases
-    pure Solved.LambdaCase {startPosition, cases}
-  MultiwayIf branches -> do
-    branches <- traverse RightHandSide.solve branches
-    pure $ Solved.MultiwayIf {branches}
-  Integer {startPosition, integer, evidence} -> do
+  pure $ do
     evidence <- Unify.solveEvidence startPosition evidence
-    pure Solved.Integer {startPosition, integer, evidence = Solved evidence}
-  Float {startPosition, float, evidence} -> do
-    evidence <- Unify.solveEvidence startPosition evidence
-    pure Solved.Float {startPosition, float, evidence = Solved evidence}
-  String {startPosition, string} -> pure $ Solved.String {startPosition, string}
-  Character {startPosition, character} -> pure $ Solved.Character {startPosition, character}
-  Tuple {startPosition, elements} -> do
-    elements <- traverse solve elements
-    pure $ Solved.Tuple {startPosition, elements}
-  Do {startPosition, dox} -> do
-    dox <- Do.solve dox
-    pure Solved.Do {startPosition, dox}
-  Generalized {expression} -> do
-    expression <- expression
-    pure Solved.Generalized {expression = Known expression}
-  RunST {startPosition, imperative} -> do
-    imperative <- solve imperative
-    pure Solved.RunST {startPosition, imperative}
-  Annotation {expression, operatorPosition, annotation, instanciation} -> do
-    expression <- expression
-    instanciation <- Unify.solveEvidence operatorPosition instanciation
-    pure
-      Solved.Annotation
-        { operatorPosition,
-          expression = Known expression,
-          annotation,
-          instanciation = Solved instanciation
-        }
-  RightSection {operatorPosition, left, right} -> do
-    left <- CallHead.solve left
-    right <- solve right
-    pure Solved.RightSection {operatorPosition, left, right}
-  LeftSection {operatorPosition, operator, operand} -> do
-    operator <- CallHead.solve operator
-    operand <- solve operand
-    pure Solved.LeftSection {operatorPosition, operator, operand}
-  Negate {startPosition, evidence, negative} -> do
-    evidence <- Unify.solveEvidence startPosition evidence
-    negative <- solve negative
+    negative <- negative
     pure
       Solved.Negate
         { startPosition,

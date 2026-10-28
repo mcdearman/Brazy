@@ -1,8 +1,9 @@
-module Semantic.Check.Temporary.CallHead where
+module Semantic.Check.Go.CallHead where
 
 import Control.Monad.ST (ST)
 import qualified Core.Builtin as Builtin
 import qualified Core.Tree.Class as Class
+import Core.Tree.Class (EvidenceInfo (..))
 import Core.Tree.Type ((-#>))
 import Core.Tree.TypeDeclaration (assumeClass, assumeData)
 import qualified Data.Vector.Strict as Strict.Vector
@@ -13,11 +14,9 @@ import Semantic.Check.Instanciate.Data (DataInstance (..))
 import qualified Semantic.Check.Instanciate.Data as DataInstance
 import qualified Semantic.Check.Instanciate.Entry as EntryInstance (taken)
 import qualified Semantic.Check.Simple.Data as Simple.Data
-import Semantic.Check.Info.Method (MethodInfo)
 import Semantic.Check.Scheme (instanciate)
 import Semantic.Check.Temporary.ConstructorInfo (ConstructorInfo)
 import qualified Semantic.Check.Temporary.ConstructorInfo as ConstructorInfo
-import Semantic.Check.Temporary.SelectorInfo (SelectorInfo)
 import qualified Semantic.Check.Temporary.SelectorInfo as SelectorInfo
 import Semantic.Check.Binding.Term (TermBinding (..), Type (..))
 import qualified Semantic.Check.Binding.Type as TypeBinding
@@ -27,53 +26,32 @@ import qualified Semantic.Index.Selector as Selector
 import qualified Semantic.Index.Table.Term as Term ((!))
 import qualified Semantic.Index.Table.Type as Type
 import qualified Semantic.Index.Term as Term (Index)
-import Semantic.Stage (Resolve)
+import Semantic.Stage (Check, Resolve)
 import qualified Semantic.Tree.CallHead as Semantic
 import qualified Semantic.Tree.CallHead as Solved
 import Semantic.Tree.Combinators.Inferred (Inferred (..))
 import qualified Semantic.Unify as Unify
 import Syntax.Position (Position)
-import Core.Tree.Class (EvidenceInfo(..))
 
-data CallHead s scope
-  = Variable
-      { variablePosition :: !Position,
-        variable :: !(Term.Index scope),
-        instanciation :: !(Unify.Instanciation s scope)
-      }
-  | Constructor
-      { constructorPosition :: !Position,
-        constructor :: !(Constructor.Index scope),
-        constructorInfo :: !(ConstructorInfo s scope)
-      }
-  | Selector
-      { selectorPosition :: !Position,
-        selector :: !(Selector.Index scope),
-        selectorInfo :: !(SelectorInfo s scope)
-      }
-  | Method
-      { methodPosition :: !Position,
-        method :: !(Method.Index scope),
-        evidence :: !(Unify.Evidence s scope),
-        instanciation :: !(Unify.Instanciation s scope),
-        methodInfo :: !(MethodInfo scope)
-      }
-
-check :: Context s scope -> Unify.Type s scope -> Semantic.CallHead layout Resolve scope -> ST s (CallHead s scope)
-check context@Context {termEnvironment} typex Semantic.Variable {variablePosition, variable} = do
-  let TermBinding binding = termEnvironment Term.! variable
+check ::
+  Context s scope ->
+  Unify.Type s scope ->
+  Semantic.CallHead layout Resolve scope ->
+  ST s (Unify.Solve s (Solved.CallHead layout' Check scope))
+check context@Context {termEnvironment} typex Semantic.Variable {variablePosition, variable = index} = do
+  let TermBinding binding = termEnvironment Term.! index
   binding >>= \case
     Wobbly scheme -> do
       (typex', instanciation) <- Unify.instanciate context variablePosition scheme
       Unify.unify context variablePosition typex typex'
-      pure Variable {variablePosition, variable, instanciation}
+      pure $ variable variablePosition index instanciation
     Rigid scheme -> do
       (typex', instanciation) <- instanciate context variablePosition scheme
       Unify.unify context variablePosition typex typex'
-      pure Variable {variablePosition, variable, instanciation}
-check context@Context {typeEnvironment} typex Semantic.Constructor {constructorPosition, constructor} =
+      pure $ variable variablePosition index instanciation
+check context@Context {typeEnvironment} typex Semantic.Constructor {constructorPosition, constructor = index} =
   do
-    let Constructor.Index typeIndex constructorIndex = constructor
+    let Constructor.Index typeIndex constructorIndex = index
     datax <- do
       let get index = assumeData <$> TypeBinding.content (typeEnvironment Type.! index)
       Builtin.index pure get typeIndex
@@ -85,7 +63,7 @@ check context@Context {typeEnvironment} typex Semantic.Constructor {constructorP
     ConstructorInstance.mark context instancex
     Unify.unify context constructorPosition typex typex'
     constructorInfo <- ConstructorInstance.built context instancex
-    pure Constructor {constructorPosition, constructor, constructorInfo}
+    pure $ constructor constructorPosition index constructorInfo
 check
   context@Context {typeEnvironment}
   typex
@@ -99,7 +77,14 @@ check
     selected <- EntryInstance.taken context selectorPosition (DataInstance.selectorEntry instancex selectorIndex)
     let typex' = DataInstance.selected instancex typeIndex selectorIndex -#> selected
     Unify.unify context selectorPosition typex typex'
-    pure Selector {selectorPosition, selector, selectorInfo}
+    pure $ do
+      selectorInfo <- SelectorInfo.solve selectorInfo
+      pure
+        Solved.Selector
+          { selectorPosition,
+            selector,
+            selectorInfo = Solved selectorInfo
+          }
 check
   context@Context {typeEnvironment}
   typex
@@ -115,41 +100,44 @@ check
             EvidenceInfo evidence = Class.evidence instancex
         (typex', instanciation) <- Unify.instanciate context methodPosition function
         Unify.unify context methodPosition typex typex'
-        pure Method {methodPosition, method, evidence, instanciation, methodInfo}
+        pure $ do
+          evidence <- Unify.solveEvidence methodPosition evidence
+          instanciation <- Unify.solveEvidence methodPosition instanciation
+          pure
+            Solved.Method
+              { methodPosition,
+                method,
+                evidence = Solved evidence,
+                instanciation = Solved instanciation,
+                methodInfo = Solved methodInfo
+              }
 
-solve = \case
-  Variable {variablePosition, variable, instanciation} -> do
-    instanciation <- Unify.solveEvidence variablePosition instanciation
-    pure
-      Solved.Variable
-        { variablePosition,
-          variable,
-          instanciation = Solved instanciation
-        }
-  Constructor {constructorPosition, constructor, constructorInfo} -> do
-    constructorInfo <- ConstructorInfo.solve constructorInfo
-    pure $
-      Solved.Constructor
-        { constructorPosition,
-          constructor,
-          constructorInfo = Solved constructorInfo
-        }
-  Selector {selectorPosition, selector, selectorInfo} -> do
-    selectorInfo <- SelectorInfo.solve selectorInfo
-    pure $
-      Solved.Selector
-        { selectorPosition,
-          selector,
-          selectorInfo = Solved selectorInfo
-        }
-  Method {methodPosition, method, evidence, instanciation, methodInfo} -> do
-    evidence <- Unify.solveEvidence methodPosition evidence
-    instanciation <- Unify.solveEvidence methodPosition instanciation
-    pure $
-      Solved.Method
-        { methodPosition,
-          method,
-          evidence = Solved evidence,
-          instanciation = Solved instanciation,
-          methodInfo = Solved methodInfo
-        }
+-- | A variable, used as the type it is given.
+variable ::
+  Position ->
+  Term.Index scope ->
+  Unify.Instanciation s scope ->
+  Unify.Solve s (Solved.CallHead layout Check scope)
+variable variablePosition variable instanciation = do
+  instanciation <- Unify.solveEvidence variablePosition instanciation
+  pure
+    Solved.Variable
+      { variablePosition,
+        variable,
+        instanciation = Solved instanciation
+      }
+
+-- | A constructor, made into what it makes.
+constructor ::
+  Position ->
+  Constructor.Index scope ->
+  ConstructorInfo s scope ->
+  Unify.Solve s (Solved.CallHead layout Check scope)
+constructor constructorPosition constructor constructorInfo = do
+  constructorInfo <- ConstructorInfo.solve constructorInfo
+  pure
+    Solved.Constructor
+      { constructorPosition,
+        constructor,
+        constructorInfo = Solved constructorInfo
+      }
