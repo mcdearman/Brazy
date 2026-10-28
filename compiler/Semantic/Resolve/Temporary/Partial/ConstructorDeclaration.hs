@@ -18,6 +18,7 @@ import qualified Semantic.Resolve.Temporary.Complete.TypeDeclaration as Complete
       ),
   )
 import qualified Semantic.Resolve.Temporary.Partial.More.Constructor as More
+import Semantic.Tree.Pattern (Failable (..))
 import Syntax.Position (Position)
 import qualified Syntax.Tree.Declaration as Syntax (Declaration (..))
 import Syntax.Tree.Fixity (Fixity)
@@ -75,7 +76,8 @@ resolve lookup entry = case entry of
                         constructorIndex,
                         selections,
                         fields = Map.fromList map,
-                        single = length constructors == 1
+                        failable =
+                          if length constructors == 1 then Exhaustive else Failable
                       }
         Complete.TypeDeclaration {constructors = Complete.GADT gadtConstructors} ->
           zipWith entry [0 ..] $ toList gadtConstructors
@@ -99,7 +101,8 @@ resolve lookup entry = case entry of
                         constructorIndex,
                         selections,
                         fields,
-                        single = length gadtConstructors == 1
+                        failable =
+                          if length gadtConstructors == 1 then Exhaustive else Failable
                       }
         _ -> error "constructor from non data"
   _ -> []
