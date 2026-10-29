@@ -1454,6 +1454,16 @@ kept, and eval and apply:
       of its size, where it went through the runtime: an eighth of the time
       of `queens`, which takes 0.55 seconds where it took 0.66, and `fuse`
       0.54 where it took 0.68
+- [x] What is cheaper to work out than to put off is worked out where it is
+      named, as GHC does: a thunk that only works out a few primitives that
+      cannot fail, of values already worked out (`Sequent.Simplify.cheap`).
+      Those are the arithmetic and comparison of `Int`s, with division only
+      by a number written in the program that is neither nothing nor minus
+      one, and of floating-point numbers. Things named together that do not
+      refer to each other in a circle are named one at a time, so that each
+      is seen to. `nbody`, whose `dx`, `dy`, `d2` and `f` were each a thunk
+      at each step, takes 0.51 seconds where it took 0.77; `strings` 1.94
+      where it took 2.21, with less memory than GHC's (test `speculate`)
 - [ ] A function that does not call itself, given an instance that is
       known, is not copied for it. Tried for `queens`, whose `safe` is
       given the instances of `Int` as a local function with a class in its
