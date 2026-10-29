@@ -1470,7 +1470,11 @@ kept, and eval and apply:
       with a class in its type, was given the instances of `Int` and took
       each method out of them; in `go`, whose copy for `Int` knows them, its
       comparisons and sums are done where they are written: 0.41 seconds
-      where it took 0.58
+      where it took 0.58. Inside a function written in a definition it is
+      put only if it takes apart what it is given with `Field`, as one given
+      instances does: in `nbody`, putting `pull` into the function given to
+      `foldl'` made that too big to be copied into a loop, and it made 26%
+      more blocks
 - [x] What never goes on is given nothing to go on to. A throw is never
       gone on from, as a catch goes on from where it was begun and what
       nothing catches ends the program, but it was given where its caller

@@ -134,7 +134,13 @@ limit = 30
 folding = 50
 evidenced = 100
 -- | A function defined inside another that is called in one place only
--- is put there however big it is, up to this.
+-- is put there however big it is, up to this, if the call is in the
+-- definition's own body, or if the function takes apart what it is given
+-- with 'Field', as one given instances does to take their methods out
+-- ('selects'). A function written in a definition may be copied into a
+-- loop, which is done only when it is small: in @nbody@ putting what the
+-- function given to @foldl'@ called into it stopped that, where @queens@'
+-- @safe@, given the instances of @Int@, has to be put there to know them.
 alone = 400
 
 -- |
@@ -142,6 +148,33 @@ alone = 400
 -- from the module it is in.
 inner :: Global.Global -> Bool
 inner Global.Global {name} = Text.any (== '%') name
+
+-- |
+-- Whether a function's body takes apart one of its parameters with 'Field',
+-- as a function given an instance does to take a method out of it.
+selects :: [Binder] -> Statement -> Bool
+selects parameters = statement
+  where
+    names = Set.fromList [name | Binder {name} <- parameters]
+    statement = \case
+      Primitive (Field _) [Variable given] _ | Set.member given names -> True
+      Cut left right -> producer left || consumer right
+      Primitive _ arguments result -> any producer arguments || consumer result
+      LetRec bindings body -> any (producer . snd) bindings || statement body
+      Abort -> False
+      Halt -> False
+    producer = \case
+      Constructor _ fields -> any producer fields
+      Mu _ body -> statement body
+      Function _ _ body -> statement body
+      Thunk _ body -> statement body
+      _ -> False
+    consumer = \case
+      MuTilde _ body -> statement body
+      Case alternatives otherwise -> or [statement body | Alternative _ _ body <- alternatives] || any statement otherwise
+      Apply arguments result -> any producer arguments || consumer result
+      Force result -> consumer result
+      Covariable _ -> False
 
 -- |
 -- How many times each definition is named in some.
@@ -179,23 +212,25 @@ inline time find once self producer = runST (inline' time find once self produce
 inline' :: Int -> (Global.Global -> Maybe Producer) -> (Global.Global -> Bool) -> Global.Global -> Producer -> ST s Producer
 inline' time find once self producer = do
   sites <- newSTRef (0 :: Int)
-  let producerx = \case
-        Constructor tag fields -> Constructor tag <$> traverse producerx fields
-        Mu covariable body -> Mu covariable <$> statement body
-        Function parameters covariable body -> Function parameters covariable <$> statement body
-        Thunk covariable body -> Thunk covariable <$> statement body
+  let -- How many functions in a statement is: one in the definition's own
+      -- body, more in a function written in it.
+      producerx depth = \case
+        Constructor tag fields -> Constructor tag <$> traverse (producerx depth) fields
+        Mu covariable body -> Mu covariable <$> statement depth body
+        Function parameters covariable body -> Function parameters covariable <$> statement (depth + 1) body
+        Thunk covariable body -> Thunk covariable <$> statement depth body
         other -> pure other
-      consumer = \case
-        MuTilde binder body -> MuTilde binder <$> statement body
+      consumer depth = \case
+        MuTilde binder body -> MuTilde binder <$> statement depth body
         Case alternatives otherwise -> do
           alternatives <- for alternatives $ \(Alternative tag binders body) ->
-            Alternative tag binders <$> statement body
-          otherwise <- traverse statement otherwise
+            Alternative tag binders <$> statement depth body
+          otherwise <- traverse (statement depth) otherwise
           pure $ Case alternatives otherwise
-        Apply arguments result -> Apply <$> traverse producerx arguments <*> consumer result
-        Force result -> Force <$> consumer result
+        Apply arguments result -> Apply <$> traverse (producerx depth) arguments <*> consumer depth result
+        Force result -> Force <$> consumer depth result
         other -> pure other
-      statement = \case
+      statement depth = \case
         Cut (Global global) (Apply arguments result)
           | global /= self,
             time >= lastly || global `notElem` fusing,
@@ -205,10 +240,10 @@ inline' time find once self producer = do
             -- written where it was when it is a name or a number.
             and [strategy == ByNeed || atom argument | (Binder {strategy}, argument) <- zip parameters arguments],
             size body <= (if or [strategy == ByValue | Binder {strategy} <- parameters] || making body then evidenced else if foldsLeft body then folding else limit)
-              || (inner global && once global && size body <= alone),
+              || ((depth <= 1 || selects parameters body) && inner global && once global && size body <= alone),
             Set.notMember global (globals body) -> do
-              arguments <- traverse producerx arguments
-              result <- consumer result
+              arguments <- traverse (producerx depth) arguments
+              result <- consumer depth result
               site <- readSTRef sites
               modifySTRef' sites (+ 1)
               let suffix = Text.pack ('^' : show time ++ "." ++ show site)
@@ -228,25 +263,25 @@ inline' time find once self producer = do
             length parameters == length arguments,
             mentions covariable body == 0,
             not (never' result) -> do
-              arguments <- traverse producerx arguments
+              arguments <- traverse (producerx depth) arguments
               pure $ Cut (Global global) (Apply arguments (Case [] Nothing))
         -- A definition that is a value written down: forcing it gives it.
         Cut (Global global) (Force result)
           | Just (Thunk covariable (Cut value (Covariable given))) <- find global,
             given == covariable,
             constant value ->
-              Cut value <$> consumer result
-        Cut left right -> Cut <$> producerx left <*> consumer right
+              Cut value <$> consumer depth result
+        Cut left right -> Cut <$> producerx depth left <*> consumer depth right
         Primitive primitive arguments result ->
-          Primitive primitive <$> traverse producerx arguments <*> consumer result
+          Primitive primitive <$> traverse (producerx depth) arguments <*> consumer depth result
         LetRec bindings body -> do
           bindings <- for bindings $ \(local, value) -> do
-            value <- producerx value
+            value <- producerx depth value
             pure (local, value)
-          LetRec bindings <$> statement body
+          LetRec bindings <$> statement depth body
         Abort -> pure Abort
         Halt -> pure Halt
-  producerx producer
+  producerx (0 :: Int) producer
 
 -- |
 -- What forcing an instance that needs nothing gives: its fields, each a
