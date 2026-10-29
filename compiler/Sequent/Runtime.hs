@@ -547,7 +547,9 @@ catch =
 
 -- To throw is to take back the catch begun last, run its handler on the
 -- value, and go on from where that catch was begun. Whatever was waiting
--- for what is thrown never gets anything.
+-- for what is thrown never gets anything, and is not given anything to go
+-- on to: neither where the catch goes on from nor ending the program comes
+-- back to it ('never'), so a call of a throw does not keep it.
 --
 -- > primThrow value = (handler, resume) = pop; resume (force handler value ())
 --
@@ -569,7 +571,7 @@ throw =
                             MuTilde (byNeed "result") $
                               Cut (variable "resume") $
                                 Force $
-                                  Apply [variable "result"] (covariable "k")
+                                  Apply [variable "result"] never
                 ]
                 Nothing,
           Alternative 0 [] $
@@ -579,11 +581,17 @@ throw =
                   [ Alternative 0 [byNeed "tag", byNeed "status", byNeed "shown", byNeed "thrown"] $
                       force "status" "code" $
                         force "shown" "text" $
-                          Primitive (outside "uncaught") [variable "code", variable "text"] (covariable "k")
+                          Primitive (outside "uncaught") [variable "code", variable "text"] never
                   ]
                   Nothing
         ]
         Nothing
+
+-- |
+-- What is given something that is never gone on to: nothing is done with
+-- it, and nothing is kept for it.
+never :: Consumer
+never = Case [] Nothing
 
 -- > putStrLnText text = \() -> print (force text)
 putStrLnText :: Producer

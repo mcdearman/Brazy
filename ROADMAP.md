@@ -1471,6 +1471,15 @@ kept, and eval and apply:
       each method out of them; in `go`, whose copy for `Int` knows them, its
       comparisons and sums are done where they are written: 0.41 seconds
       where it took 0.58
+- [x] What never goes on is given nothing to go on to. A throw is never
+      gone on from, as a catch goes on from where it was begun and what
+      nothing catches ends the program, but it was given where its caller
+      went on to: a division by a variable, which throws if the divisor is
+      nothing, kept what came after it as an object made at each division.
+      A throw is given nothing now (`never`, in "Sequent.Runtime"), and so is
+      a call of any function that never goes on to what it is given
+      (`Sequent.Inline`). `primes` makes 22.5 million blocks where it made
+      26.2 million
 - [ ] A function that does not call itself, given an instance that is
       known, is not copied for it. Tried for `queens`, whose `safe` is
       given the instances of `Int` as a local function with a class in its
