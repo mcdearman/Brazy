@@ -40,13 +40,14 @@ import Syntax.Position (Position)
 import Prelude hiding (Eq)
 
 fromEnum' ::
+  Context s scope ->
   Type2.Index scope ->
   Strict.Vector (ConstructorInstance s scope) ->
   Unify.Solve s (Expression scope)
-fromEnum' typeIndex constructors = do
+fromEnum' context typeIndex constructors = do
   let toIntN constructorIndex constructor =
         do
-          info <- ConstructorInfo.solve $ ConstructorInstance.info constructor
+          info <- ConstructorInfo.solve context $ ConstructorInstance.info constructor
           let index =
                 Constructor.Index
                   { typeIndex,
@@ -80,17 +81,18 @@ fromEnum' typeIndex constructors = do
         }
 
 toEnum' ::
+  Context s scope ->
   Position ->
   Type2.Index scope ->
   Strict.Vector (ConstructorInstance s scope) ->
   ST s (Unify.Solve s (Expression scope))
-toEnum' _ typeIndex constructors
+toEnum' context _ typeIndex constructors
   | let singleton ConstructorInstance {entries} = null entries,
     all singleton constructors = do
       pure $ do
         let fromInt constructorIndex constructor =
               do
-                info <- ConstructorInfo.solve $ ConstructorInstance.info constructor
+                info <- ConstructorInfo.solve context $ ConstructorInstance.info constructor
                 let index =
                       Constructor.Index
                         { typeIndex,
@@ -113,7 +115,7 @@ toEnum' _ typeIndex constructors
                   let branch left right = Statements.Branch {left, right}
                    in foldr branch Statements.Bottom declarations
               }
-toEnum' position _ _ = derivingNonEnum position
+toEnum' _ position _ _ = derivingNonEnum position
 
 fromEnum,
   toEnum ::
@@ -128,14 +130,14 @@ fromEnum context position typeIndex datax = do
   sequence $ zipWith unify [0 ..] (toList types)
   pure $ do
     body <- do
-      fromEnum <- fromEnum' (shift typeIndex) constructors
+      fromEnum <- fromEnum' context (shift typeIndex) constructors
       pure fromEnum
     pure $ Generated $ Solved $ TypeLambda.mono Type.lazy body
 toEnum context position typeIndex datax = do
   DataInstance {types, constructors} <- instanciateMark context position (shift datax)
   let unify index typex = Unify.unify context position typex (Simple.Variable $ Local.Local index)
   sequence $ zipWith unify [0 ..] (toList types)
-  body <- toEnum' position (shift typeIndex) constructors
+  body <- toEnum' context position (shift typeIndex) constructors
   pure $ do
     body <- body
     pure $ Generated $ Solved $ TypeLambda.mono Type.lazy $ body
@@ -156,7 +158,7 @@ enumFrom context position evidence typeIndex datax = do
   let unify index typex = Unify.unify context position typex (Simple.Variable $ Local.Local index)
   sequence $ zipWith unify [0 ..] (toList types)
   pure $ do
-    maxInfo <- ConstructorInfo.solve $ ConstructorInstance.info (Strict.Vector.last constructors)
+    maxInfo <- ConstructorInfo.solve context $ ConstructorInstance.info (Strict.Vector.last constructors)
     let max =
           shift $
             Expression.simplifyConstructorExact
@@ -192,9 +194,9 @@ enumFromThen context position evidence typeIndex datax = do
   let unify index typex = Unify.unify context position typex (Simple.Variable $ Local.Local index)
   sequence $ zipWith unify [0 ..] (toList types)
   pure $ do
-    minInfo <- ConstructorInfo.solve $ ConstructorInstance.info (Strict.Vector.head constructors)
-    maxInfo <- ConstructorInfo.solve $ ConstructorInstance.info (Strict.Vector.last constructors)
-    fromEnum <- fromEnum' (shift typeIndex) constructors
+    minInfo <- ConstructorInfo.solve context $ ConstructorInstance.info (Strict.Vector.head constructors)
+    maxInfo <- ConstructorInfo.solve context $ ConstructorInstance.info (Strict.Vector.last constructors)
+    fromEnum <- fromEnum' context (shift typeIndex) constructors
     let max =
           shift $
             shift $

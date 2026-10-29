@@ -181,10 +181,11 @@ check context (Semantic.Local declarations) = do
           locals
           declarations
   let context = locals (fmap2 (Morph $ pure . runIdentity) $ Proper declarations)
-  declarations <- pure $ solve declarations
+  declarations <- pure $ solve context declarations
   pure $ context :& (Local <$> declarations)
 
 solve ::
+  Context s (Scope.Declaration ':+ scope) ->
   Declarations
     (Unify.Solve s)
     (Unify.Logical s (Scope.Declaration ':+ scope))
@@ -204,9 +205,9 @@ solve ::
         Check
         (Scope.Declaration ':+ scope)
     )
-solve Declarations {terms, types, typeExtras, dataInstances, classInstances} =
+solve context Declarations {terms, types, typeExtras, dataInstances, classInstances} =
   declarations
-    <$> traverse Declaration.solve terms
+    <$> traverse (Declaration.solve context) terms
     <*> traverse (traverse (fmap Identity)) typeExtras
     <*> traverse (traverse Instance.solve) dataInstances
     <*> traverse (traverse Instance.solve) classInstances

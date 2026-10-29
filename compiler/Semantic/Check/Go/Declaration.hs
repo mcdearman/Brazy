@@ -67,11 +67,12 @@ check link solve reflection information Declaration {position, name, definition}
     }
 
 solve ::
+  Context s scope ->
   Declaration (Unify.Solve s) (Unify.Logical s scope) locality Identity Layout.Group Check scope ->
   Unify.Solve s (Declaration Identity Void locality Identity Layout.Group Check scope)
-solve Declaration {position, name, definition, typex = Identity (Solved typex)} = do
-  definition <- Definition4.solveDefinition position definition
-  typex <- Unify.solve position typex
+solve context Declaration {position, name, definition, typex = Identity (Solved typex)} = do
+  definition <- Definition4.solveDefinition context position definition
+  typex <- Unify.solve context position typex
   pure
     Declaration
       { position,

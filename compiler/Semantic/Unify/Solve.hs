@@ -1,6 +1,5 @@
 module Semantic.Unify.Solve where
 
-import qualified Core.Tree.Type as Levity (lazy)
 import Control.Monad (ap, liftM)
 import Control.Monad.ST (ST)
 import Core.Tree.Constraint (ConstraintF (..))
@@ -17,14 +16,15 @@ import qualified Data.Kind as Kind
 import Data.STRef (readSTRef)
 import Data.Void (Void)
 import Error (Position, unsupportedFeatureConstraintedTypeDefaulting)
-import Semantic.Scope (Environment)
-import qualified Semantic.Shift0 as Shift0
-import qualified Semantic.Index.Evidence as Index.Evidence (Index (Direct))
+import {-# SOURCE #-} Semantic.Check.Context (Context)
 import qualified Semantic.Index.Type2 as Type2
-import qualified Semantic.Unify.Evidence as Evidence (Box (..), Fallback (..), Logical (..), classOf)
-import qualified Semantic.Default as Default
+import Semantic.Scope (Environment)
+import qualified Semantic.Shift as Shift
+import qualified Semantic.Shift0 as Shift0
+import qualified Semantic.Unify.Evidence as Evidence (Box (..), Logical (..))
 import Semantic.Unify.Type (Logical, defaultFrom)
 import qualified Semantic.Unify.Type as Type (Box (..), Logical (..))
+import {-# SOURCE #-} Semantic.Unify.Type1 (defaulted)
 
 newtype Solve s a = Solve (ST s a)
 
@@ -42,9 +42,15 @@ instance Applicative (Solve s) where
 instance Monad (Solve s) where
   Solve m >>= f = Solve (m >>= (\(Solve a) -> a) . f)
 
+-- |
+-- What is solved is solved where it was checked: the context is that of
+-- where its type variables were made, so that one that was never worked out
+-- can be taken to be one of the types its module's @default@ declaration
+-- lists, as an instance is looked up there.
 type SolveType :: (Kind.Type -> Environment -> Kind.Type) -> Constraint
 class SolveType typef where
   solveWith ::
+    Context s scopex ->
     Shift0.Category scopex scope ->
     Position ->
     typef (Logical s scopex) scope ->
@@ -52,36 +58,47 @@ class SolveType typef where
 
 solve ::
   (SolveType typef) =>
+  Context s scope ->
   Position ->
   typef (Logical s scope) scope ->
   Solve s (typef Void scope)
-solve = solveWith Shift0.Id
+solve context = solveWith context Shift0.Id
 
 instance SolveType TypeF where
-  solveWith category position = \case
+  solveWith context category position = \case
     Type.Logical (Type.Box reference) ->
       Solve (readSTRef reference) >>= \case
         Type.Solved typex ->
-          Shift0.map category <$> solve position typex
-        Type.Unsolved {kind, constraints} ->
-          Solve $ defaultFrom position constraints (Core.mapLogical category kind)
+          Shift0.map category <$> solve context position typex
+        Type.Unsolved {kind, constraints}
+          -- Classes are asked of it: what it is taken to be has to be an
+          -- instance of each.
+          | not (null constraints) -> do
+              taken <- Solve $ defaulted context position (Type.Logical (Type.Box reference))
+              if taken
+                then
+                  Solve (readSTRef reference) >>= \case
+                    Type.Solved typex -> Shift0.map category <$> solve context position typex
+                    _ -> error "a type that was defaulted is not worked out"
+                else Solve $ unsupportedFeatureConstraintedTypeDefaulting position
+          | otherwise -> Solve $ defaultFrom position (Core.mapLogical category kind)
         -- There is no type to say for it, and none is needed: nothing is
         -- done with types once they are checked. Any type will do.
         Type.Skolem {} -> pure $ Type.Constructor (Type2.Tuple 0)
     Type.Logical (Type.Shift logical) ->
-      solveWith (category Shift0.:. Shift0.Shift) position (Type.Logical logical)
+      solveWith (Shift.unshift context) (category Shift0.:. Shift0.Shift) position (Type.Logical logical)
     Type.Variable name -> pure $ Type.Variable name
     Type.Constructor index -> pure $ Type.Constructor index
     Type.Call function argument -> do
-      function <- solveWith category position function
-      argument <- solveWith category position argument
+      function <- solveWith context category position function
+      argument <- solveWith context category position argument
       pure $ Type.Call function argument
     Type.Function argument result -> do
-      argument <- solveWith category position argument
-      result <- solveWith category position result
+      argument <- solveWith context category position argument
+      result <- solveWith context category position result
       pure $ Type.Function argument result
     Type.Type universe -> do
-      universe <- solveWith category position universe
+      universe <- solveWith context category position universe
       pure $ Type.Type universe
     Type.Constraint -> pure Type.Constraint
     Type.Small -> pure Type.Small
@@ -90,29 +107,30 @@ instance SolveType TypeF where
     Type.Levity -> pure Type.Levity
 
 instance SolveType ConstraintF where
-  solveWith category position Constraint {classx, head, arguments} = do
-    arguments <- traverse (solveWith (Shift0.Shift Shift0.:. category) position) arguments
+  solveWith context category position Constraint {classx, head, arguments} = do
+    arguments <- traverse (solveWith context (Shift0.Shift Shift0.:. category) position) arguments
     pure Constraint {classx, head, arguments}
 
 instance SolveType ConstraintsF where
-  solveWith category position = \case
+  solveWith context category position = \case
     Constraints constraints -> do
-      constraints <- traverse (solveWith category position) constraints
+      constraints <- traverse (solveWith context category position) constraints
       pure $ Constraints constraints
     Value {levity} -> do
-      levity <- solveWith category position levity
+      levity <- solveWith context category position levity
       pure Value {levity}
 
 instance (SolveType typef) => SolveType (ForallOver typef) where
-  solveWith category position ForallOver {parameters, constraints, result} = do
-    parameters <- traverse (solveWith category position) parameters
-    constraints <- solveWith category position constraints
-    result <- solveWith (Shift0.Shift Shift0.:. category) position result
+  solveWith context category position ForallOver {parameters, constraints, result} = do
+    parameters <- traverse (solveWith context category position) parameters
+    constraints <- solveWith context category position constraints
+    result <- solveWith context (Shift0.Shift Shift0.:. category) position result
     pure ForallOver {parameters, constraints, result}
 
 type SolveEvidence :: (Kind.Type -> Kind.Type -> Environment -> Kind.Type) -> Constraint
 class SolveEvidence evidencef where
   solveEvidenceWith ::
+    Context s scopex ->
     Shift0.Category scopex scope ->
     Position ->
     evidencef (Evidence.Logical s scopex) (Type.Logical s scopex) scope ->
@@ -120,52 +138,51 @@ class SolveEvidence evidencef where
 
 solveEvidence ::
   (SolveEvidence evidencef) =>
+  Context s scope ->
   Position ->
   evidencef (Evidence.Logical s scope) (Type.Logical s scope) scope ->
   Solve s (evidencef Void Void scope)
-solveEvidence = solveEvidenceWith Shift0.Id
+solveEvidence context = solveEvidenceWith context Shift0.Id
 
 instance SolveEvidence EvidenceF where
-  solveEvidenceWith category position = \case
+  solveEvidenceWith context category position = \case
     Evidence.Variable variable instanciation -> do
-      instanciation <- solveEvidenceWith category position instanciation
+      instanciation <- solveEvidenceWith context category position instanciation
       pure Evidence.Variable {variable, instanciation}
     Evidence.Super base index -> do
-      base <- solveEvidenceWith category position base
+      base <- solveEvidenceWith context category position base
       pure $ Evidence.Super {base, index}
     Evidence.Held term -> pure Evidence.Held {term}
     Evidence.Applied function arguments -> do
-      function <- solveEvidenceWith category position function
-      arguments <- traverse (solveEvidenceWith category position) arguments
+      function <- solveEvidenceWith context category position function
+      arguments <- traverse (solveEvidenceWith context category position) arguments
       pure Evidence.Applied {function, arguments}
     -- It is only made of evidence that is worked out already.
     Evidence.Abstract {} -> error "solving evidence that is a function"
     Evidence.Logical (Evidence.Shift evidence) ->
-      solveEvidenceWith (category Shift0.:. Shift0.Shift) position (Evidence.Logical evidence)
+      solveEvidenceWith (Shift.unshift context) (category Shift0.:. Shift0.Shift) position (Evidence.Logical evidence)
     Evidence.Logical (Evidence.Box reference) ->
       Solve (readSTRef reference) >>= \case
-        Evidence.Solved evidence -> Shift0.map category <$> solveEvidence position evidence
-        -- The type the evidence is for was never worked out. If it may be
-        -- taken to be Integer or Double, this is the evidence of that type's
-        -- instance.
-        Evidence.Unsolved {fallback = Just Evidence.Fallback {classx, permitted}} ->
-          Solve permitted >>= \case
-            Just typex ->
-              pure
-                Evidence.Variable
-                  { variable = Index.Evidence.Direct (Evidence.classOf classx) (Default.typeOf typex),
-                    instanciation = Mono {levity = Levity.lazy}
-                  }
-            Nothing -> unsupportedFeatureConstraintedTypeDefaulting position
-        Evidence.Unsolved {fallback = Nothing} -> unsupportedFeatureConstraintedTypeDefaulting position
+        Evidence.Solved evidence -> Shift0.map category <$> solveEvidence context position evidence
+        -- The type the evidence is for was never worked out. If it can be
+        -- taken to be one of the types the module's @default@ declaration
+        -- lists, this is the evidence of that type's instance.
+        Evidence.Unsolved {subject} -> do
+          taken <- Solve $ maybe (pure False) (defaulted context position) subject
+          if taken
+            then
+              Solve (readSTRef reference) >>= \case
+                Evidence.Solved evidence -> Shift0.map category <$> solveEvidence context position evidence
+                Evidence.Unsolved {} -> error "evidence of a type that was defaulted is not worked out"
+            else Solve $ unsupportedFeatureConstraintedTypeDefaulting position
 
 instance SolveEvidence InstanciationF where
-  solveEvidenceWith category position = \case
+  solveEvidenceWith context category position = \case
     Instanciation instanciation -> do
-      instanciation <- traverse (solveEvidenceWith category position) instanciation
+      instanciation <- traverse (solveEvidenceWith context category position) instanciation
       pure $ Instanciation instanciation
     Mono {levity} -> do
-      levity <- solveWith category position levity
+      levity <- solveWith context category position levity
       pure Mono {levity}
 
 -- todo, figure out how to make sure nodes that are being solved early have a

@@ -70,8 +70,8 @@ instance Unify.Generalizable Types where
   collect collector (Types types) = foldMap (Unify.collect collector) types
 
 instance Unify.SolveType Types where
-  solveWith category position (Types types) =
-    Types <$> traverse (Unify.solveWith category position) types
+  solveWith context category position (Types types) =
+    Types <$> traverse (Unify.solveWith context category position) types
 
 newtype Set locality layout stage scope
   = Set (Strict.Vector (Element locality layout stage scope))

@@ -2,6 +2,7 @@ module Semantic.Check.Temporary.SelectorInfo where
 
 import qualified Data.Strict.Maybe as Strict (Maybe)
 import qualified Data.Vector.Strict as Strict (Vector)
+import {-# SOURCE #-} Semantic.Check.Context (Context)
 import qualified Semantic.Check.Info.Selector as Solved
 import Semantic.Check.Temporary.ConstructorInfo (ConstructorInfo)
 import qualified Semantic.Check.Temporary.ConstructorInfo as ConstructorInfo
@@ -23,16 +24,16 @@ data Select s scope
     constructorInfo :: !(ConstructorInfo s scope)
   }
 
-solve :: SelectorInfo s scope -> Unify.Solve s (Solved.SelectorInfo scope)
-solve = \case
+solve :: Context s scope -> SelectorInfo s scope -> Unify.Solve s (Solved.SelectorInfo scope)
+solve context = \case
   Uniform {position, levity} -> do
-    levity <- Unify.solve position levity
+    levity <- Unify.solve context position levity
     pure Solved.Uniform {levity}
   Disjoint {select} -> do
-    select <- traverse solveSelect select
+    select <- traverse (solveSelect context) select
     pure Solved.Disjoint {select}
 
-solveSelect :: Select s scope -> Unify.Solve s (Solved.Select scope)
-solveSelect Select {selectIndex, constructorInfo} = do
-  constructorInfo <- ConstructorInfo.solve constructorInfo
+solveSelect :: Context s scope -> Select s scope -> Unify.Solve s (Solved.Select scope)
+solveSelect context Select {selectIndex, constructorInfo} = do
+  constructorInfo <- ConstructorInfo.solve context constructorInfo
   pure Solved.Select {selectIndex, constructorInfo}

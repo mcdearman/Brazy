@@ -47,8 +47,8 @@ equal context position typeIndex datax = do
         inside <- Apart.within context position datay (shift typeIndex) constructor
         evidence <- traverse (Unify.constrain inside position Type2.Eq) types
         pure $ do
-          evidence <- traverse (Unify.solveEvidence position) evidence
-          info <- ConstructorInfo.solve $ ConstructorInstance.info constructor
+          evidence <- traverse (Unify.solveEvidence context position) evidence
+          info <- ConstructorInfo.solve context $ ConstructorInstance.info constructor
           let index =
                 Constructor.Index
                   { typeIndex,

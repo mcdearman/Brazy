@@ -2,6 +2,7 @@ module Semantic.Check.Temporary.UpdateInfo where
 
 import qualified Data.Strict.Maybe as Strict (Maybe)
 import qualified Data.Vector.Strict as Strict (Vector)
+import {-# SOURCE #-} Semantic.Check.Context (Context)
 import qualified Semantic.Check.Info.Update as Solved
 import Semantic.Check.Temporary.ConstructorInfo (ConstructorInfo)
 import qualified Semantic.Check.Temporary.ConstructorInfo as ConstructorInfo
@@ -16,12 +17,12 @@ data Update s scope = Update
     selectorIndexes :: !(Strict.Vector (Strict.Maybe Int))
   }
 
-solve :: UpdateInfo s scope -> Unify.Solve s (Solved.UpdateInfo scope)
-solve UpdateInfo {updateInfo} = do
-  updateInfo <- traverse solveUpdate updateInfo
+solve :: Context s scope -> UpdateInfo s scope -> Unify.Solve s (Solved.UpdateInfo scope)
+solve context UpdateInfo {updateInfo} = do
+  updateInfo <- traverse (solveUpdate context) updateInfo
   pure Solved.UpdateInfo {updateInfo}
 
-solveUpdate :: Update s scope -> Unify.Solve s (Solved.Update scope)
-solveUpdate Update {constructorInfo, selectorIndexes} = do
-  constructorInfo <- ConstructorInfo.solve constructorInfo
+solveUpdate :: Context s scope -> Update s scope -> Unify.Solve s (Solved.Update scope)
+solveUpdate context Update {constructorInfo, selectorIndexes} = do
+  constructorInfo <- ConstructorInfo.solve context constructorInfo
   pure Solved.Update {constructorInfo, selectorIndexes}

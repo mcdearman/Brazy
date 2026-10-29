@@ -51,7 +51,7 @@ bound bound context position typeIndex datax = do
                 Max -> length constructors - 1
               constructor = constructors Strict.Vector.! constructorIndex
           pure $ do
-            info <- ConstructorInfo.solve $ ConstructorInstance.info constructor
+            info <- ConstructorInfo.solve context $ ConstructorInstance.info constructor
             pure $
               Expression.simplifyConstructorExact
                 Constructor.Index
@@ -64,8 +64,8 @@ bound bound context position typeIndex datax = do
           inside <- Apart.within context position datay (shift typeIndex) constructor
           evidences <- traverse (Unify.constrain inside position Type2.Bounded . entry) entries
           pure $ do
-            info <- ConstructorInfo.solve $ ConstructorInstance.info constructor
-            evidences <- traverse (Unify.solveEvidence position) evidences
+            info <- ConstructorInfo.solve context $ ConstructorInstance.info constructor
+            evidences <- traverse (Unify.solveEvidence context position) evidences
             let argument evidence = case bound of
                   Min -> Expression.minBound evidence
                   Max -> Expression.maxBound evidence

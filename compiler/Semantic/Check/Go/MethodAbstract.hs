@@ -6,7 +6,7 @@ import qualified Core.Tree.Forall as Simple (ForallOver (..), simplify)
 import Semantic.Check.Context (Context)
 import qualified Semantic.Check.Mask as Mask
 import Semantic.Check.Scheme (augmentForall)
-import qualified Semantic.Check.Temporary.Definition as Definition
+import qualified Semantic.Check.Go.Definition as Definition
 import Semantic.Layout (Group)
 import Semantic.Shift (shift)
 import Semantic.Stage (Check, Resolve)
@@ -29,5 +29,5 @@ check context position Method {annotation} (Semantic.DefaultResolve definition)
       context <- augmentForall position scheme Mask.Runtime context
       definition <- Definition.check context (logicalType result) (shift definition)
       pure $ do
-        definition <- Definition.solve definition
+        definition <- definition
         pure $ DefaultCheck definition

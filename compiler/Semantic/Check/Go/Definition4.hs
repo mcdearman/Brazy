@@ -24,7 +24,7 @@ import qualified Semantic.Check.Binding.Type as TypeBinding
 import qualified Semantic.Index.Table.Type as Table.Type
 import qualified Semantic.Check.Go.Scheme as Solved.Scheme
 import qualified Semantic.Check.Mask as Mask
-import qualified Semantic.Check.Temporary.Definition3 as Definition3
+import qualified Semantic.Check.Go.Definition3 as Definition3
 import qualified Semantic.Check.Temporary.Scheme as Scheme
 import qualified Semantic.Layout as Layout
 import Semantic.Scope (Environment (..), Local)
@@ -80,6 +80,7 @@ data Solve solve logical s scope = Solve
     logical ::
       forall typef.
       (SolveType typef) =>
+      Context s scope ->
       Position ->
       typef (Unify.Logical s scope) scope ->
       ST s (typef logical scope)
@@ -89,14 +90,14 @@ delay :: Solve (Unify.Solve s) (Unify.Logical s scope) s scope
 delay =
   Solve
     { solve = pure,
-      logical = const pure
+      logical = \_ _ -> pure
     }
 
 now :: Solve Identity Void s scope
 now =
   Solve
     { solve = fmap Identity . Unify.runSolve,
-      logical = (.) Unify.runSolve . Unify.solve
+      logical = \context position -> Unify.runSolve . Unify.solve context position
     }
 
 check ::
@@ -146,10 +147,8 @@ check position Solve {solve, logical} reflection information = \case
                     marshalled <- Foreign.callThrough (Builtin.index pure content) foreignPosition target symbol (Forall.simplify scheme)
                     marshalled `seq` pure (Tree.Definition3.Label info (Definition2.Exported call {Definition2.marshalled = Just marshalled} exported))
                   _ -> pure definition
-                definition <- checkAnnotation context position scheme $ \context typex -> do
-                  definition <- Definition3.checkManual context typex definition
-                  definition <- pure $ Definition3.solve position definition
-                  pure definition
+                definition <- checkAnnotation context position scheme $ \context typex ->
+                  Definition3.checkManual position context typex definition
                 definition <- solve definition
                 pure $ Implicit.Check <$> definition
               _ -> error "bad self annotation"
@@ -190,9 +189,9 @@ check position Solve {solve, logical} reflection information = \case
                     let element' = Shift.map (Shift.Over Shift) element
                         typex = fresh Vector.! index
                         used = writeSTRef recursive True
-                    element <- Definition3.checkAuto (groupTermBindings used fresh context) (shiftLogical typex) element'
+                    element <- Definition3.checkAuto position (groupTermBindings used fresh context) (shiftLogical typex) element'
                     pure $ do
-                      element <- Definition3.solve position element
+                      element <- element
                       pure Element {element, link}
                   types = Types (Strict.Vector.fromLazy fresh)
               case waiting of
@@ -208,22 +207,23 @@ check position Solve {solve, logical} reflection information = \case
                           Nothing -> error "a definition that was put off was never checked"
                   pure $ types Unify.::: solved
             set <- solve set
-            types <- logical position types
+            types <- logical context position types
             pure $ Solved types :::: (Implicit.Check <$> set)
         }
     where
       Identity (_ :::: Identity (Implicit.Resolve (Set set))) = group
 
 solveDefinition ::
+  Context s scope ->
   Position ->
   Definition4 (Unify.Solve s) (Unify.Logical s scope) locality Identity Layout.Group Check scope ->
   Unify.Solve s (Definition4 Identity Void locality Identity Layout.Group Check scope)
-solveDefinition position = \case
+solveDefinition context position = \case
   (annotation ::: Identity definition) -> do
     definition <- definition
     pure $ annotation ::: Identity (Identity definition)
   Link link id -> pure (Link link id)
   Group (Identity (Solved types :::: set)) -> do
-    types <- Unify.solve position types
+    types <- Unify.solve context position types
     set <- set
     pure $ Group $ Identity (Solved types :::: pure set)

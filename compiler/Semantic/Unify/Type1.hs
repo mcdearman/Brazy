@@ -40,7 +40,6 @@ import Semantic.Unify.Type
     Type,
     alikeAll,
     compared,
-    defaults,
     equated,
     equatedHidden,
     firstM,
@@ -55,7 +54,12 @@ import Control.Monad (filterM)
 import qualified Core.Tree.Constraints as Instance (Prerequisites (..))
 import qualified Core.Tree.Type as Simple (Type)
 import Data.Foldable (for_)
-import qualified Semantic.Unify.Evidence as Evidence (Fallback (..), defaultable)
+import qualified Core.Builtin (index)
+import qualified Core.Tree.Class as Class (Class (..))
+import Core.Tree.TypeDeclaration (assumeClass)
+import Data.List (find)
+import Data.Maybe (isJust)
+import qualified Semantic.Default as Default (typeOf)
 import Syntax.Position (Position)
 import Prelude hiding (Functor, head, map)
 
@@ -128,10 +132,7 @@ constrainWith context_ position classx_ term_ arguments_ = constrainWith context
               unify context position (Function target Constraint) real
 
               typeCheck context position target (foldl (#) term arguments)
-              let fallback = do
-                    classx <- Evidence.defaultable classx
-                    pure Evidence.Fallback {classx, permitted = defaults (defaulting context) reference}
-              logical <- newSTRef Evidence.Unsolved {fallback}
+              logical <- newSTRef Evidence.Unsolved {subject = Just term}
               let delay = Delay {arguments, evidence = Evidence.Logical (Evidence.Box logical)}
               writeSTRef reference $! Unsolved {kind, constraints = Map.insert classx [delay] constraints, erasure}
               pure $ Evidence.Logical (Evidence.Box logical)
@@ -143,7 +144,7 @@ constrainWith context_ position classx_ term_ arguments_ = constrainWith context
               case found of
                 Just Delay {evidence} -> pure evidence
                 Nothing -> do
-                  logical <- newSTRef Evidence.Unsolved {fallback = Nothing}
+                  logical <- newSTRef Evidence.Unsolved {subject = Just term}
                   let delay = Delay {arguments, evidence = Evidence.Logical (Evidence.Box logical)}
                   writeSTRef reference $!
                     Unsolved {kind, constraints = Map.insert classx (delays ++ [delay]) constraints, erasure}
@@ -256,3 +257,60 @@ everywhere = \case
     Constructor Type2.Every -> True
     _ -> False
 
+
+-- |
+-- Take a type that was never worked out to be one of the types its
+-- module's @default@ declaration lists, if classes are asked of it, as the
+-- Haskell report has it: the first that is an instance of every one of
+-- them, if each is asked of the type alone and at least one is a class of
+-- numbers. Whether it is now worked out is said.
+--
+-- The instances are looked up as any other is, so a class of the program's
+-- own may be asked of the type too, which the report does not have.
+defaulted :: Context s scope -> Position -> Type s scope -> ST s Bool
+defaulted context position typex = case typex of
+  Logical (Shift logical) -> defaulted (Shift.unshift context) position (Logical logical)
+  Logical (Box reference) ->
+    readSTRef reference >>= \case
+      Solved typex -> defaulted context position typex
+      Skolem {} -> pure False
+      Unsolved {constraints} -> do
+        let classes = Map.keys constraints
+            alone Delay {arguments} = null arguments
+            fits candidate = all (\classx -> instanced context classx (Default.typeOf candidate)) classes
+        numbers <- isJust <$> firstM (numeric context) classes
+        case find fits (defaulting context) of
+          Just candidate
+            | numbers && all alone (concat (Map.elems constraints)) -> do
+                unify context position typex (Constructor (Default.typeOf candidate))
+                pure True
+          _ -> pure False
+  _ -> pure True
+
+-- |
+-- Whether a class is one of numbers: @Num@, or one that requires it.
+numeric :: Context s scope -> Type2.Index scope -> ST s Bool
+numeric context@Context {typeEnvironment} classx
+  | classx == Type2.Num = pure True
+  | otherwise = do
+      Class.Class {constraints} <- do
+        let get index = assumeClass <$> TypeBinding.content (typeEnvironment Type.Table.! index)
+        Core.Builtin.index pure get classx
+      let supers = [super | Simple.Constraint.Constraint {classx = super, arguments} <- toList constraints, null arguments]
+      isJust <$> firstM (numeric context) supers
+
+-- |
+-- Whether a type that is given nothing is an instance of a class, as
+-- 'constrainWith' would find it.
+instanced :: Context s scope -> Type2.Index scope -> Type2.Index scope -> Bool
+instanced Context {typeEnvironment} classx typex = ofClass || ofType || builtin
+  where
+    ofClass = case classx of
+      Type2.Index index
+        | TypeBinding {classInstances} <- typeEnvironment Type.Table.! index -> Map.member typex classInstances
+      _ -> False
+    ofType = case typex of
+      Type2.Index index
+        | TypeBinding {dataInstances} <- typeEnvironment Type.Table.! index -> Map.member classx dataInstances
+      _ -> False
+    builtin = isJust (Builtin.constrain Nothing (\_ () -> Nothing) classx typex [])

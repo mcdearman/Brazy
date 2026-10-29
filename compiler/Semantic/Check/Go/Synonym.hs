@@ -43,9 +43,10 @@ check context position (annotation ::: SynonymBody {parameters, synonym}) = do
   target <- Unify.fresh (Core.typeWith universe)
   kind' <- pure $ foldr ((-#>) . Unsolved.typex) target parameters
   Unify.unify context position kind kind'
+  let outer = context
   context <- pure $ Unsolved.augment parameters context
   synonym <- Type.check context (shiftLogical target) synonym
-  parameters <- Unify.runSolve $ traverse Unsolved.solve parameters
+  parameters <- Unify.runSolve $ traverse (Unsolved.solve outer) parameters
   synonym <- Unify.runSolve $ Type.solve context synonym
-  kind <- Unify.runSolve $ Unify.solve position kind
+  kind <- Unify.runSolve $ Unify.solve outer position kind
   pure $ annotation ::: SynonymBody {kind = Solved kind, parameters, synonym}

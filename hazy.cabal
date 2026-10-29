@@ -205,29 +205,29 @@ executable hazy
     Semantic.Check.Simple.Constructor
     Semantic.Check.Simple.Data
     Semantic.Check.Scheme
-    Semantic.Check.Temporary.Alternative
-    Semantic.Check.Temporary.Body
-    Semantic.Check.Temporary.CallHead
-    Semantic.Check.Temporary.Comprehension
+    Semantic.Check.Go.Alternative
+    Semantic.Check.Go.Body
+    Semantic.Check.Go.CallHead
+    Semantic.Check.Go.Comprehension
     Semantic.Check.Temporary.Constraint
     Semantic.Check.Temporary.Constraints
     Semantic.Check.Temporary.Constructor
     Semantic.Check.Temporary.ConstructorInfo
-    Semantic.Check.Temporary.Definition
-    Semantic.Check.Temporary.Definition2
-    Semantic.Check.Temporary.Definition3
-    Semantic.Check.Temporary.Do
+    Semantic.Check.Go.Definition
+    Semantic.Check.Go.Definition2
+    Semantic.Check.Go.Definition3
+    Semantic.Check.Go.Do
     Semantic.Check.Temporary.Entry
     Semantic.Check.Temporary.EntryInfo
-    Semantic.Check.Temporary.Expression
-    Semantic.Check.Temporary.Function
-    Semantic.Check.Temporary.Lambda
+    Semantic.Check.Go.Expression
+    Semantic.Check.Go.Function
+    Semantic.Check.Go.Lambda
     Semantic.Check.Temporary.Method
     Semantic.Check.Temporary.Pattern
-    Semantic.Check.Temporary.RightHandSide
+    Semantic.Check.Go.RightHandSide
     Semantic.Check.Temporary.Scheme
     Semantic.Check.Temporary.SelectorInfo
-    Semantic.Check.Temporary.Statements
+    Semantic.Check.Go.Statements
     Semantic.Check.Temporary.StrictnessAnnotation
     Semantic.Check.Temporary.Type
     Semantic.Check.Temporary.TypeDefinition

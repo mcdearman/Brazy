@@ -58,7 +58,7 @@ import qualified Semantic.Check.Go.Scheme as Scheme
 import qualified Semantic.Check.Mask as Mask
 import qualified Semantic.Check.Scheme as Core.Scheme
 import qualified Semantic.Check.Temporary.Constraints as Unsolved.Constraints (check, solve)
-import qualified Semantic.Check.Temporary.Definition as Definition
+import qualified Semantic.Check.Go.Definition as Definition
 import qualified Semantic.Check.Temporary.Scheme as Unsolved (augment)
 import qualified Semantic.Check.Temporary.Type as Unsolved.Type (check, solve)
 import qualified Semantic.Check.Temporary.TypePattern as Unsolved (TypePattern (..), solve)
@@ -331,7 +331,7 @@ checkHeader position key information Header {parameters, prerequisites, lenient}
           let kind = shiftLogical (Unsolved.typex (parameters Strict.Vector.! index))
           typex <- Unsolved.Type.check context kind typex
           pure (index, typex)
-        parameters <- Unify.runSolve $ traverse Unsolved.solve parameters
+        parameters <- Unify.runSolve $ traverse (Unsolved.solve outer) parameters
         prerequisites <- Unify.runSolve $ Unsolved.Constraints.solve context prerequisites
         equated <- Unify.runSolve $ for equated $ \(index, typex) -> do
           typex <- Unsolved.Type.solve context typex
@@ -393,7 +393,7 @@ checkMethod Method {position, context} Manual _ scheme (Definition (Resolve memb
   context <- Core.Scheme.augmentForall position scheme Mask.Runtime context
   definition <- Definition.check context result member
   pure $ do
-    result <- Definition.solve definition
+    result <- definition
     pure $
       Definition $
         Implicit.Check
@@ -582,12 +582,12 @@ checkBody position key Solve {solve} reflection information lookup members =
               inner <- Core.Scheme.augment position (Strict.Vector.singleton kind) given Mask.Runtime context
               let parameter = foldl (#) (shift base) (shift <$> reverse before) # Core.Type.Variable (Local.Local 0)
               evidence <- Unify.constrain inner position (shift (shift classx)) (logicalType parameter)
-              body <- Unify.runSolve $ Unify.solveEvidence position evidence
+              body <- Unify.runSolve $ Unify.solveEvidence inner position evidence
               pure Core.Evidence.Abstract {count = 1, body}
             _ -> do
               let parameter = foldl (#) base arguments
               evidence <- Unify.constrain context position (shift classx) (logicalType parameter)
-              Unify.runSolve $ Unify.solveEvidence position evidence
+              Unify.runSolve $ Unify.solveEvidence context position evidence
         let arguments =
               Method
                 { position,

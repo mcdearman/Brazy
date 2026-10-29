@@ -181,8 +181,8 @@ made context position className classx typeIndex datax = do
             found = zipWith (shape position className parameter) fields held
         found <- Prelude.traverse (each (Unify.constrain inside position (shift classx))) found
         pure $ do
-          shapes <- Prelude.traverse (each (Unify.solveEvidence position)) found
-          info <- ConstructorInfo.solve $ ConstructorInstance.info constructorx
+          shapes <- Prelude.traverse (each (Unify.solveEvidence context position)) found
+          info <- ConstructorInfo.solve context $ ConstructorInstance.info constructorx
           pure
             Made
               { constructor = Constructor.Index {typeIndex = shift typeIndex, constructorIndex = index},

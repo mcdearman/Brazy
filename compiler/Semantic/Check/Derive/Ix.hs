@@ -123,9 +123,9 @@ through context position typeIndex datax = do
     found
       | not (null found),
         all nullary found -> do
-          back <- Enum.toEnum' position (shift typeIndex) constructors
+          back <- Enum.toEnum' context position (shift typeIndex) constructors
           pure $ do
-            to <- Enum.fromEnum' (shift typeIndex) constructors
+            to <- Enum.fromEnum' context (shift typeIndex) constructors
             back <- back
             pure
               Through
@@ -143,8 +143,8 @@ through context position typeIndex datax = do
                 _ -> foldl Core.Call (Core.Constructor (Type2.Tuple count)) held
           evidence <- Unify.constrain inside position Type2.Ix typex
           pure $ do
-            evidence <- Unify.solveEvidence position evidence
-            info <- ConstructorInfo.solve $ ConstructorInstance.info constructorx
+            evidence <- Unify.solveEvidence context position evidence
+            info <- ConstructorInfo.solve context $ ConstructorInstance.info constructorx
             let constructor = Constructor.Index {typeIndex = shift typeIndex, constructorIndex = 0}
                 matched =
                   Match

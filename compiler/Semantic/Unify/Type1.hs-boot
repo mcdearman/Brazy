@@ -21,3 +21,4 @@ constrainWith ::
   Type s scope ->
   [Type s scope] ->
   ST s (Evidence s scope)
+defaulted :: Context s scope -> Position -> Type s scope -> ST s Bool

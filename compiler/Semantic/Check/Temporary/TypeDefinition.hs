@@ -247,21 +247,21 @@ solve context = \case
   -- Once it is checked, a type declared with @where@ is a type like any
   -- other, some of whose constructors say what type they make.
   GADT {brand, position, parameters, owned, selectors} -> do
-    parameters <- traverse TypePattern.solve parameters
+    parameters <- traverse (TypePattern.solve context) parameters
     constructors <- for owned $ \Owned {variables, required, constructor} -> do
-      variables <- traverse TypePattern.solve variables
+      variables <- traverse (TypePattern.solve context) variables
       let inner = Scheme.augmentSolve variables context
       required <- Constraints.solve inner required
       constructor <- Constructor.solve inner constructor
       pure (requiring required constructor)
     pure Solved.ADT {position, brand, parameters, constructors, selectors}
   ADT {brand, position, parameters, constructors, selectors} -> do
-    parameters <- traverse TypePattern.solve parameters
+    parameters <- traverse (TypePattern.solve context) parameters
     context <- pure $ Scheme.augmentSolve parameters context
     constructors <- traverse (Constructor.solve context) constructors
     pure Solved.ADT {position, brand, parameters, constructors, selectors}
   Class {parameter, position, constraints, methods} -> do
-    parameter <- TypePattern.solve parameter
+    parameter <- TypePattern.solve context parameter
     context <- pure $ Scheme.augmentSolve (Strict.Vector.singleton parameter) context
     constraints <- traverse (Constraint.solve context) constraints
     methods <- traverse (Method.solve context) methods

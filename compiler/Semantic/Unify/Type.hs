@@ -3,7 +3,6 @@ module Semantic.Unify.Type where
 import Control.Monad (foldM, when, zipWithM)
 import Control.Monad.ST (ST)
 import Core.Substitute (logicalType)
-import qualified Core.Tree.Evidence as Evidence (EvidenceF (..))
 import Core.Tree.Type (TypeF (..))
 import qualified Core.Tree.Type as Simple (Type)
 import Data.Foldable (for_)
@@ -27,20 +26,7 @@ import qualified Semantic.Shift as Shift
 import qualified Semantic.Shift0 as Shift0
 import {-# SOURCE #-} Semantic.Unify.Error (Error (..), abort)
 import Semantic.Unify.Evidence (Evidence)
-import qualified Semantic.Unify.Evidence as Evidence
-  ( Box (..),
-    Defaultable (..),
-    Fallback (..),
-    Logical (..),
-    defaultable,
-    fractional,
-    numeric,
-    unify,
-    unshift,
-  )
-import qualified Semantic.Default as Default
-import Semantic.Default (Default)
-import Data.List (find)
+import qualified Semantic.Unify.Evidence as Evidence (unify, unshift)
 import {-# SOURCE #-} Semantic.Unify.Type1 (constrainWith)
 import Syntax.Position (Position)
 import Prelude hiding (Functor, head, map)
@@ -821,106 +807,42 @@ unshift context position typex = unshift typex
       abort position $ Unshift context typex
 
 -- |
--- What a type variable that was never worked out may be taken to be, if
--- anything. This is the Haskell report's defaulting, with its default list
--- of @Integer@ and then @Double@: every class the variable is constrained
--- by must be one that does not stop it, at least one must be a class of
--- numbers, and the type is the first of the two that is an instance of
--- every one.
-defaults :: [Default] -> STRef s (Box s scope) -> ST s (Maybe Default)
-defaults listed reference =
-  readSTRef reference >>= \case
-    Solved typex -> follow typex
-    Unsolved {constraints} -> pure (firstFitting listed constraints)
-    Skolem {} -> pure Nothing
-  where
-    -- The variable may have been made the same as another since.
-    follow :: Type s scope -> ST s (Maybe Default)
-    follow = \case
-      Logical (Box reference) -> defaults listed reference
-      Logical (Shift logical) -> follow (Logical logical)
-      _ -> pure Nothing
-
--- |
--- The first of the types listed that is an instance of every class asked:
--- one that is not a fraction, where none of the classes is of fractions,
--- and one that is, where none is @Integral@.
-firstFitting :: [Default] -> Map (Type2.Index scope) [Delay s scope] -> Maybe Default
-firstFitting listed constraints = do
-  classes <- traverse Evidence.defaultable (Map.keys constraints)
-  if all plain (concat (Map.elems constraints)) && any Evidence.numeric classes
-    then find (fits classes) listed
-    else Nothing
-  where
-    plain Delay {arguments} = null arguments
-    fits classes candidate = all (instanceOf candidate) classes
-    -- Which of the classes that do not stop defaulting each type is an
-    -- instance of.
-    instanceOf candidate = \case
-      Evidence.Integral -> not (Default.fractional candidate)
-      Evidence.Bounded -> candidate == Default.Int
-      classx
-        | Evidence.fractional classx -> Default.fractional candidate
-        | otherwise -> True
-
--- |
--- What a variable's evidence was taken to be, if it was: the type it is
--- taken to be is the same, as the module it was asked in has it.
-chosen :: Map (Type2.Index scope) [Delay s scope] -> ST s (Maybe Default)
-chosen constraints = go (concat (Map.elems constraints))
-  where
-    go = \case
-      [] -> pure Nothing
-      Delay {evidence} : rest ->
-        fallbackOf evidence >>= \case
-          Just found -> pure (Just found)
-          Nothing -> go rest
-    fallbackOf :: Evidence s scope' -> ST s (Maybe Default)
-    fallbackOf = \case
-      Evidence.Logical logical -> logicalOf logical
-      _ -> pure Nothing
-    logicalOf :: Evidence.Logical s scope' -> ST s (Maybe Default)
-    logicalOf = \case
-      Evidence.Box reference ->
-        readSTRef reference >>= \case
-          Evidence.Unsolved {fallback = Just Evidence.Fallback {permitted}} -> permitted
-          _ -> pure Nothing
-      Evidence.Shift logical -> logicalOf logical
-
+-- What a type that nothing is asked of, and that was never worked out, is
+-- taken to be: any type of its kind will do, as nothing can tell which.
 defaultFrom,
   defaultUniverse ::
     Position ->
-    Map (Type2.Index scope') [Delay s scope'] ->
-    Type s scope'' ->
+    Type s scope' ->
     ST s (Simple.Type scope)
-defaultFrom position constraints kind = case kind of
-  Logical (Shift logical) -> defaultFrom position constraints (Logical logical)
+defaultFrom position kind = case kind of
+  Logical (Shift logical) -> defaultFrom position (Logical logical)
   Logical (Box reference) ->
     readSTRef reference >>= \case
-      Solved kind -> defaultFrom position constraints kind
+      Solved kind -> defaultFrom position kind
       Unsolved {} -> unsupportedFeatureConstraintedTypeDefaulting position
       Skolem {} -> unsupportedFeatureConstraintedTypeDefaulting position
-  Type universe -> defaultUniverse position constraints universe
+  Type universe -> defaultUniverse position universe
   Levity -> pure $ Constructor Type2.Lazy
   _ -> unsupportedFeatureConstraintedTypeDefaulting position
-defaultUniverse position constraints universe = case universe of
-  Logical (Shift logical) -> defaultUniverse position constraints (Logical logical)
+defaultUniverse position universe = case universe of
+  Logical (Shift logical) -> defaultUniverse position (Logical logical)
   Logical (Box reference) ->
     readSTRef reference >>= \case
-      Solved kind -> defaultUniverse position constraints kind
-      Unsolved {}
-        | null constraints -> pure $ Type Small
-        | otherwise -> fromChosen
+      Solved kind -> defaultUniverse position kind
+      Unsolved {} -> pure $ Type Small
       Skolem {} -> unsupportedFeatureConstraintedTypeDefaulting position
-  Small
-    | null constraints -> pure $ Constructor (Type2.Tuple 0)
-    | otherwise -> fromChosen
-  Large
-    | null constraints -> pure $ Type Small
-    | otherwise -> error "unexpected kind constraints"
+  Small -> pure $ Constructor (Type2.Tuple 0)
+  Large -> pure $ Type Small
   _ -> error "unexpected universe kind"
-  where
-    fromChosen =
-      chosen constraints >>= \case
-        Just typex -> pure $ Constructor (Default.typeOf typex)
-        Nothing -> unsupportedFeatureConstraintedTypeDefaulting position
+
+-- |
+-- Where a type variable that was moved out of a scope was moved to, if it
+-- was: the type evidence that is moved with it is for.
+moved :: Type s (scope ':+ scopes) -> ST s (Maybe (Type s scopes))
+moved = \case
+  Logical (Box reference) ->
+    readSTRef reference >>= \case
+      Solved typex -> moved typex
+      _ -> pure Nothing
+  Logical (Shift logical) -> pure $ Just (Logical logical)
+  _ -> pure Nothing
