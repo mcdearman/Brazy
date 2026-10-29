@@ -18,7 +18,10 @@
 -- called ('Sequent.Inline'). A value that is constructed and at once taken
 -- apart is not constructed: the alternative for it is gone to, and so is
 -- the one for the answer of a comparison of two numbers written in the
--- program, as dividing by one compares it with nothing. A consumer
+-- program, as dividing by one compares it with nothing. A thunk that only
+-- works out a few primitives that cannot fail, of values that are
+-- evaluated, is worked out where it is named instead: a difference of two
+-- numbers a constructor holds strictly costs less than a thunk. A consumer
 -- that is named and only ever given constructed values, each choosing an
 -- alternative of its own, is put where they are, so that a comparison goes
 -- straight on to what its answer chooses. A value that is forced is itself.
@@ -40,7 +43,8 @@ import Data.List (nub)
 import qualified Data.Set as Set
 
 import Data.Text (Text)
-import Sequent.Primitive (Primitive (IntEqual, IntLessThenEqual))
+import qualified Data.Text as Text
+import Sequent.Primitive (Primitive (..))
 import qualified Sequent.Tree as Literal (Literal (..))
 import Sequent.Tree
   ( Alternative (..),
@@ -170,10 +174,14 @@ instance Simplify Statement where
       | otherwise -> Primitive primitive arguments' (simplify result)
       where
         arguments' = simplify arguments
-    -- One thing that does not refer to itself is only named.
-    LetRec [(name, value)] body
-      | Set.notMember name (free value) ->
-          cut (simplify value) (MuTilde Binder {name, strategy = ByNeed} (simplify body))
+    -- One thing that refers to nothing named with it, itself included, is
+    -- only named, before the rest: things that do not refer to each other
+    -- in a circle are named one at a time.
+    LetRec [] body -> simplify body
+    LetRec bindings body
+      | names <- Set.fromList (map fst bindings),
+        (before, (name, value) : after) <- break (\(_, value) -> Set.disjoint names (free value)) bindings ->
+          cut (simplify value) (MuTilde Binder {name, strategy = ByNeed} (simplify (LetRec (before ++ after) body)))
     LetRec bindings body -> LetRec [(name, simplify value) | (name, value) <- bindings] (simplify body)
     Abort -> Abort
     Halt -> Halt
@@ -239,6 +247,13 @@ cut producer consumer = case (producer, consumer) of
   (Thunk result body, MuTilde binder@Binder {name} (Cut (Variable other) (Force inner)))
     | other == name ->
         cut (Mu result body) (MuTilde binder (Cut (Variable name) inner))
+  -- A thunk that only works out a few primitives that cannot fail, of values
+  -- that are already evaluated, is worked out where it is named: it is
+  -- cheaper than making it. What is named is then a value, and forcing it
+  -- is going on with it.
+  (Thunk result body, MuTilde binder@Binder {name, strategy = ByNeed} rest)
+    | cheap result body ->
+        cut (Mu result body) (MuTilde binder {strategy = ByValue} (simplify (unforced name rest)))
   -- A thunk that only constructs a value is the value. What it named on
   -- the way is named first.
   (Thunk _ _, MuTilde _ _)
@@ -290,6 +305,83 @@ answered primitive arguments = case (primitive, arguments) of
   _ -> Nothing
   where
     bool answer = Constructor (fromEnum answer) []
+
+-- |
+-- Whether a thunk's body only works out a few primitives that cannot fail,
+-- of what it is given, which is evaluated, and of what they give, before it
+-- gives the last: so few that it is cheaper to do it than to make the
+-- thunk, and nothing that could stop the program or never end.
+cheap :: Text -> Statement -> Bool
+cheap result = go (8 :: Int)
+  where
+    go budget = \case
+      Primitive primitive arguments next
+        | budget > 0,
+          safe primitive arguments ->
+            case next of
+              Covariable other -> other == result
+              MuTilde _ rest -> go (budget - 1) rest
+              _ -> False
+      Cut (Literal _) (MuTilde _ rest) -> go budget rest
+      _ -> False
+
+-- |
+-- Whether a primitive cannot fail, given what it is given: arithmetic and
+-- comparison of @Int@s, division only by a number written in the program
+-- that is neither nothing nor minus one, and arithmetic and comparison of
+-- floating-point numbers, which give a number that is not one where they
+-- would fail.
+safe :: Primitive -> [Producer] -> Bool
+safe primitive arguments = case primitive of
+  IntEqual -> True
+  IntLessThenEqual -> True
+  IntAdd -> True
+  IntMinus -> True
+  IntMultiply -> True
+  IntNegate -> True
+  IntAbs -> True
+  IntSignum -> True
+  IntQuot -> divisor
+  IntRem -> divisor
+  IntDiv -> divisor
+  IntMod -> divisor
+  Foreign name _
+    | name == Text.pack "float_binary", [_, Literal (Literal.Int operation), _, _] <- arguments -> operation `elem` [0 .. 3]
+    | name == Text.pack "float_unary", [_, Literal (Literal.Int operation), _] <- arguments -> operation `elem` [0, 1, 5]
+    | name == Text.pack "float_compare" -> True
+    | name == Text.pack "float_from_int" -> True
+  _ -> False
+  where
+    divisor = case arguments of
+      [_, Literal (Literal.Int by)] -> by `notElem` [0, -1]
+      _ -> False
+
+-- |
+-- A statement in which a variable, which now always holds a value, is not
+-- forced where it is used: what forcing it would go on to is given it.
+unforced :: Text -> Statement -> Statement
+unforced name = statement
+  where
+    statement = \case
+      Cut (Variable other) (Force inner)
+        | other == name -> Cut (Variable other) (consumer inner)
+      Cut producer inner -> Cut (producerx producer) (consumer inner)
+      Primitive primitive arguments inner -> Primitive primitive (map producerx arguments) (consumer inner)
+      LetRec bindings body -> LetRec [(local, producerx value) | (local, value) <- bindings] (statement body)
+      Abort -> Abort
+      Halt -> Halt
+    producerx = \case
+      Constructor tag fields -> Constructor tag (map producerx fields)
+      Mu covariable body -> Mu covariable (statement body)
+      Function parameters covariable body -> Function parameters covariable (statement body)
+      Thunk covariable body -> Thunk covariable (statement body)
+      other -> other
+    consumer = \case
+      MuTilde binder body -> MuTilde binder (statement body)
+      Case alternatives otherwise -> Case [Alternative tag binders (statement body) | Alternative tag binders body <- alternatives] (fmap statement otherwise)
+      Apply arguments inner -> Apply (map producerx arguments) (consumer inner)
+      Force inner -> Force (consumer inner)
+      other -> other
 
 -- |
 -- Which of some alternatives is for a tag.
