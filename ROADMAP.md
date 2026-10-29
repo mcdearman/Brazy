@@ -1421,6 +1421,14 @@ kept, and eval and apply:
       digit a division of the whole number, which takes time in the square
       of its length: `show (2 ^ 100000)` took most of a tenth of a second
       and 188 MB, and takes no time to speak of now (test `integer-show`)
+- [x] `zipWith`, and so `zip`, is written as `map` is: its list made by
+      `build`, its first list gone through by `listFoldr`, with what is
+      left of the second passed along, and nothing of its own that calls
+      itself, so that it is put where it is called. Written with `build`
+      alone, about a loop of its own, it was not put there and nothing was
+      saved. A comprehension over `zip`, and `and` over that, make neither
+      list: `queens` makes 12% fewer blocks and `spectral` 29% fewer, which
+      takes it from 0.89 seconds to 0.59 (test `zip-fusion`)
 
 Where it stands against GHC with `-O1`, on 2026-10-29, each workload made
 big enough to be timed (in `~/perf2` of the machine it was measured on).

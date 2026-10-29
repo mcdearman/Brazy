@@ -167,20 +167,25 @@ lookup key ((x, y) : xys)
   | otherwise = lookup key xys
 
 zip :: [a] -> [b] -> [(a, b)]
-zip = zipWith (,)
+zip as bs = zipWith (,) as bs
 
 zip3 :: [a] -> [b] -> [c] -> [(a, b, c)]
 zip3 = zipWith3 (,,)
 
 zipWith :: (a -> b -> c) -> [a] -> [b] -> [c]
-zipWith z (a : as) (b : bs) =
-  z a b : zipWith z as bs
-zipWith _ _ _ = []
+zipWith z as bs = build (\c n -> listFoldr (step c n) (\_ -> n) as bs)
+  where
+    step c n a rest = \case
+      b : bs -> c (z a b) (rest bs)
+      [] -> n
 
 zipWith3 :: (a -> b -> c -> d) -> [a] -> [b] -> [c] -> [d]
-zipWith3 z (a : as) (b : bs) (c : cs) =
-  z a b c : zipWith3 z as bs cs
-zipWith3 _ _ _ _ = []
+zipWith3 z as bs cs = build (\c n -> zipping c n as bs cs)
+  where
+    zipping c n = go
+      where
+        go (a : as) (b : bs) (d : ds) = c (z a b d) (go as bs ds)
+        go _ _ _ = n
 
 unzip :: [(a, b)] -> ([a], [b])
 unzip = foldr (\(a, b) ~(as, bs) -> (a : as, b : bs)) ([], [])
