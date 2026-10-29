@@ -131,6 +131,7 @@ where
 
 import qualified Data.Set as Set (fromDistinctAscList, member, notMember, toAscList)
 import Prelude hiding (drop, filter, foldl, foldr, lookup, map, null, splitAt, take)
+import qualified Data.Foldable as Foldable (foldl')
 import qualified Prelude
 import Data.Semigroup (Arg (..))
 import Data.Set (Set)
@@ -181,13 +182,13 @@ fromArgSet :: Set (Arg k a) -> Map k a
 fromArgSet set = fromDistinctAscList [(k, a) | Arg k a <- Set.toAscList set]
 
 fromList :: (Ord k) => [(k, a)] -> Map k a
-fromList = Prelude.foldl (\m (k, x) -> insert k x m) Tip
+fromList = Foldable.foldl' (\m (k, x) -> insert k x m) Tip
 
 fromListWith :: (Ord k) => (a -> a -> a) -> [(k, a)] -> Map k a
 fromListWith f = fromListWithKey (\_ new old -> f new old)
 
 fromListWithKey :: (Ord k) => (k -> a -> a -> a) -> [(k, a)] -> Map k a
-fromListWithKey f = Prelude.foldl (\m (k, x) -> insertWithKey f k x m) Tip
+fromListWithKey f = Foldable.foldl' (\m (k, x) -> insertWithKey f k x m) Tip
 
 fromAscList :: (Eq k) => [(k, a)] -> Map k a
 fromAscList = fromAscListWithKey (\_ new _ -> new)
@@ -376,10 +377,10 @@ unionWithKey f (Bin _ k x l r) b = case splitLookup k b of
         Nothing -> x
 
 unions :: (Foldable f, Ord k) => f (Map k a) -> Map k a
-unions = Prelude.foldl union Tip
+unions = Foldable.foldl' union Tip
 
 unionsWith :: (Foldable f, Ord k) => (a -> a -> a) -> f (Map k a) -> Map k a
-unionsWith f = Prelude.foldl (unionWith f) Tip
+unionsWith f = Foldable.foldl' (unionWith f) Tip
 
 difference :: (Ord k) => Map k a -> Map k b -> Map k a
 difference Tip _ = Tip

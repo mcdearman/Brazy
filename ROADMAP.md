@@ -1437,6 +1437,11 @@ kept, and eval and apply:
       program owns is given back by the program, as a constructed value is.
       `nbody` takes 0.83 seconds where it took 1.18, `spectral` 0.48, and
       `queens` 0.66
+- [x] A set or a map made from a list is made as the list is gone through.
+      `Data.Set.fromList` and `Data.Map.fromList`, and the `unions`, went
+      through it with the lazy `foldl`, so a thunk for each element was held
+      until the last: `set` took 94 MB where GHC takes 8, and takes 2.7 MB
+      with `foldl'`, as containers has it (test `strict-containers`)
 - [ ] A function that does not call itself, given an instance that is
       known, is not copied for it. Tried for `queens`, whose `safe` is
       given the instances of `Int` as a local function with a class in its
