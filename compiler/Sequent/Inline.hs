@@ -255,6 +255,16 @@ inline' time find once self producer = do
                   named = [(mark name, argument) | (name, argument) <- pairs, not (atom argument)]
                   bind (name, argument) rest = Cut argument (MuTilde Binder {name, strategy = ByNeed} rest)
               pure $ Cut (Mu (mark covariable) (foldr bind (renew written mark body) named)) result
+        -- A function that never goes on to what it is given, as one that
+        -- throws does not, is given nothing to go on to: what would have
+        -- gone on is not kept for it, and need not be made.
+        Cut (Global global) (Apply arguments result)
+          | Just (Function parameters covariable body) <- find global,
+            length parameters == length arguments,
+            mentions covariable body == 0,
+            not (never' result) -> do
+              arguments <- traverse (producerx depth) arguments
+              pure $ Cut (Global global) (Apply arguments (Case [] Nothing))
         -- A definition that is a value written down: forcing it gives it.
         Cut (Global global) (Force result)
           | Just (Thunk covariable (Cut value (Covariable given))) <- find global,
@@ -862,6 +872,13 @@ expandable covariable self body
       Apply arguments result -> concatMap producerExits arguments ++ consumerExits result
       Force result -> consumerExits result
       Covariable _ -> []
+
+-- |
+-- Whether a consumer is the one that is given what is never gone on to.
+never' :: Consumer -> Bool
+never' = \case
+  Case [] Nothing -> True
+  _ -> False
 
 -- |
 -- How many times a covariable is mentioned.
