@@ -42,7 +42,7 @@ import Data.List.Reverse (List (..))
 import qualified Data.List.Reverse as Reverse
 import qualified Data.Map as Map
 import Data.Ratio (denominator, numerator)
-import Data.Text (Text)
+import Data.Text (Text, pack)
 import qualified Data.Strict.Maybe as Strict (Maybe (..))
 import qualified Data.Vector.Strict as Strict (Vector)
 import qualified Data.Vector.Strict as Strict.Vector
@@ -636,6 +636,84 @@ instance (Monadic syntax) => Simplify (Semantic.Statements syntax) where
                   }
             }
 
+-- |
+-- A list comprehension, as GHC makes one: the list is made by @build@,
+-- given what puts an element before the rest and what comes after the last,
+-- so that what goes through it can be given the elements instead. A
+-- generator goes through its list with @listFoldr@, its pattern matched
+-- against each element, and an element it does not match is skipped; a
+-- guard goes on or skips to the rest; and what is made is put before the
+-- rest. Made through the list monad instead, each element was put in a list
+-- of one, or of none, which was then gone through.
+comprehension :: Semantic.Statements 'Semantic.Statements.Comprehension Normal Check scope -> Expression scope
+comprehension statements =
+  helper "build"
+    `call` Lambda
+      { body =
+          Lambda
+            { body = made (shift (shift statements)) (shift lambdaVariable) lambdaVariable
+            }
+      }
+  where
+    helper name = Helper {helperName = pack name}
+    wildcard =
+      Pattern.Wildcard
+        { startPosition = (),
+          levity = Solved Type.lazy,
+          names = Map.empty,
+          forced = False
+        }
+    -- What a comprehension makes, given what puts an element before the
+    -- rest and what comes after it.
+    made ::
+      Semantic.Statements 'Semantic.Statements.Comprehension Normal Check scope' ->
+      Expression scope' ->
+      Expression scope' ->
+      Expression scope'
+    made statements before after = case statements of
+      Semantic.Statements.Done {done} -> before `call` simplify done `call` after
+      Semantic.Statements.Run {effect, after = rest} -> ifx (simplify effect) (made rest before after) after
+      Semantic.Statements.Let {declarations = Semantic.Declarations.Local declarations, body} ->
+        Let
+          { declarations = Declarations.simplify declarations,
+            letBody = made body (shift before) (shift after)
+          }
+      Semantic.Statements.Bind {patternx, effect, thenx, fail} ->
+        helper "listFoldr" `call` each `call` after `call` simplify effect
+        where
+          -- Given an element and what comes after it: what the rest of the
+          -- comprehension makes of the element, if it matches, put before
+          -- that, and that alone if it does not.
+          each =
+            Definition.desugar $
+              if fail
+                then Definition.Alternative {definition = matched, alternative = Definition {definition = skipped}}
+                else Definition {definition = matched}
+          matched =
+            Bound
+              { patternx = Pattern.anonymize patternx,
+                body =
+                  Bound
+                    { patternx = wildcard,
+                      body =
+                        Function.Plain
+                          { plain =
+                              RightHandSide.Done
+                                { done = made (shift thenx) (shift (shift before)) (patternVariable Type.lazy)
+                                }
+                          }
+                    }
+              }
+          skipped =
+            Bound
+              { patternx = wildcard,
+                body =
+                  Bound
+                    { patternx = wildcard,
+                      body = Function.Plain {plain = RightHandSide.Done {done = patternVariable Type.lazy}}
+                    }
+              }
+
 simplifyConstructor ::
   Constructor.Index scope ->
   Semantic.ConstructorInfo scope ->
@@ -825,7 +903,7 @@ instance Simplify Semantic.Expression where
         argument element = TypeLambda.mono Type.lazy (simplify element)
     Semantic.List {items} ->
       foldr (cons . simplify) nil items
-    Semantic.Comprehension {statements} -> simplify statements
+    Semantic.Comprehension {statements} -> comprehension statements
     Semantic.Let {declarations = Semantic.Declarations.Local declarations, letBody} ->
       Let
         { declarations = Declarations.simplify declarations,
