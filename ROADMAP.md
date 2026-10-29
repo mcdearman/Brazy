@@ -1670,13 +1670,12 @@ Missing:
       fractions, `Double` if one is and `Integral` is not, and neither if
       both are (tests `defaulting-double` and `IntegralFraction`).
       A module's `default` declaration lists the types in its place, in its
-      order, of `Integer`, `Int`, `Double` and `Float`, and each is taken
-      only for the classes it is an instance of; `Bounded` takes part too,
-      which `Int` is an instance of (test `default-declaration`, whose
-      modules have each their own; `default ()` and a list of another type
-      are refused, tests `DefaultNone` and `DefaultBool`). The declaration
-      is resolved with the module, and the checker gives each module's
-      definitions the list it has (`defaulting`, in the context). For this
+      order, and each is taken only for the classes it is an instance of;
+      `Bounded` takes part too, which `Int` is an instance of (test
+      `default-declaration`, whose modules have each their own; `default ()`
+      is refused, test `DefaultNone`). The declaration is resolved with the
+      module, and the checker gives each module's definitions the list it
+      has (`defaulting`, in the context, shifted as the context is). For this
       `Float` and `Double` are
       builtin types, and `Floating`, `RealFrac` and `RealFloat` builtin
       classes, as `Int` and `Fractional` are: their instances are newtypes
@@ -1696,9 +1695,12 @@ Missing:
       have (test `defaulting-lookup`). A pattern keeps a tree of its own,
       since what is inside a match is checked with it; so does the
       checking of types
-- [ ] What defaulting does not do yet. A `default` declaration lists only
-      `Integer`, `Int`, `Double` and `Float`, where the report has it list
-      any type that is an instance of `Num`
+- [x] A `default` declaration lists any type, as the report has it, where
+      it listed only `Integer`, `Int`, `Double` and `Float`: a type of the
+      program's own is taken as any other is (test `default-own`). Each has
+      to be an instance of `Num`, which is asked of it when something is
+      taken to be one of them, and a type that is not is an error there
+      (test `DefaultBool`)
 - [x] Floating point. A `Float` or a `Double` is a block of its own in the
       native heap, which holds the 64 bits of a double; a `Float` is kept
       as the double it is exactly, and what is worked out of it is worked
