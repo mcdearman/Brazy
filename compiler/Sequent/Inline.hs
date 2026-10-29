@@ -21,7 +21,7 @@
 -- The bodies that are put in are those of the definitions as they were
 -- before this was done to them. So this can be done over again, each time
 -- reaching one call further, and it always ends.
-module Sequent.Inline (inline, specialize, copy, isCopy) where
+module Sequent.Inline (inline, specialize, copy, isCopy, uses) where
 
 import Control.Monad.ST (ST, runST)
 import Data.Map (Map)
@@ -129,20 +129,55 @@ data Made
 -- one that goes through a list from the left ('foldsLeft'), though not as
 -- much: allowed as much, the compiler's LLVM was 3% longer and nothing ran
 -- faster.
-limit, folding, evidenced :: Int
+limit, folding, evidenced, alone :: Int
 limit = 30
 folding = 50
 evidenced = 100
+-- | A function defined inside another that is called in one place only
+-- is put there however big it is, up to this.
+alone = 400
+
+-- |
+-- Whether a definition was defined inside another, and so is only called
+-- from the module it is in.
+inner :: Global.Global -> Bool
+inner Global.Global {name} = Text.any (== '%') name
+
+-- |
+-- How many times each definition is named in some.
+uses :: [Producer] -> Map Global.Global Int
+uses = foldr producer Map.empty
+  where
+    producer value counts = case value of
+      Global global -> Map.insertWith (+) global 1 counts
+      Constructor _ fields -> foldr producer counts fields
+      Mu _ body -> statement body counts
+      Function _ _ body -> statement body counts
+      Thunk _ body -> statement body counts
+      _ -> counts
+    consumer value counts = case value of
+      MuTilde _ body -> statement body counts
+      Case alternatives otherwise ->
+        foldr (\(Alternative _ _ body) -> statement body) (maybe counts (`statement` counts) otherwise) alternatives
+      Apply arguments result -> foldr producer (consumer result counts) arguments
+      Force result -> consumer result counts
+      Covariable _ -> counts
+    statement value counts = case value of
+      Cut left right -> producer left (consumer right counts)
+      Primitive _ arguments result -> foldr producer (consumer result counts) arguments
+      LetRec bindings body -> foldr (producer . snd) (statement body counts) bindings
+      Abort -> counts
+      Halt -> counts
 
 -- |
 -- A definition with the small functions it calls put in. It is given which
 -- time over this is, what each definition was the time before, and the name
 -- of the definition.
-inline :: Int -> (Global.Global -> Maybe Producer) -> Global.Global -> Producer -> Producer
-inline time find self producer = runST (inline' time find self producer)
+inline :: Int -> (Global.Global -> Maybe Producer) -> (Global.Global -> Bool) -> Global.Global -> Producer -> Producer
+inline time find once self producer = runST (inline' time find once self producer)
 
-inline' :: Int -> (Global.Global -> Maybe Producer) -> Global.Global -> Producer -> ST s Producer
-inline' time find self producer = do
+inline' :: Int -> (Global.Global -> Maybe Producer) -> (Global.Global -> Bool) -> Global.Global -> Producer -> ST s Producer
+inline' time find once self producer = do
   sites <- newSTRef (0 :: Int)
   let producerx = \case
         Constructor tag fields -> Constructor tag <$> traverse producerx fields
@@ -169,7 +204,8 @@ inline' time find self producer = do
             -- A parameter that is a value is given one, which is only
             -- written where it was when it is a name or a number.
             and [strategy == ByNeed || atom argument | (Binder {strategy}, argument) <- zip parameters arguments],
-            size body <= (if or [strategy == ByValue | Binder {strategy} <- parameters] || making body then evidenced else if foldsLeft body then folding else limit),
+            size body <= (if or [strategy == ByValue | Binder {strategy} <- parameters] || making body then evidenced else if foldsLeft body then folding else limit)
+              || (inner global && once global && size body <= alone),
             Set.notMember global (globals body) -> do
               arguments <- traverse producerx arguments
               result <- consumer result
