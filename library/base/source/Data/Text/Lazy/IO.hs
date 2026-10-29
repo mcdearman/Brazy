@@ -7,7 +7,6 @@ import qualified System.IO.Internal as Internal
 import Prelude hiding (appendFile, getContents, getLine, interact, putStr, putStrLn, readFile, writeFile)
 import qualified Prelude
 import Data.Text.Lazy (Text)
-import Hazy.Prelude (placeholder)
 import System.IO (Handle)
 
 readFile :: FilePath -> IO Text
