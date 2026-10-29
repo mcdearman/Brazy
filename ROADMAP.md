@@ -1437,6 +1437,23 @@ kept, and eval and apply:
       program owns is given back by the program, as a constructed value is.
       `nbody` takes 0.83 seconds where it took 1.18, `spectral` 0.48, and
       `queens` 0.66
+- [x] A set or a map made from a list is made as the list is gone through.
+      `Data.Set.fromList` and `Data.Map.fromList`, and the `unions`, went
+      through it with the lazy `foldl`, so a thunk for each element was held
+      until the last: `set` took 94 MB where GHC takes 8, and takes 2.7 MB
+      with `foldl'`, as containers has it (test `strict-containers`)
+- [x] A comparison of two `Int`s written in the program is its answer.
+      Dividing by a number written in the program compared it with nothing,
+      to throw, and as the throw was given where the program went on after
+      the division, that place was a consumer made at each division: `even`
+      and `div` by 2 made two at each step of `collatz`. It makes one at each
+      step now, for the `1 +` still to be done, and takes 0.61 seconds
+      where it took 1.20, twice GHC's
+- [x] A thunk whose body has taken what it held, and that nothing else
+      refers to, is given back by the program to the list of free blocks
+      of its size, where it went through the runtime: an eighth of the time
+      of `queens`, which takes 0.55 seconds where it took 0.66, and `fuse`
+      0.54 where it took 0.68
 - [ ] A function that does not call itself, given an instance that is
       known, is not copied for it. Tried for `queens`, whose `safe` is
       given the instances of `Int` as a local function with a class in its

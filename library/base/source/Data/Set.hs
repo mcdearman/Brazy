@@ -72,6 +72,7 @@ module Data.Set
 where
 
 import Prelude hiding (drop, filter, foldl, foldr, map, null, splitAt, take)
+import qualified Data.Foldable as Foldable (foldl')
 import qualified Prelude
 
 -- A set is a tree balanced by weight: neither side of a node has more than
@@ -109,7 +110,7 @@ singleton :: a -> Set a
 singleton x = Bin 1 x Tip Tip
 
 fromList :: (Ord a) => [a] -> Set a
-fromList = Prelude.foldl (\set x -> insert x set) Tip
+fromList = Foldable.foldl' (\set x -> insert x set) Tip
 
 fromAscList :: (Eq a) => [a] -> Set a
 fromAscList = fromDistinctAscList . adjacent
@@ -221,7 +222,7 @@ union a@(Bin _ x l r) b = case splitMember x b of
   (smaller, _, larger) -> link x (union l smaller) (union r larger)
 
 unions :: (Foldable f, Ord a) => f (Set a) -> Set a
-unions = Prelude.foldl union Tip
+unions = Foldable.foldl' union Tip
 
 difference :: (Ord a) => Set a -> Set a -> Set a
 difference Tip _ = Tip

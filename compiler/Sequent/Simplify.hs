@@ -16,7 +16,9 @@
 --
 -- The rest is for what is left when a function's body is put where it is
 -- called ('Sequent.Inline'). A value that is constructed and at once taken
--- apart is not constructed: the alternative for it is gone to. A consumer
+-- apart is not constructed: the alternative for it is gone to, and so is
+-- the one for the answer of a comparison of two numbers written in the
+-- program, as dividing by one compares it with nothing. A consumer
 -- that is named and only ever given constructed values, each choosing an
 -- alternative of its own, is put where they are, so that a comparison goes
 -- straight on to what its answer chooses. A value that is forced is itself.
@@ -38,6 +40,7 @@ import Data.List (nub)
 import qualified Data.Set as Set
 
 import Data.Text (Text)
+import Sequent.Primitive (Primitive (IntEqual, IntLessThenEqual))
 import qualified Sequent.Tree as Literal (Literal (..))
 import Sequent.Tree
   ( Alternative (..),
@@ -162,7 +165,11 @@ instance Simplify Alternative where
 instance Simplify Statement where
   simplify = \case
     Cut producer consumer -> cut (simplify producer) (simplify consumer)
-    Primitive primitive arguments result -> Primitive primitive (simplify arguments) (simplify result)
+    Primitive primitive arguments result
+      | Just answer <- answered primitive arguments' -> cut answer (simplify result)
+      | otherwise -> Primitive primitive arguments' (simplify result)
+      where
+        arguments' = simplify arguments
     -- One thing that does not refer to itself is only named.
     LetRec [(name, value)] body
       | Set.notMember name (free value) ->
@@ -272,6 +279,17 @@ cut producer consumer = case (producer, consumer) of
         0 -> rest
         _ -> simplify (replace name producer rest)
   _ -> Cut producer consumer
+
+-- |
+-- What a primitive gives, if it is a comparison of two @Int@s that are
+-- written in the program: @False@ or @True@, constructed.
+answered :: Primitive -> [Producer] -> Maybe Producer
+answered primitive arguments = case (primitive, arguments) of
+  (IntEqual, [Literal (Literal.Int left), Literal (Literal.Int right)]) -> Just (bool (left == right))
+  (IntLessThenEqual, [Literal (Literal.Int left), Literal (Literal.Int right)]) -> Just (bool (left <= right))
+  _ -> Nothing
+  where
+    bool answer = Constructor (fromEnum answer) []
 
 -- |
 -- Which of some alternatives is for a tag.
