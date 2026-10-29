@@ -4,6 +4,7 @@ import qualified Data.Vector.Strict as Strict
 import qualified Semantic.Check.Info.Constructor as Solved
 import Semantic.Check.Temporary.EntryInfo (EntryInfo)
 import qualified Semantic.Check.Temporary.EntryInfo as EntryInfo
+import {-# SOURCE #-} Semantic.Check.Context (Context)
 import qualified Semantic.Unify as Unify
 import Syntax.Position (Position)
 
@@ -18,13 +19,13 @@ data ConstructorInfo s scope
         held :: !(Strict.Vector (Position, Unify.Evidence s scope))
       }
 
-solve :: ConstructorInfo s scope -> Unify.Solve s (Solved.ConstructorInfo scope)
-solve = \case
+solve :: Context s scope -> ConstructorInfo s scope -> Unify.Solve s (Solved.ConstructorInfo scope)
+solve context = \case
   ConstructorInfo {entries} -> do
-    entries <- traverse EntryInfo.solve entries
+    entries <- traverse (EntryInfo.solve context) entries
     pure Solved.ConstructorInfo {entries}
   Newtype -> pure Solved.Newtype
   Holding {entries, held} -> do
-    entries <- traverse EntryInfo.solve entries
-    held <- traverse (uncurry Unify.solveEvidence) held
+    entries <- traverse (EntryInfo.solve context) entries
+    held <- traverse (uncurry (Unify.solveEvidence context)) held
     pure Solved.Holding {entries, held}

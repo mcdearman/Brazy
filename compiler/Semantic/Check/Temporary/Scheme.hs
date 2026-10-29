@@ -53,7 +53,7 @@ check context Semantic.Scheme {startPosition, implicit, parameters, constraints,
 
 solve :: Context s scope -> Scheme s scope -> Unify.Solve s (Solved.Scheme Position Check scope)
 solve context Scheme {startPosition, implicit, parameters = wobbly, constraints, result} = do
-  parameters <- traverse TypePattern.solve wobbly
+  parameters <- traverse (TypePattern.solve context) wobbly
   constraints <- Constraints.solve (augment wobbly context) constraints
   result <- Type.solve (augment wobbly context) result
   pure $ Solved.Scheme {startPosition, implicit, parameters, constraints, result}

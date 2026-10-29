@@ -206,8 +206,8 @@ showsPrec context position typeIndex datax = do
         inside <- Apart.within context position datay (shift typeIndex) constructor
         evidence <- traverse (Unify.constrain inside position Type2.Show) types
         pure $ do
-          evidence <- traverse (Unify.solveEvidence position) evidence
-          info <- ConstructorInfo.solve $ ConstructorInstance.info constructor
+          evidence <- traverse (Unify.solveEvidence context position) evidence
+          info <- ConstructorInfo.solve context $ ConstructorInstance.info constructor
           let constructor = Constructor.Index {typeIndex, constructorIndex}
           pure $ case info of
             Semantic.ConstructorInfo {entries} ->

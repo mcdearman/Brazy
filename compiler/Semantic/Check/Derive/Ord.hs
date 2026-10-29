@@ -48,8 +48,8 @@ compare context position typeIndex datax = do
         inside <- Apart.within context position datay (shift typeIndex) constructor
         evidence <- traverse (Unify.constrain inside position Type2.Ord) types
         pure $ do
-          evidence <- traverse (Unify.solveEvidence position) evidence
-          info <- ConstructorInfo.solve $ ConstructorInstance.info constructor
+          evidence <- traverse (Unify.solveEvidence context position) evidence
+          info <- ConstructorInfo.solve context $ ConstructorInstance.info constructor
           let index =
                 Constructor.Index
                   { typeIndex,
@@ -103,7 +103,7 @@ compare context position typeIndex datax = do
   definitions <- sequence $ zipWith generate [0 ..] (toList constructors)
   pure $ do
     definitions <- sequence definitions
-    fromEnum <- shift . shift <$> fromEnum' (shift typeIndex) constructors
+    fromEnum <- shift . shift <$> fromEnum' context (shift typeIndex) constructors
     body <-
       pure $
         Expression.Lambda $

@@ -10,6 +10,7 @@ import Core.Tree.Type (TypeF)
 import Data.Kind (Constraint)
 import qualified Data.Kind as Kind
 import Data.Void (Void)
+import {-# SOURCE #-} Semantic.Check.Context (Context)
 import Semantic.Scope (Environment)
 import qualified Semantic.Shift0 as Shift0
 import {-# SOURCE #-} qualified Semantic.Unify.Evidence as Evidence (Logical)
@@ -28,6 +29,7 @@ instance Monad (Solve s)
 type SolveType :: (Kind.Type -> Environment -> Kind.Type) -> Constraint
 class SolveType typef where
   solveWith ::
+    Context s scopex ->
     Shift0.Category scopex scope ->
     Position ->
     typef (Logical s scopex) scope ->
@@ -35,6 +37,7 @@ class SolveType typef where
 
 solve ::
   (SolveType typef) =>
+  Context s scope ->
   Position ->
   typef (Logical s scope) scope ->
   Solve s (typef Void scope)
@@ -50,6 +53,7 @@ instance (SolveType typef) => SolveType (ForallOver typef)
 type SolveEvidence :: (Kind.Type -> Kind.Type -> Environment -> Kind.Type) -> Constraint
 class SolveEvidence evidencef where
   solveEvidenceWith ::
+    Context s scopex ->
     Shift0.Category scopex scope ->
     Position ->
     evidencef (Evidence.Logical s scopex) (Type.Logical s scopex) scope ->
@@ -57,6 +61,7 @@ class SolveEvidence evidencef where
 
 solveEvidence ::
   (SolveEvidence evidencef) =>
+  Context s scope ->
   Position ->
   evidencef (Evidence.Logical s scope) (Type.Logical s scope) scope ->
   Solve s (evidencef Void Void scope)

@@ -58,7 +58,7 @@ check context typex = \case
     thenx <- check (Pattern.augment patternx context) (shiftLogical $ monad # output) thenx
     Pattern.sealed context patternx [input, monad # output]
     pure $ do
-      patternx <- Pattern.solve patternx
+      patternx <- Pattern.solve context patternx
       effect <- effect
       thenx <- thenx
       pure

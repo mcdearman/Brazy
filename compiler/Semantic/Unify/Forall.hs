@@ -174,8 +174,8 @@ generalizeBody position context requiring varying (Generalize run) = do
         result
       }
       ::: do
-        parameters <- traverse (solve position) parameters
-        constraints <- solve position constraints
+        parameters <- traverse (solve context position) parameters
+        constraints <- solve context position constraints
         result <- term
         pure
           Simple.TypeLambdaOver

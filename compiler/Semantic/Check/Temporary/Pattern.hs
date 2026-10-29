@@ -521,15 +521,15 @@ unnamed startPosition index =
       field = Solved.Wildcard {startPosition, levity = Solved Type.lazy, names = Map.empty, forced = Prelude.False}
     }
 
-solve :: Pattern s scope -> Unify.Solve s (Solved.Pattern Position Check scope)
-solve = \case
+solve :: Context s scope -> Pattern s scope -> Unify.Solve s (Solved.Pattern Position Check scope)
+solve context = \case
   Wildcard {startPosition, levity, names, forced} -> do
-    levity <- Unify.solve startPosition levity
+    levity <- Unify.solve context startPosition levity
     pure Solved.Wildcard {startPosition, levity = Solved levity, names, forced}
   Polymorphic {position, names} ->
     pure Solved.Wildcard {startPosition = position, levity = Solved Type.lazy, names, forced = Prelude.False}
   Match {startPosition, levity, names, irrefutable, match} -> do
-    levity <- Unify.solve startPosition levity
+    levity <- Unify.solve context startPosition levity
     match <- case match of
       Constructor
         { constructorPosition,
@@ -538,11 +538,11 @@ solve = \case
           evident,
           constructorInfo
         } -> do
-          patterns <- traverse solve patterns
+          patterns <- traverse (solve context) patterns
           -- The evidence the value holds is matched as well, so that it has
           -- a name: it comes after everything the pattern says.
           patterns <- pure (patterns <> Strict.Vector.replicate evident Solved.Wildcard {startPosition = constructorPosition, levity = Solved Type.lazy, names = Map.empty, forced = Prelude.False})
-          constructorInfo <- ConstructorInfo.solve constructorInfo
+          constructorInfo <- ConstructorInfo.solve context constructorInfo
           pure
             Solved.Constructor
               { constructorPosition,
@@ -560,11 +560,11 @@ solve = \case
           constructorInfo
         } -> do
           let solveField Field {index, field} = do
-                field <- solve field
+                field <- solve context field
                 pure Solved.Field {index, field}
           fields <- traverse solveField fields
           fields <- pure $ fields <> Strict.Vector.fromList (unnamed constructorPosition <$> [arity .. arity + evident - 1])
-          constructorInfo <- ConstructorInfo.solve constructorInfo
+          constructorInfo <- ConstructorInfo.solve context constructorInfo
           pure
             Solved.Record
               { constructorPosition,
@@ -574,11 +574,11 @@ solve = \case
                 failable = Unused
               }
       List {items} -> do
-        items <- traverse solve items
+        items <- traverse (solve context) items
         pure Solved.List {items}
       Integer {integer, evidence, equal} -> do
-        evidence <- Unify.solveEvidence startPosition evidence
-        equal <- Unify.solveEvidence startPosition equal
+        evidence <- Unify.solveEvidence context startPosition evidence
+        equal <- Unify.solveEvidence context startPosition equal
         pure
           Solved.Integer
             { integer,
@@ -586,8 +586,8 @@ solve = \case
               equal = Solved equal
             }
       Float {float, evidence, equal} -> do
-        evidence <- Unify.solveEvidence startPosition evidence
-        equal <- Unify.solveEvidence startPosition equal
+        evidence <- Unify.solveEvidence context startPosition evidence
+        equal <- Unify.solveEvidence context startPosition equal
         pure
           Solved.Float
             { float,

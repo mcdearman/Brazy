@@ -53,7 +53,7 @@ checkManual outer context@Context {termEnvironment} typex declaration = case dec
     Pattern.bindable position patternx
     (levity, typex') <- pure $ patternx Pattern.! bound
     Unify.unify context position typex typex'
-    pure $ piece outer (shift index) instanciation levity patternx bound
+    pure $ piece context outer (shift index) instanciation levity patternx bound
 
 -- |
 -- Check a definition whose type is worked out. The position is the
@@ -81,11 +81,12 @@ checkAuto outer context@Context {termEnvironment} typex declaration = case decla
     Pattern.bindable position patternx
     (levity, typex') <- pure $ patternx Pattern.! bound
     Unify.unify context position typex typex'
-    pure $ piece outer index instanciation levity patternx bound
+    pure $ piece context outer index instanciation levity patternx bound
 
 -- |
 -- One of the things a pattern that is defined names.
 piece ::
+  Context s scope ->
   Position ->
   Term.Index scope ->
   Unify.Instanciation s scope ->
@@ -93,10 +94,10 @@ piece ::
   Pattern s scope ->
   Bound ->
   Unify.Solve s (Solved.Definition2 Single mark Group Check scope)
-piece position index instanciation levity patternx bound = do
-  instanciation <- Unify.solveEvidence position instanciation
-  patternx <- Pattern.solve patternx
-  levity <- Unify.solve position levity
+piece context position index instanciation levity patternx bound = do
+  instanciation <- Unify.solveEvidence context position instanciation
+  patternx <- Pattern.solve context patternx
+  levity <- Unify.solve context position levity
   pure $
     Solved.Piece
       Solved.Choice

@@ -80,6 +80,7 @@ data Solve solve logical s scope = Solve
     logical ::
       forall typef.
       (SolveType typef) =>
+      Context s scope ->
       Position ->
       typef (Unify.Logical s scope) scope ->
       ST s (typef logical scope)
@@ -89,14 +90,14 @@ delay :: Solve (Unify.Solve s) (Unify.Logical s scope) s scope
 delay =
   Solve
     { solve = pure,
-      logical = const pure
+      logical = \_ _ -> pure
     }
 
 now :: Solve Identity Void s scope
 now =
   Solve
     { solve = fmap Identity . Unify.runSolve,
-      logical = (.) Unify.runSolve . Unify.solve
+      logical = \context position -> Unify.runSolve . Unify.solve context position
     }
 
 check ::
@@ -206,22 +207,23 @@ check position Solve {solve, logical} reflection information = \case
                           Nothing -> error "a definition that was put off was never checked"
                   pure $ types Unify.::: solved
             set <- solve set
-            types <- logical position types
+            types <- logical context position types
             pure $ Solved types :::: (Implicit.Check <$> set)
         }
     where
       Identity (_ :::: Identity (Implicit.Resolve (Set set))) = group
 
 solveDefinition ::
+  Context s scope ->
   Position ->
   Definition4 (Unify.Solve s) (Unify.Logical s scope) locality Identity Layout.Group Check scope ->
   Unify.Solve s (Definition4 Identity Void locality Identity Layout.Group Check scope)
-solveDefinition position = \case
+solveDefinition context position = \case
   (annotation ::: Identity definition) -> do
     definition <- definition
     pure $ annotation ::: Identity (Identity definition)
   Link link id -> pure (Link link id)
   Group (Identity (Solved types :::: set)) -> do
-    types <- Unify.solve position types
+    types <- Unify.solve context position types
     set <- set
     pure $ Group $ Identity (Solved types :::: pure set)

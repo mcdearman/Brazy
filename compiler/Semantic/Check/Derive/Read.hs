@@ -177,8 +177,8 @@ readsPrec context position typeIndex datax = do
         inside <- Apart.within context position datay (shift typeIndex) constructorx
         evidence <- traverse (Unify.constrain inside position Type2.Read . entry) (toList entries)
         pure $ do
-          evidence <- traverse (Unify.solveEvidence position) evidence
-          info <- ConstructorInfo.solve $ ConstructorInstance.info constructorx
+          evidence <- traverse (Unify.solveEvidence context position) evidence
+          info <- ConstructorInfo.solve context $ ConstructorInstance.info constructorx
           let printed infixed = unpack $ toStrict $ toLazyText $ printConstructor infixed name
               expect = map Expect
               (past, steps) = case syntax of

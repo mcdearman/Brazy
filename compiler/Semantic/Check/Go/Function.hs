@@ -33,6 +33,6 @@ check context typex = \case
     function <- check (Pattern.augment patternx context) (shiftLogical result) function
     Pattern.sealed context patternx [argument, result]
     pure $ do
-      patternx <- Pattern.solve patternx
+      patternx <- Pattern.solve context patternx
       function <- function
       pure Solved.Bound {functionPosition, patternx, function}

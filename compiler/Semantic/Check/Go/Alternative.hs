@@ -23,6 +23,6 @@ check context typex binder Semantic.Alternative {parameter, rightHandSide} = do
   rightHandSide <- RightHandSide.check (Pattern.augment parameter context) (shiftLogical typex) rightHandSide
   Pattern.sealed context parameter [binder, typex]
   pure $ do
-    parameter <- Pattern.solve parameter
+    parameter <- Pattern.solve context parameter
     rightHandSide <- rightHandSide
     pure Solved.Alternative {parameter, rightHandSide}

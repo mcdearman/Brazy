@@ -1560,13 +1560,11 @@ Missing:
 
 - [x] Constrained type defaulting, to `Integer` and then `Double`, as the
       report's `default (Integer, Double)` has it. A type that is never
-      worked out is taken to be one of them when every class it is
-      constrained by is one of `Num`, `Real`, `Integral`, `Fractional`,
-      `Floating`, `RealFrac`, `RealFloat`, `Enum`, `Eq`, `Ord`, `Show` and
-      `Read`, and at least one is a class of numbers: `Integer` if none is
-      a class of fractions, `Double` if one is and `Integral` is not, and
-      neither if both are (tests `defaulting-double` and
-      `IntegralFraction`).
+      worked out, whose classes are each asked of it alone and at least
+      one of which is a class of numbers, is taken to be the first of them
+      that is an instance of every one: `Integer` if none is a class of
+      fractions, `Double` if one is and `Integral` is not, and neither if
+      both are (tests `defaulting-double` and `IntegralFraction`).
       A module's `default` declaration lists the types in its place, in its
       order, of `Integer`, `Int`, `Double` and `Float`, and each is taken
       only for the classes it is an instance of; `Bounded` takes part too,
@@ -1579,19 +1577,24 @@ Missing:
       builtin types, and `Floating`, `RealFrac` and `RealFloat` builtin
       classes, as `Int` and `Fractional` are: their instances are newtypes
       in `Hazy.Helper`, as the other builtin types' are
-- [ ] Defaulting done Freddy's way. What is there now is a stopgap: it knows
-      only `Integer`, `Double` and twelve builtin classes, because nothing is
-      at hand to look an instance up with when types are finally worked
-      out. Freddy's
-      plan, which will be followed here, is to do away with most of
-      `Semantic.Check.Temporary` and make it `Semantic.Check.Go`, where
-      checking gives back `ST s (Unify.Solve s ..)`. The inner step then
-      closes over the `Context`, and defaulting can try each candidate type
-      through the ordinary instance lookup. That gives `default`
-      declarations and classes of a program's own. When it is done, the
-      `Fallback` in `Semantic.Unify.Evidence` goes. Not now. Until then a
-      type constrained by a class of the library, as `Ix` is, is not
-      defaulted, where the report would default it
+- [x] Defaulting done Freddy's way. Checking an expression, a match, a
+      definition and the rest of a term gives back what solving it gives,
+      `ST s (Unify.Solve s ..)`, in `Semantic.Check.Go` (they were in
+      `Semantic.Check.Temporary`, as trees of their own solved afterwards).
+      So what is solved is solved where it was checked, and solving is
+      given the context there. Evidence that is not worked out says which
+      type variable it waits on, and when solving gets to it the variable
+      is taken to be the first type of the module's default list that is
+      an instance of every class asked of it, each instance looked up as
+      any other is (`defaulted`, in `Semantic.Unify.Type1`). A class of
+      the library, as `Ix` is, can be asked of it, as the report has it,
+      and so can a class of the program's own, which the report does not
+      have (test `defaulting-lookup`). A pattern keeps a tree of its own,
+      since what is inside a match is checked with it; so does the
+      checking of types
+- [ ] What defaulting does not do yet. A `default` declaration lists only
+      `Integer`, `Int`, `Double` and `Float`, where the report has it list
+      any type that is an instance of `Num`
 - [x] Floating point. A `Float` or a `Double` is a block of its own in the
       native heap, which holds the 64 bits of a double; a `Float` is kept
       as the double it is exactly, and what is worked out of it is worked

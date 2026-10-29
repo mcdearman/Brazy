@@ -7,7 +7,6 @@ module Semantic.Default
   ( Default (..),
     standard,
     typeOf,
-    fractional,
   )
 where
 
@@ -30,12 +29,3 @@ typeOf = \case
   Int -> Type2.Int
   Double -> Type2.Double
   Float -> Type2.Float
-
--- | Whether it is an instance of the classes of fractions, and so not of
--- @Integral@.
-fractional :: Default -> Bool
-fractional = \case
-  Double -> True
-  Float -> True
-  Integer -> False
-  Int -> False

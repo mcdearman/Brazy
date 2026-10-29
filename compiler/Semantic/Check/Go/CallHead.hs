@@ -44,11 +44,11 @@ check context@Context {termEnvironment} typex Semantic.Variable {variablePositio
     Wobbly scheme -> do
       (typex', instanciation) <- Unify.instanciate context variablePosition scheme
       Unify.unify context variablePosition typex typex'
-      pure $ variable variablePosition index instanciation
+      pure $ variable context variablePosition index instanciation
     Rigid scheme -> do
       (typex', instanciation) <- instanciate context variablePosition scheme
       Unify.unify context variablePosition typex typex'
-      pure $ variable variablePosition index instanciation
+      pure $ variable context variablePosition index instanciation
 check context@Context {typeEnvironment} typex Semantic.Constructor {constructorPosition, constructor = index} =
   do
     let Constructor.Index typeIndex constructorIndex = index
@@ -63,7 +63,7 @@ check context@Context {typeEnvironment} typex Semantic.Constructor {constructorP
     ConstructorInstance.mark context instancex
     Unify.unify context constructorPosition typex typex'
     constructorInfo <- ConstructorInstance.built context instancex
-    pure $ constructor constructorPosition index constructorInfo
+    pure $ constructor context constructorPosition index constructorInfo
 check
   context@Context {typeEnvironment}
   typex
@@ -78,7 +78,7 @@ check
     let typex' = DataInstance.selected instancex typeIndex selectorIndex -#> selected
     Unify.unify context selectorPosition typex typex'
     pure $ do
-      selectorInfo <- SelectorInfo.solve selectorInfo
+      selectorInfo <- SelectorInfo.solve context selectorInfo
       pure
         Solved.Selector
           { selectorPosition,
@@ -101,8 +101,8 @@ check
         (typex', instanciation) <- Unify.instanciate context methodPosition function
         Unify.unify context methodPosition typex typex'
         pure $ do
-          evidence <- Unify.solveEvidence methodPosition evidence
-          instanciation <- Unify.solveEvidence methodPosition instanciation
+          evidence <- Unify.solveEvidence context methodPosition evidence
+          instanciation <- Unify.solveEvidence context methodPosition instanciation
           pure
             Solved.Method
               { methodPosition,
@@ -114,12 +114,13 @@ check
 
 -- | A variable, used as the type it is given.
 variable ::
+  Context s scope ->
   Position ->
   Term.Index scope ->
   Unify.Instanciation s scope ->
   Unify.Solve s (Solved.CallHead layout Check scope)
-variable variablePosition variable instanciation = do
-  instanciation <- Unify.solveEvidence variablePosition instanciation
+variable context variablePosition variable instanciation = do
+  instanciation <- Unify.solveEvidence context variablePosition instanciation
   pure
     Solved.Variable
       { variablePosition,
@@ -129,12 +130,13 @@ variable variablePosition variable instanciation = do
 
 -- | A constructor, made into what it makes.
 constructor ::
+  Context s scope ->
   Position ->
   Constructor.Index scope ->
   ConstructorInfo s scope ->
   Unify.Solve s (Solved.CallHead layout Check scope)
-constructor constructorPosition constructor constructorInfo = do
-  constructorInfo <- ConstructorInfo.solve constructorInfo
+constructor context constructorPosition constructor constructorInfo = do
+  constructorInfo <- ConstructorInfo.solve context constructorInfo
   pure
     Solved.Constructor
       { constructorPosition,

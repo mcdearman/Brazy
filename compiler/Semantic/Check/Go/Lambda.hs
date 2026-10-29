@@ -35,6 +35,6 @@ check context typex = \case
     body <- check (Pattern.augment parameter context) (shiftLogical resultType) body
     Pattern.sealed context parameter [parameterType, resultType]
     pure $ do
-      parameter <- Pattern.solve parameter
+      parameter <- Pattern.solve context parameter
       body <- body
       pure Solved.Bound {boundPosition, parameter, body}

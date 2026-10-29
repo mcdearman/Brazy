@@ -38,7 +38,7 @@ check context typex = \case
     effect <- Expression.check context (monad # ignore) effect
     after <- check context typex after
     pure $ do
-      evidence <- Unify.solveEvidence startPosition evidence
+      evidence <- Unify.solveEvidence context startPosition evidence
       effect <- effect
       after <- after
       pure
@@ -63,8 +63,8 @@ check context typex = \case
     thenx <- check (Pattern.augment patternx context) (shiftLogical $ monad # output) thenx
     Pattern.sealed context patternx [input, monad # output]
     pure $ do
-      patternx <- Pattern.solve patternx
-      evidence <- Unify.solveEvidence startPosition evidence
+      patternx <- Pattern.solve context patternx
+      evidence <- Unify.solveEvidence context startPosition evidence
       effect <- effect
       thenx <- thenx
       pure

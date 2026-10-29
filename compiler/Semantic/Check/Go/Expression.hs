@@ -90,8 +90,8 @@ generalize ::
   Semantic.Expression Group Resolve scope ->
   ST s (Solve s scope)
 generalize context position ForallOver {parameters, constraints, result} expression = do
-  parameters <- Unify.runSolve $ traverse (Unify.solve position) parameters
-  constraints <- Unify.runSolve $ Unify.solve position constraints
+  parameters <- Unify.runSolve $ traverse (Unify.solve context position) parameters
+  constraints <- Unify.runSolve $ Unify.solve context position constraints
   inner <- Rigid.augment position parameters constraints Mask.Runtime context
   body <- check inner (Core.Functor.map shift result) (shift expression)
   pure $ do
@@ -159,12 +159,12 @@ holding
         arguments <- zipWithM (fill context) filled arguments
         constructorInfo <- ConstructorInstance.built context instancex
         let made given = do
-              callHead <- CallHead.constructor constructorPosition constructor constructorInfo
+              callHead <- CallHead.constructor context constructorPosition constructor constructorInfo
               given <- sequence given
               pure Solved.CallHead {callHead, arguments = Strict.Vector.fromList given}
         pure $ Just $ case (through, reverse arguments) of
           (Just (variablePosition, variable), final : before) -> do
-            callHead <- CallHead.variable variablePosition variable Mono {levity = Levity.lazy}
+            callHead <- CallHead.variable context variablePosition variable Mono {levity = Levity.lazy}
             made <- made (reverse before)
             final <- final
             pure Solved.CallHead {callHead, arguments = Strict.Vector.fromList [made, final]}
@@ -250,7 +250,7 @@ check
       fields <- traverse checkField fields
       pure $ do
         fields <- sequence fields
-        constructorInfo <- ConstructorInfo.solve constructorInfo
+        constructorInfo <- ConstructorInfo.solve context constructorInfo
         pure
           Solved.Record
             { constructorPosition,
@@ -305,12 +305,12 @@ check context typex Semantic.MultiwayIf {branches} = do
 check context typex Semantic.Integer {startPosition, integer} = do
   evidence <- Unify.constrain context startPosition Type2.Num typex
   pure $ do
-    evidence <- Unify.solveEvidence startPosition evidence
+    evidence <- Unify.solveEvidence context startPosition evidence
     pure Solved.Integer {startPosition, integer, evidence = Solved evidence}
 check context typex Semantic.Float {startPosition, float} = do
   evidence <- Unify.constrain context startPosition Type2.Fractional typex
   pure $ do
-    evidence <- Unify.solveEvidence startPosition evidence
+    evidence <- Unify.solveEvidence context startPosition evidence
     pure Solved.Float {startPosition, float, evidence = Solved evidence}
 check context typex Semantic.String {startPosition, string} = do
   Unify.unify context startPosition typex (Core.list Core.char)
@@ -363,7 +363,7 @@ check
     pure $ do
       base <- base
       updates <- sequence updates
-      updateInfo <- UpdateInfo.solve updateInfo
+      updateInfo <- UpdateInfo.solve context updateInfo
       pure
         Solved.Update
           { base,
@@ -397,7 +397,7 @@ check context typex Semantic.Lambda {startPosition, parameter, body} = do
   body <- Lambda.check (Pattern.augment parameter context) (shiftLogical resultType) body
   Pattern.sealed context parameter [parameterType, resultType]
   pure $ do
-    parameter <- Pattern.solve parameter
+    parameter <- Pattern.solve context parameter
     body <- body
     pure Solved.Lambda {startPosition, parameter, body}
 check context typex Semantic.LambdaCase {startPosition, cases} = do
@@ -441,7 +441,7 @@ check context typex Semantic.Annotation {expression = Explicit expression, opera
   Unify.unify context operatorPosition typex typex'
   pure $ do
     expression <- expression
-    instanciation <- Unify.solveEvidence operatorPosition instanciation
+    instanciation <- Unify.solveEvidence context operatorPosition instanciation
     pure
       Solved.Annotation
         { operatorPosition,
@@ -474,7 +474,7 @@ check context typex Semantic.Negate {startPosition, negative} = do
   evidence <- Unify.constrain context startPosition Type2.Num typex
   negative <- check context typex negative
   pure $ do
-    evidence <- Unify.solveEvidence startPosition evidence
+    evidence <- Unify.solveEvidence context startPosition evidence
     negative <- negative
     pure
       Solved.Negate

@@ -84,10 +84,10 @@ check outside position reflection information = \case
                     element <- TypeDefinition.check context' (shiftLogical typex) element
                     pure $ do
                       element <- TypeDefinition.solve context' element
-                      typex <- Unify.solve position typex
+                      typex <- Unify.solve context position typex
                       pure Element {element, typex = Solved typex, position, name, constructorNames, link}
             set <- Unify.runSolve $ sequence set
-            kinds <- Unify.runSolve $ traverse (Unify.solve position) fresh
+            kinds <- Unify.runSolve $ traverse (Unify.solve context position) fresh
             pure $ Solved (Types $ Strict.Vector.fromLazy kinds) :::: Set set
         }
   Synonym (Identity synonym) ->

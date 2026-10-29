@@ -1,5 +1,6 @@
 module Semantic.Check.Temporary.TypePattern where
 
+import {-# SOURCE #-} Semantic.Check.Context (Context)
 import Semantic.Stage (Check)
 import Semantic.Tree.Combinators.Inferred (Inferred (..))
 import qualified Semantic.Tree.TypePattern as Solved
@@ -13,9 +14,9 @@ data TypePattern s scope = TypePattern
     name :: !VariableIdentifier
   }
 
-solve :: TypePattern s scope -> Unify.Solve s (Solved.TypePattern Position Check scope)
-solve TypePattern {position, name, typex} = do
-  typex <- Unify.solve position typex
+solve :: Context s scope -> TypePattern s scope -> Unify.Solve s (Solved.TypePattern Position Check scope)
+solve context TypePattern {position, name, typex} = do
+  typex <- Unify.solve context position typex
   pure
     Solved.TypePattern
       { position,
