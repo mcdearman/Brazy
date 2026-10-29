@@ -473,7 +473,7 @@ instance Integral HelperInteger where
   toInteger (Integer x) = x
 
 instance Show HelperInteger where
-  showsPrec n (Integer integer) = showSigned showInt n integer
+  showsPrec n (Integer integer) = showSigned (\x -> showString (unpack (primIntegerShow x))) n integer
 
 instance Read HelperInteger where
   readsPrec p s = [(Integer i, t) | (i, t) <- readWhole s]

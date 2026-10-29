@@ -847,6 +847,7 @@ outside World {catching, files, failure, building, arguments, programName, retur
       _ -> left `xor` right
   ("integer_shift", [Integer number, Int places]) -> pure $ Integer $ shift number (fromIntegral places)
   ("integer_pop_count", [Integer number]) -> pure $ Int $ fromIntegral $ popCount number
+  ("integer_show", [Integer number]) -> pure $ Text $ Text.pack $ show number
   -- A program on the machine is given no arguments, until it sets some.
   ("arg_count", []) -> Int . fromIntegral . length <$> readIORef arguments
   ("arg", [Int index]) -> Text . (!! fromIntegral index) <$> readIORef arguments

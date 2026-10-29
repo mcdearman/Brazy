@@ -305,6 +305,7 @@ definitions =
             ("primIntegerBits", wrap (outside "integer_bits")),
             ("primIntegerShift", wrap (outside "integer_shift")),
             ("primIntegerPopCount", wrap (outside "integer_pop_count")),
+            ("primIntegerShow", wrap (outside "integer_show")),
             ("primArgCount", effect "arg_count"),
             ("primArg", effect "arg"),
             ("primGetEnv", effect "get_env"),
