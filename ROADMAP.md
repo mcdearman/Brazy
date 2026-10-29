@@ -1902,9 +1902,21 @@ Missing:
       what it is. Nothing that catches them ends the program with how they
       are shown, as `error` does (test `exceptions`, which agrees with GHC).
       GHC says where the pattern was; Hazy does not
-- [ ] A value shared by more than one thing that throws while it is worked
-      out, and is caught, is left being worked out: asked for again, it
-      seems to loop, where GHC's throws again
+- [x] A value shared by more than one thing that throws while it is worked
+      out, and is caught, was left being worked out: asked for again, it
+      seemed to loop, where GHC's throws again. It throws again now. The
+      thunks being worked out are a list, the last begun first, kept
+      through the word of each that held its code, which is stale while it
+      runs (`hazy_working`, which forcing a thunk and giving it its value
+      keep, in `compiler/LLVM/FromAxCut.hs`); so it costs a load and two
+      stores where a thunk is forced, and nothing is allocated. A catch
+      keeps where the list was when it began. A throw that a catch catches
+      first makes a thunk that throws the value again, and every thunk
+      begun since the catch began holds it where its code was, with a tag
+      that says it threw (`catch_abandon`); forcing one forces that. The
+      AxCut machine does the same (test `thrown-again`, which agrees with
+      GHC, for definitions at the top, one inside another, one made while
+      the program runs, and one asked for again by its handler)
 - [x] GADTs: see M6
 - [x] Polymorphic components: see M6
 - [x] Bang patterns, as GHC2021 has them on. A `!` written straight before

@@ -134,6 +134,7 @@ outside =
     ("os", 0),
     ("catch_push", 2),
     ("catch_pop", 0),
+    ("catch_abandon", 1),
     ("catching", 0),
     ("uncaught", 2),
     ("pack_new", 0),

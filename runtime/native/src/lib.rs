@@ -1656,7 +1656,8 @@ pub extern "C" fn hazy_prim_pack_done(buffer: Value) -> Value {
 /// the handler gives.
 #[no_mangle]
 pub extern "C" fn hazy_prim_catch_push(handler: Value, resume: Value) -> Value {
-    heap::catching().push((heap::share(handler), heap::share(resume)));
+    let working = unsafe { heap::hazy_working };
+    heap::catching().push((heap::share(handler), heap::share(resume), working));
     unit()
 }
 
@@ -1664,14 +1665,15 @@ pub extern "C" fn hazy_prim_catch_push(handler: Value, resume: Value) -> Value {
 /// a catch begun before C was called is out of reach.
 #[no_mangle]
 pub extern "C" fn hazy_prim_catching() -> Value {
-    boolean(matches!(heap::catching().last(), Some(&(handler, _)) if handler != heap::BARRIER))
+    boolean(matches!(heap::catching().last(), Some(&(handler, _, _)) if handler != heap::BARRIER))
 }
 
 /// C calls into the program: what is thrown there and not caught there is
 /// not caught by a catch begun before C was called.
 #[no_mangle]
 pub extern "C" fn hazy_catch_barrier() {
-    heap::catching().push((heap::BARRIER, heap::BARRIER));
+    let working = unsafe { heap::hazy_working };
+    heap::catching().push((heap::BARRIER, heap::BARRIER, working));
 }
 
 /// The call from C into the program is over.
@@ -1757,12 +1759,20 @@ pub extern "C" fn hazy_prim_uncaught(status: Value, shown: Value) -> Value {
     fail(&format!("uncaught exception: {}", text(shown)))
 }
 
+/// A value is thrown, and the catch begun last catches it: the thunks
+/// begun since then throw it again, through the thunk given.
+#[no_mangle]
+pub extern "C" fn hazy_prim_catch_abandon(again: Value) -> Value {
+    heap::abandon(again);
+    unit()
+}
+
 /// The catch begun last, which is over: its handler and where it goes on,
 /// as a constructor of two fields.
 #[no_mangle]
 pub extern "C" fn hazy_prim_catch_pop() -> Value {
     match heap::catching().pop() {
-        Some((handler, resume)) => {
+        Some((handler, resume, _)) => {
             let block = hazy_alloc(3, header(DATA, 0, 2));
             unsafe {
                 *block.add(1) = handler;
