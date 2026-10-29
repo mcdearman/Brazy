@@ -181,6 +181,26 @@ unsafe fn words(block: *mut u64) -> usize {
     }
 }
 
+/// Whether a block holds nothing, and is two words: a floating-point
+/// number, or an `Integer` kept in its block. It can go straight back.
+fn leaf(head: u64) -> bool {
+    match head & KIND {
+        FLOAT => true,
+        INTEGER => tag(head) == SMALL_INTEGER,
+        _ => false,
+    }
+}
+
+/// Give back a block that holds nothing and is two words.
+#[inline(always)]
+unsafe fn give_leaf(block: *mut u64) {
+    let free = free_list(2);
+    *block = FREE;
+    *block.add(1) = *free as u64;
+    *free = block;
+    hazy_freed += 1;
+}
+
 /// The values a block holds references to.
 unsafe fn children(block: *mut u64) -> &'static [Value] {
     let head = *block;
@@ -326,6 +346,7 @@ impl Heap {
     }
 
     /// Give a block's words back. What it refers to is not looked at.
+    #[inline(always)]
     unsafe fn give(&mut self, block: *mut u64) {
         let size = words(block);
         if (*block & KIND) == INTEGER && tag(*block) != SMALL_INTEGER {
@@ -356,6 +377,7 @@ impl Heap {
     }
 
     /// Give up what a block holds, and then its words.
+    #[inline(always)]
     unsafe fn take_apart(&mut self, block: *mut u64) {
         for &child in children(block) {
             self.erase(child);
@@ -364,16 +386,22 @@ impl Heap {
         hazy_freed += 1;
     }
 
+    #[inline(always)]
     unsafe fn erase(&mut self, value: Value) {
         if let Some(block) = counted(value) {
             *block -= ONE;
             if references(*block) == 0 {
-                self.free(block);
+                if leaf(*block) {
+                    give_leaf(block);
+                } else {
+                    self.free(block);
+                }
             }
         }
     }
 
     /// A block's count has reached zero.
+    #[inline(always)]
     unsafe fn free(&mut self, block: *mut u64) {
         *block |= PENDING;
         self.pending.push(block);
@@ -578,9 +606,15 @@ pub extern "C" fn hazy_alloc(size: u64, head: u64) -> *mut u64 {
 /// and so are a few of what it held that are no longer held either.
 #[no_mangle]
 pub extern "C" fn hazy_free(value: Value) {
-    let heap = heap();
+    let block = value as *mut u64;
     unsafe {
-        heap.take_apart(value as *mut u64);
+        // A number holds nothing, and goes straight back.
+        if leaf(*block) {
+            give_leaf(block);
+            return;
+        }
+        let heap = heap();
+        heap.take_apart(block);
         heap.settle(8);
     }
 }

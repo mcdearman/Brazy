@@ -1416,6 +1416,63 @@ kept, and eval and apply:
       An instance that needs others is copied whole, which made its LLVM
       15% longer and it ran no faster. Counting with `foldr` and a function
       at the top made a third fewer blocks with the first
+- [x] An `Integer` is shown in tens by the runtime (`integer_show`), as the
+      library of big numbers does it. It was shown digit by digit, each
+      digit a division of the whole number, which takes time in the square
+      of its length: `show (2 ^ 100000)` took most of a tenth of a second
+      and 188 MB, and takes no time to speak of now (test `integer-show`)
+- [x] `zipWith`, and so `zip`, is written as `map` is: its list made by
+      `build`, its first list gone through by `listFoldr`, with what is
+      left of the second passed along, and nothing of its own that calls
+      itself, so that it is put where it is called. Written with `build`
+      alone, about a loop of its own, it was not put there and nothing was
+      saved. A comprehension over `zip`, and `and` over that, make neither
+      list: `queens` makes 12% fewer blocks and `spectral` 29% fewer, which
+      takes it from 0.89 seconds to 0.59 (test `zip-fusion`)
+- [x] Numbers and forced thunks are given back without going round the
+      runtime. A block that holds nothing, a `Double` or an `Integer` kept in
+      its block, goes straight to the list of free blocks of its size when
+      its count reaches zero, where it went on the list of blocks to be
+      taken apart first; and a forced thunk or a `Double` whose inside the
+      program owns is given back by the program, as a constructed value is.
+      `nbody` takes 0.83 seconds where it took 1.18, `spectral` 0.48, and
+      `queens` 0.66
+- [ ] A function that does not call itself, given an instance that is
+      known, is not copied for it. Tried for `queens`, whose `safe` is
+      given the instances of `Int` as a local function with a class in its
+      type: in the copy the methods were known and done where they were
+      called, but the copy was made from the function as it was a round of
+      putting functions where they are called before, so what it went
+      through lists with was no longer made into loops, and the program made
+      more blocks than without it. Copies would need as many rounds as the
+      functions they are made of
+
+Where it stands against GHC with `-O1`, on 2026-10-29, each workload made
+big enough to be timed (in `~/perf2` of the machine it was measured on).
+Seconds, the best of three, and how many times GHC's; the output of each is
+the same as GHC's. `binarytrees` is against GHC without `-fcse` and
+`-ffull-laziness` too, which take the repeated work out of it:
+
+| Workload | Brazy | GHC | Times | What most of it is |
+| - | - | - | - | - |
+| `map`, a million insertions | 0.53 | 0.95 | 0.6 | |
+| `folds` | 0.25 | 0.17 | 1.5 | |
+| `fuse` | 0.71 | 0.31 | 2.3 | |
+| `strings` | 2.58 | 1.03 | 2.5 | |
+| `binarytrees` | 0.63 | 0.18 | 3.5 | blocks made and given back |
+| `collatz` up to a million | 1.19 | 0.29 | 4.1 | |
+| `wordfreq` | 0.83 | 0.20 | 4.1 | |
+| `set` | 0.27 | 0.06 | 4.5 | `balance`, and 12 times the memory |
+| `primes` | 0.09 | 0.01 | 9 | `listFoldr` not fused away |
+| `spectral` | 0.89 | 0.04 | 22 | a block for each `Double`; `zipWith` |
+| `nbody` | 1.18 | 0.04 | 30 | a block for each `Double`, and a pair for each sum |
+| `queens` | 0.80 | 0.02 | 40 | 146 million blocks: `zip`, `and` and ranges not fused |
+| `integer` | 0.00 | 0.00 | | was 0.13, before `integer_show` |
+
+Giving blocks back (`Heap::give`, `take_apart`) is a tenth to a quarter
+of the time in all but `integer` and `set`. A `Double` is a block of its
+own, where GHC keeps one in a register or in the constructor that holds it
+strictly; that is most of what is left in `nbody` and `spectral`
 
 ## Track A: Hazy's own list
 

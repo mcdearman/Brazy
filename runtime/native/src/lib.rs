@@ -577,6 +577,14 @@ pub extern "C" fn hazy_prim_integer_pop_count(number: Value) -> Value {
     from_int(if number.is_negative() { -count } else { count })
 }
 
+/// An `Integer` in tens, with a `-` before it if it is less than nothing.
+/// Worked out digit by digit in the program, each digit would be a division
+/// of the whole number.
+#[no_mangle]
+pub extern "C" fn hazy_prim_integer_show(number: Value) -> Value {
+    from_text(&integer(number).to_string())
+}
+
 // The world outside ---------------------------------------------------------
 //
 // These are the primitives that `Sequent.Primitive` calls foreign: each is

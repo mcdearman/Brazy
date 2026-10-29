@@ -96,6 +96,7 @@ outside =
     ("integer_bits", 3),
     ("integer_shift", 2),
     ("integer_pop_count", 1),
+    ("integer_show", 1),
     ("arg_count", 0),
     ("arg", 1),
     ("get_env", 1),

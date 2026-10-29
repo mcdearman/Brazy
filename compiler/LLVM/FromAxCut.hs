@@ -3172,12 +3172,16 @@ helpers =
     %held = lshr i64 %header, 32
     %only = icmp eq i64 %held, 1
     br i1 %only, label %give, label %split
-  ; A constructed value, a function or a thunk of a small size goes back on
-  ; the list of free blocks of its size here. Anything else goes back
-  ; through the runtime.
+  ; A constructed value, a function, a thunk, forced or not, or a
+  ; floating-point number of a small size goes back on the list of free
+  ; blocks of its size here. Anything else goes back through the runtime.
+  ; A floating-point number counts nothing in its header, and is two words
+  ; as a thunk that captures nothing is.
   give:
     %kind = and i64 %header, 15
-    %plain = icmp ule i64 %kind, 2
+    %thunky = icmp ule i64 %kind, 4
+    %floating = icmp eq i64 %kind, 10
+    %plain = or i1 %thunky, %floating
     br i1 %plain, label %sized, label %runtime
   sized:
     %fields = lshr i64 %header, 19
