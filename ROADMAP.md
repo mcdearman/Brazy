@@ -1449,6 +1449,11 @@ kept, and eval and apply:
       and `div` by 2 made two at each step of `collatz`. It makes one at each
       step now, for the `1 +` still to be done, and takes 0.61 seconds
       where it took 1.20, twice GHC's
+- [x] A thunk whose body has taken what it held, and that nothing else
+      refers to, is given back by the program to the list of free blocks
+      of its size, where it went through the runtime: an eighth of the time
+      of `queens`, which takes 0.55 seconds where it took 0.66, and `fuse`
+      0.54 where it took 0.68
 - [ ] A function that does not call itself, given an instance that is
       known, is not copied for it. Tried for `queens`, whose `safe` is
       given the instances of `Int` as a local function with a class in its

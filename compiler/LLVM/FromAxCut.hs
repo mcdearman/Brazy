@@ -3099,14 +3099,33 @@ helpers =
 
   ; A thunk's body has taken what the thunk captured. If the thunk is still
   ; one that has not been forced, nothing else refers to it, and it was
-  ; forced without anything to keep its value: it is given back.
+  ; forced without anything to keep its value: it is given back, to the
+  ; list of free blocks of its size if it is small, as a constructed value
+  ; is, and otherwise through the runtime.
   define linkonce_odr void @hazy_thunk_taken(i64 %value) alwaysinline {
     %pointer = inttoptr i64 %value to ptr
     %header = load i64, ptr %pointer
     %kind = and i64 %header, 15
     %alone = icmp eq i64 %kind, 2
-    br i1 %alone, label %give, label %out
-  give:
+    br i1 %alone, label %sized, label %out
+  sized:
+    %fields = lshr i64 %header, 19
+    %entries = and i64 %fields, 8191
+    %words = add i64 %entries, 2
+    %small = icmp ule i64 %words, 32
+    br i1 %small, label %push, label %runtime
+  push:
+    %slot = getelementptr [33 x ptr], ptr @hazy_free_lists, i64 0, i64 %words
+    %first = load ptr, ptr %slot
+    store i64 15, ptr %pointer
+    %link = getelementptr i64, ptr %pointer, i64 1
+    store ptr %first, ptr %link
+    store ptr %pointer, ptr %slot
+    %given = load i64, ptr @hazy_freed
+    %more = add i64 %given, 1
+    store i64 %more, ptr @hazy_freed
+    br label %out
+  runtime:
     call void @hazy_give(i64 %value)
     br label %out
   out:
