@@ -71,8 +71,8 @@ import qualified Semantic.Scope as Scope
 import Sequent.Primitive (Primitive (Export, Field))
 import Sequent.Borrow (Lending, lending)
 import Sequent.Hoist (Unshared (..), hoist)
-import Sequent.Inline (copy, inline, isCopy, specialize)
-import qualified Sequent.Uncurry as Uncurry (rewrite, shape, split, whole)
+import Sequent.Inline (copy, inline, isCopy, specialize, uses)
+import qualified Sequent.Uncurry as Uncurry (direct, rewrite, shape, split, whole)
 import qualified Sequent.Runtime as Runtime
 import Sequent.Simplify (simplify)
 import Sequent.Strict (demand, strengthen, valued)
@@ -243,11 +243,22 @@ tables modules = Tables {members = family, borrowed = lends, lost = unshared, ta
     -- other family.
     improve before time =
       let look = memberIn before
-          improved global found =
+          improved once global found =
             simplify . Uncurry.rewrite known . specialize look . simplify $
-              inline time look global (specialize look found)
+              inline time look once global (specialize look found)
           improving definitions =
-            let made = Map.mapWithKey (\top members -> copy time look top (Map.mapWithKey improved members)) definitions
+            -- Which definitions of the module are named in one place only,
+            -- apart from the entry a function that takes its arguments one
+            -- at a time calls for them all.
+            let counts =
+                  Map.unionsWith
+                    (+)
+                    [ Map.delete (Uncurry.direct referrer) (uses [found])
+                      | members <- Map.elems definitions,
+                        (referrer, found) <- Map.toList members
+                    ]
+                once global = Map.lookup global counts == Just 1
+                made = Map.mapWithKey (\top members -> copy time look top (Map.mapWithKey (improved once) members)) definitions
                 copies = Map.unions (map snd (Map.elems made))
              in Map.union (Map.map fst made) (Map.mapWithKey Map.singleton copies)
        in Map.map improving before

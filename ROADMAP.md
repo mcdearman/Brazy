@@ -1464,6 +1464,17 @@ kept, and eval and apply:
       is seen to. `nbody`, whose `dx`, `dy`, `d2` and `f` were each a thunk
       at each step, takes 0.51 seconds where it took 0.77; `strings` 1.94
       where it took 2.21, with less memory than GHC's (test `speculate`)
+- [x] A function defined inside another that is named in one place only in
+      its module is put where it is called whatever its size, up to 400, as
+      GHC puts what is used once. `queens`' `safe`, defined in a `where`
+      with a class in its type, was given the instances of `Int` and took
+      each method out of them; in `go`, whose copy for `Int` knows them, its
+      comparisons and sums are done where they are written: 0.41 seconds
+      where it took 0.58. Inside a function written in a definition it is
+      put only if it takes apart what it is given with `Field`, as one given
+      instances does: in `nbody`, putting `pull` into the function given to
+      `foldl'` made that too big to be copied into a loop, and it made 26%
+      more blocks
 - [ ] A function that does not call itself, given an instance that is
       known, is not copied for it. Tried for `queens`, whose `safe` is
       given the instances of `Int` as a local function with a class in its
