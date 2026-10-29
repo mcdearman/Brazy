@@ -1,4 +1,9 @@
 {-# LANGUAGE_HAZY UnorderedRecords #-}
+-- |
+-- What is known of a record update, once checking is done, for Core: for
+-- each constructor of the type, what is known of it and, for each thing it
+-- holds, which selector that is, if any. While checking, it is the one in
+-- "Semantic.Check.Temporary.UpdateInfo".
 module Semantic.Check.Info.Update where
 
 import qualified Data.Strict.Maybe as Strict (Maybe)

@@ -1,4 +1,10 @@
 {-# LANGUAGE_HAZY UnorderedRecords #-}
+-- |
+-- Works out what each module exports and what its imports bring into
+-- scope, including the implicit @Prelude@ import, import lists and
+-- @hiding@. All modules are done together by tying a knot over their
+-- exports ("Graph.Topological"), so modules may import each other in any
+-- order; only an import cycle that cannot be resolved is an error.
 module Semantic.Resolve.Import
   ( Module (..),
     pickPrelude,

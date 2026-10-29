@@ -1,4 +1,8 @@
 {-# LANGUAGE_HAZY UnorderedRecords #-}
+-- |
+-- The declarations of one scope in Core, a module's, a @let@'s or a
+-- @where@'s: its terms, its types and what goes with them, and the
+-- instances that go with each type declaration.
 module Core.Tree.Declarations where
 
 import qualified Core.Substitute as Substitute

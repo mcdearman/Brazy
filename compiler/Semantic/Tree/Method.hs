@@ -1,5 +1,7 @@
 {-# LANGUAGE_HAZY UnorderedRecords #-}
 
+-- |
+-- A method as its class declares it: its name and type signature.
 module Semantic.Tree.Method where
 
 import Semantic.FreeVariables (FreeTypeVariables (freeTypeVariables))

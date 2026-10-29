@@ -1,4 +1,8 @@
 {-# LANGUAGE_HAZY UnorderedRecords #-}
+-- |
+-- The body of an instance: a definition for each method of the class, in
+-- the class's order, and, once checked, the evidence for what the class
+-- requires of the type (its superclasses).
 module Semantic.Tree.InstanceDefinition where
 
 import qualified Core.Tree.EvidenceSet as Core

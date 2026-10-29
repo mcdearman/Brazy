@@ -1,4 +1,7 @@
 {-# LANGUAGE_HAZY UnorderedRecords #-}
+-- |
+-- A type variable where it is bound rather than used, as after @forall@ or
+-- in an instance head, with where it was written.
 module Syntax.Tree.TypePattern where
 
 import Syntax.Parser (Parser)

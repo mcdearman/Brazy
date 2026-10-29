@@ -1,4 +1,7 @@
 {-# LANGUAGE_HAZY UnorderedRecords #-}
+-- |
+-- What a GADT declaration says, as one piece of a type declaration: its
+-- brand, parameters, constructors and record selectors.
 module Semantic.Resolve.Temporary.Partial.More.GADT where
 
 import qualified Data.Vector.Strict as Strict (Vector)

@@ -1,3 +1,7 @@
+-- |
+-- A table of a value for every term in scope, built up a scope at a time
+-- and looked up by a term's index. "Generate.Context" keeps what each term
+-- is called in one while Core is translated into the sequent IR.
 module Core.Index.Table.Term where
 
 import Data.Kind (Type)

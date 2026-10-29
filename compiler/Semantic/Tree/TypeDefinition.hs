@@ -1,4 +1,9 @@
 {-# LANGUAGE_HAZY UnorderedRecords #-}
+-- |
+-- What a type declaration defines: a @data@ type or @newtype@, with its
+-- constructors and field selectors; or a class, with its superclasses and
+-- the signatures of its methods. A type declared with @where@ is a 'GADT'
+-- only before checking, which turns it into an 'ADT'.
 module Semantic.Tree.TypeDefinition where
 
 import qualified Data.Vector.Strict as Strict

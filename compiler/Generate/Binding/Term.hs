@@ -1,4 +1,8 @@
 {-# LANGUAGE_HAZY UnorderedRecords #-}
+-- |
+-- What is known of a term in scope while Core is translated into the
+-- sequent IR: what it is called, whether it is held evaluated, and whether
+-- it is still to be evaluated where it is given evidence.
 module Generate.Binding.Term where
 
 import Data.Kind (Type)

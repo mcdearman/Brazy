@@ -1,3 +1,7 @@
+-- |
+-- The builtin class @MonadFail@, written as Haskell source: its superclass
+-- @Monad@ and its one method @fail@. 'builtinClass' compiles it into the
+-- names, Core definition and extra the compiler keeps of it.
 module Builtin.MonadFail where
 
 import Builtin (builtinClass)

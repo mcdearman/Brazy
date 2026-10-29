@@ -1,3 +1,7 @@
+-- |
+-- The builtin class @Real@, written as Haskell source: its superclasses
+-- @Num@ and @Ord@ and its one method @toRational@. 'builtinClass' compiles
+-- it into the names, Core definition and extra the compiler keeps of it.
 module Builtin.Real where
 
 import Builtin (builtinClass)

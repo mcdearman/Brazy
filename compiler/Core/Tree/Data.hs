@@ -1,4 +1,8 @@
 {-# LANGUAGE_HAZY UnorderedRecords #-}
+-- |
+-- A data type in Core: the kinds of its parameters, and its constructors
+-- and selectors. The type checker can instanciate its definition with
+-- types for the parameters.
 module Core.Tree.Data where
 
 import Core.Instanciate (Normal, Store, Instanciated)

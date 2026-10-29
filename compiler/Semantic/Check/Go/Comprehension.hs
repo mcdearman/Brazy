@@ -1,3 +1,7 @@
+-- |
+-- Checking the statements of a list comprehension: generators, each drawing
+-- from a list, conditions, which are @Bool@, and @let@s, ending in an element
+-- of the list it makes.
 module Semantic.Check.Go.Comprehension where
 
 import Control.Monad.ST (ST)

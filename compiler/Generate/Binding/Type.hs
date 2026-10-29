@@ -1,4 +1,8 @@
 {-# LANGUAGE_HAZY UnorderedRecords #-}
+-- |
+-- What is known of a type in scope while Core is translated into the
+-- sequent IR: what the instances that go with it are called, and which
+-- fields of its constructors are strict.
 module Generate.Binding.Type where
 
 import Data.Map (Map)

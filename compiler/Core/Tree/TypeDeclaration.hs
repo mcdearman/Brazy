@@ -1,4 +1,6 @@
 {-# LANGUAGE_HAZY UnorderedRecords #-}
+-- |
+-- A declaration of a type in Core: its name and its definition.
 module Core.Tree.TypeDeclaration where
 
 import qualified Core.Substitute as Substitute

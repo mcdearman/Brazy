@@ -1,4 +1,10 @@
 {-# LANGUAGE_HAZY UnorderedRecords #-}
+-- |
+-- The context the type checker carries: the bindings for the terms, type
+-- variables and types in scope, what is known of type variables here, and
+-- the order to default types in. It is built up as checking goes into
+-- declarations, groups of definitions and binders, and answers lookups such
+-- as the kind of a type or what a synonym stands for.
 module Semantic.Check.Context where
 
 import Control.Monad.ST (ST)

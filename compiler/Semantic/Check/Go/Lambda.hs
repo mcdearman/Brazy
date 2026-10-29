@@ -1,3 +1,7 @@
+-- |
+-- Checking what comes after a lambda's first parameter: its other
+-- parameters, one at a time, and what it gives once it has them all. The
+-- first parameter is checked in "Semantic.Check.Go.Expression".
 module Semantic.Check.Go.Lambda where
 
 import Control.Monad.ST (ST)

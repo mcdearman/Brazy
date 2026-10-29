@@ -1,3 +1,7 @@
+-- |
+-- What the checker's context holds for a term: how to get its type. The type
+-- is rigid for a global definition, and may still hold types being worked
+-- out for a local one or for one checked together with others.
 module Semantic.Check.Binding.Term where
 
 import Control.Monad.ST (ST)

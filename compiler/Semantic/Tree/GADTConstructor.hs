@@ -1,5 +1,9 @@
 {-# LANGUAGE_HAZY UnorderedRecords #-}
 
+-- |
+-- A constructor of a type declared with @where@, by the type written for
+-- it. Only the resolver makes these: the checker turns each into a
+-- 'Semantic.Tree.Constructor.Constructor'.
 module Semantic.Tree.GADTConstructor where
 
 import Semantic.FreeVariables (FreeTypeVariables (freeTypeVariables))

@@ -1,5 +1,8 @@
 {-# LANGUAGE_HAZY UnorderedRecords #-}
 
+-- |
+-- One piece of a class method, read from a class declaration: a type
+-- signature, or a clause of its default definition.
 module Semantic.Resolve.Temporary.Partial.Method where
 
 import Data.Foldable (toList)

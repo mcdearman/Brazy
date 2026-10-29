@@ -1,4 +1,8 @@
 {-# LANGUAGE_HAZY UnorderedRecords #-}
+-- |
+-- A type variable that a declaration or a @forall@ brings into scope, with
+-- its kind still being worked out. Solving it gives the kind it was found
+-- to have.
 module Semantic.Check.Temporary.TypePattern where
 
 import {-# SOURCE #-} Semantic.Check.Context (Context)

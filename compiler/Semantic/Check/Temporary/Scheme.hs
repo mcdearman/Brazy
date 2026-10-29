@@ -1,5 +1,10 @@
 {-# LANGUAGE_HAZY UnorderedRecords #-}
 
+-- |
+-- A type signature, a type that may have a @forall@ and a context, checked
+-- into a tree of its own that is solved afterwards. Its type variables are
+-- given kinds yet to be found, and are wobbly where the rest of it is
+-- checked.
 module Semantic.Check.Temporary.Scheme where
 
 import Control.Monad.ST (ST)

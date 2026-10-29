@@ -1,4 +1,10 @@
 {-# LANGUAGE_HAZY UnorderedRecords #-}
+-- |
+-- What is known of a constructor where it is used, once checking is done,
+-- for Core to lay it out: the levity of each thing it holds, or that it is
+-- a newtype's, or the evidence it holds for what it requires of its types.
+-- The checked tree carries it at each use. While checking, it is the one in
+-- "Semantic.Check.Temporary.ConstructorInfo".
 module Semantic.Check.Info.Constructor where
 
 import Core.Tree.Evidence (Evidence)

@@ -1,4 +1,7 @@
 {-# LANGUAGE_HAZY UnorderedRecords #-}
+-- |
+-- One declaration in the body of a class: a type signature of methods, a
+-- default definition, or a fixity declaration, and its parser.
 module Syntax.Tree.ClassDeclaration where
 
 import Data.Foldable (toList)

@@ -1,3 +1,8 @@
+-- |
+-- Evidence in Core that a class holds of a type, which is passed for a
+-- constraint: evidence in scope, a superclass of other evidence, evidence
+-- a constructor holds, or a function of evidence and its application. The
+-- type checker builds it with logical variables; finished evidence has none.
 module Core.Tree.Evidence (Evidence, EvidenceF (..)) where
 
 import qualified Core.Evidence.Functor as Core

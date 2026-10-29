@@ -1,3 +1,8 @@
+-- |
+-- Checking the head of a call: a variable, a constructor, a record selector
+-- or a class method, each taken at a fresh instance of its type, which is
+-- unified with the type it is used as. 'variable' and 'constructor' are also
+-- used by "Semantic.Check.Go.Expression" for heads it checks itself.
 module Semantic.Check.Go.CallHead where
 
 import Control.Monad.ST (ST)

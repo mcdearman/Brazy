@@ -1,3 +1,6 @@
+-- |
+-- Checking a right-hand side: its @where@ declarations, and then its body
+-- with them in scope.
 module Semantic.Check.Go.RightHandSide where
 
 import Control.Monad.ST (ST)

@@ -1,3 +1,7 @@
+-- |
+-- Turning a resolved type back into a syntax tree: each index is replaced
+-- by the name a "Semantic.Label.Context" has for it, and each builtin by
+-- its name qualified with @Hazy@. Error messages print types this way.
 module Semantic.Label.Go.Type where
 
 import Data.Text (pack)

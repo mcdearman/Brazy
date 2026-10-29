@@ -1,4 +1,7 @@
 {-# LANGUAGE_HAZY UnorderedRecords #-}
+-- |
+-- A type synonym: its parameters and the type it names, with the kind
+-- written for it, if there is one, and the kind checking finds.
 module Semantic.Tree.Synonym where
 
 import qualified Core.Tree.Type as Core

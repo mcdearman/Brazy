@@ -1,3 +1,7 @@
+-- |
+-- The builtin class @Bounded@, written as Haskell source: its methods
+-- @minBound@ and @maxBound@, which have no defaults. 'builtinClass' compiles
+-- it into the names, Core definition and extra the compiler keeps of it.
 module Builtin.Bounded where
 
 import Builtin (builtinClass)

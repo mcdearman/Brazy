@@ -1,3 +1,8 @@
+-- |
+-- The index a declared type (or class) is resolved to: which scope it is
+-- declared in, counted outward by 'Shift', and where in that scope. It is a
+-- declaration of a local block, a member of a group of type declarations
+-- checked together, or a top-level declaration (by module and place).
 module Semantic.Index.Type where
 
 import Semantic.Scope (Declaration, Environment (..), Global, GroupType, Local)

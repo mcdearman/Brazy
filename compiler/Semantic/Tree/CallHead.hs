@@ -1,4 +1,9 @@
 {-# LANGUAGE_HAZY UnorderedRecords #-}
+-- |
+-- What is called at the head of an application: a variable, a constructor,
+-- a field selector or a class method, by its index. Checking fills in what
+-- it found for it, such as how a variable's type is instantiated, or the
+-- evidence a method is used with.
 module Semantic.Tree.CallHead where
 
 import qualified Core.Tree.Evidence as Simple (Evidence)

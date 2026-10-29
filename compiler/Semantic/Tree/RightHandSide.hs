@@ -1,4 +1,7 @@
 {-# LANGUAGE_HAZY UnorderedRecords #-}
+-- |
+-- A right-hand side: its body, and its @where@ declarations, which the body
+-- is in the scope of.
 module Semantic.Tree.RightHandSide where
 
 import Semantic.Connect (Connect (..))

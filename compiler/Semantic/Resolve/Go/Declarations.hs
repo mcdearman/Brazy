@@ -1,5 +1,9 @@
 {-# LANGUAGE_HAZY UnorderedRecords #-}
 
+-- |
+-- Resolves the declarations of a @let@ or @where@: brings in any imports
+-- among them, puts the declared names in scope for each other, and gives
+-- back the context in which what they scope over is resolved.
 module Semantic.Resolve.Go.Declarations where
 
 import Data.Foldable (toList)

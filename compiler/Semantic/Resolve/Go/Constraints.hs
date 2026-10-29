@@ -1,3 +1,7 @@
+-- |
+-- Resolves what a type scheme or an instance requires: a list of
+-- constraints, or, with none, whether a value of the type is lazy, strict,
+-- or of a levity it names.
 module Semantic.Resolve.Go.Constraints where
 
 import Semantic.Resolve.Context (Context)

@@ -1,4 +1,7 @@
 {-# LANGUAGE_HAZY UnorderedRecords #-}
+-- |
+-- A named field of a record constructor, resolved. One field declaration
+-- can name several fields of the same type.
 module Semantic.Resolve.Temporary.Complete.Field where
 
 import Data.Foldable (toList)

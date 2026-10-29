@@ -1,3 +1,7 @@
+-- |
+-- A class method's default definition, if the class gives it one. Once
+-- checked, the default is in the scope of the type variables of the
+-- method's own signature.
 module Semantic.Tree.MethodAbstract where
 
 import Semantic.Connect (Connect (..))

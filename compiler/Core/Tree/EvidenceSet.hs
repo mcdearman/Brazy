@@ -1,3 +1,6 @@
+-- |
+-- The evidence an instance holds for the superclasses of its class, given
+-- the evidence for what the instance requires.
 module Core.Tree.EvidenceSet where
 
 import qualified Core.Substitute as Substitute

@@ -1,3 +1,7 @@
+-- |
+-- The builtin type @Bool@, written as Haskell source: its constructors
+-- @False@ and @True@. 'builtinData' compiles it into the names and Core
+-- definition the compiler keeps of it.
 module Builtin.Bool where
 
 import Builtin (builtinData)

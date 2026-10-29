@@ -1,3 +1,6 @@
+-- |
+-- The text of a string literal, kept so that it can hold surrogate
+-- characters, which 'Text' cannot.
 module Syntax.StringLiteral (StringLiteral, pack, unpack) where
 
 import qualified Data.Char as Char

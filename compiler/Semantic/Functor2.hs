@@ -1,3 +1,9 @@
+-- |
+-- Mapping and traversing the functor a semantic tree wraps some of its
+-- parts in (its first parameter, such as the one around the inferred type
+-- of a declaration), for trees that are also indexed by layout, stage and
+-- scope. 'Proper' fits such a tree to the classes of "Data.Functor2" and
+-- "Data.Traversable2".
 module Semantic.Functor2 where
 
 import Data.Functor.Compose (Compose (..))

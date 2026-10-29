@@ -1,4 +1,7 @@
 {-# LANGUAGE_HAZY UnorderedRecords #-}
+-- |
+-- The definition of one method of an instance in Core, whether it was
+-- written in the instance or made by the compiler.
 module Core.Tree.MethodConcrete where
 
 import qualified Core.Substitute as Substitute

@@ -1,3 +1,5 @@
+-- |
+-- A @Maybe@ that is strict in what it holds.
 module Data.Strict.Maybe where
 
 import Prelude hiding (Maybe (Just, Nothing))

@@ -1,4 +1,10 @@
 {-# LANGUAGE_HAZY UnorderedRecords #-}
+-- |
+-- Resolves all the modules of a program together: what each imports and
+-- exports is worked out from the declarations of all of them, and each
+-- module's declarations are resolved in the scope that results. Two
+-- modules of one name are an error. Also reads a module's @default@
+-- declaration, which may list only builtin types of numbers.
 module Semantic.Resolve.Temporary.Complete.Module where
 
 import Control.Monad.Fix (mfix)

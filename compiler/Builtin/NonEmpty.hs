@@ -1,3 +1,7 @@
+-- |
+-- The builtin type @NonEmpty@, written as Haskell source: its constructor
+-- @:|@ and its fixity. 'builtinData' compiles it into the names and Core
+-- definition the compiler keeps of it.
 module Builtin.NonEmpty where
 
 import Builtin (builtinData)

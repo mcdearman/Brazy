@@ -1,5 +1,10 @@
 {-# LANGUAGE_HAZY UnorderedRecords #-}
 
+-- |
+-- One piece of what a declaration group says of a type, read from a single
+-- declaration: a data, GADT, class or synonym declaration, or a kind
+-- signature. A data declaration has its constructors and record selectors
+-- worked out here, and a class its methods.
 module Semantic.Resolve.Temporary.Partial.TypeDeclaration where
 
 import Data.Foldable (toList)

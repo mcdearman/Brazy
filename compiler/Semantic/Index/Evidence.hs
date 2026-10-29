@@ -1,3 +1,7 @@
+-- |
+-- The index of evidence for a class: either evidence that a scope assumes
+-- (an "Semantic.Index.Evidence0" index), or the instance of a class for a
+-- type constructor, named by the two of them ('Direct').
 module Semantic.Index.Evidence where
 
 import qualified Semantic.Index.Evidence0 as Evidence0

@@ -1,3 +1,9 @@
+-- |
+-- The builtin class @RealFloat@, written as Haskell source: its
+-- superclasses @RealFrac@ and @Floating@, its methods, and defaults for
+-- @exponent@, @significand@, @scaleFloat@ and @atan2@. 'builtinClass'
+-- compiles it into the names, Core definition and extra the compiler keeps
+-- of it.
 module Builtin.RealFloat where
 
 import Builtin (builtinClass)

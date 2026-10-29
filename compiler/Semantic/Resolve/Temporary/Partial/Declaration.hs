@@ -1,5 +1,12 @@
 {-# LANGUAGE_HAZY UnorderedRecords #-}
 
+-- |
+-- One piece of what a declaration group says of a term, read from a single
+-- declaration: a fixity, a type signature, a clause of a definition, a
+-- variable bound by a pattern binding, a class method or record selector,
+-- a foreign import or export, or the shared right-hand side of a pattern
+-- binding. Each piece is keyed by the name it is for, to be merged with
+-- the others.
 module Semantic.Resolve.Temporary.Partial.Declaration
   ( Declaration (..),
     Key (..),

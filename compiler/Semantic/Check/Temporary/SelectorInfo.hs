@@ -1,4 +1,8 @@
 {-# LANGUAGE_HAZY UnorderedRecords #-}
+-- |
+-- What is known of a field selector where it is used, while checking: its
+-- levities are types still being worked out. Solving it gives the one in
+-- "Semantic.Check.Info.Selector".
 module Semantic.Check.Temporary.SelectorInfo where
 
 import qualified Data.Strict.Maybe as Strict (Maybe)

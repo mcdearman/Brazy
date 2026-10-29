@@ -1,4 +1,10 @@
 {-# LANGUAGE_HAZY UnorderedRecords #-}
+-- |
+-- What the checker's context holds for a type variable in scope: a rigid
+-- one, with what is known of it by class, or a wobbly one standing for a
+-- type that unification is still working out. Also the 'Equality' list the
+-- context carries: what matching on constructors tells of type variables,
+-- and a few other things handed to everything inside a definition.
 module Semantic.Check.Binding.Local where
 
 import Control.Monad.ST (ST)

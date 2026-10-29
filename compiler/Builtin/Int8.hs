@@ -1,3 +1,7 @@
+-- |
+-- The builtin type @Int8@, written as Haskell source: a newtype of an
+-- @Int@. 'builtinData' compiles it into the names and Core definition the
+-- compiler keeps of it.
 module Builtin.Int8 where
 
 import Builtin (builtinData)

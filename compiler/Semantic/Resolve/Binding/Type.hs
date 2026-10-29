@@ -1,3 +1,8 @@
+-- |
+-- What the resolver knows about a type or class in scope: its index, its
+-- fixity as a type operator, and a class's methods by name. The header
+-- holds where it was bound and the constructors and fields that come with
+-- it in an import or export written @T(..)@.
 module Semantic.Resolve.Binding.Type where
 
 import Data.Functor.Classes (Show1 (..), showsPrec1)

@@ -1,4 +1,8 @@
 {-# LANGUAGE_HAZY UnorderedRecords #-}
+-- |
+-- A data constructor in Core: its name, the entries it holds, and, for a
+-- constructor of a type declared with @where@, the arguments it gives the
+-- type and what it requires of them.
 module Core.Tree.Constructor where
 
 import Core.Instanciate (Normal, Store (Empty))

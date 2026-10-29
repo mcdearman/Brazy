@@ -1,3 +1,8 @@
+-- |
+-- What is kept of a term declaration to print it back as syntax: its
+-- qualified name, or, for the value a pattern binding shares among its
+-- variables, which has no name of its own, 'SharedTermBinding'. See
+-- "Semantic.Label.Context".
 module Semantic.Label.Binding.Term where
 
 import Data.Kind (Type)

@@ -1,4 +1,8 @@
 {-# LANGUAGE_HAZY UnorderedRecords #-}
+-- |
+-- What is known of one thing a constructor holds, once checking is done:
+-- its levity. While checking, it is the one in
+-- "Semantic.Check.Temporary.EntryInfo".
 module Semantic.Check.Info.Entry where
 
 import qualified Core.Substitute as Substitute

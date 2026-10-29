@@ -1,4 +1,8 @@
 {-# LANGUAGE_HAZY UnorderedRecords #-}
+-- |
+-- The body of an instance: its definitions after @where@ (none when there
+-- is no @where@), or a mark that the instance is derived, by a standalone
+-- @deriving instance@ or a @deriving@ clause, and has no written body.
 module Syntax.Tree.InstanceDeclarations where
 
 import qualified Data.Vector.Strict as Strict

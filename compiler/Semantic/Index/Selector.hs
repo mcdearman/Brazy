@@ -1,4 +1,7 @@
 {-# LANGUAGE_HAZY UnorderedRecords #-}
+-- |
+-- The index of a record field selector: the data type it selects from and
+-- its place among that type's selectors.
 module Semantic.Index.Selector where
 
 import qualified Semantic.Index.Type2 as Type2

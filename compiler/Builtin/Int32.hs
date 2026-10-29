@@ -1,3 +1,7 @@
+-- |
+-- The builtin type @Int32@, written as Haskell source: a newtype of an
+-- @Int@. 'builtinData' compiles it into the names and Core definition the
+-- compiler keeps of it.
 module Builtin.Int32 where
 
 import Builtin (builtinData)

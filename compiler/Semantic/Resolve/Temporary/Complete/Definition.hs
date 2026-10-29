@@ -1,3 +1,9 @@
+-- |
+-- One clause of a function or variable definition, resolved: the name it
+-- defines, and the function its parameters and right-hand side make. The
+-- patterns either side of an operator defined infix are re-associated by
+-- its fixity. Used for definitions in declaration groups, classes and
+-- instances.
 module Semantic.Resolve.Temporary.Complete.Definition where
 
 import Data.Foldable (toList)

@@ -1,3 +1,8 @@
+-- |
+-- Checking the definition of a type as cells of the table of declarations.
+-- One with a kind signature is checked against it; ones without are checked
+-- as a group, with the others they use and are used by, whose kinds are
+-- worked out together; a synonym is checked by "Semantic.Check.Go.Synonym".
 module Semantic.Check.Go.TypeDefinition2 where
 
 import Control.Monad.ST (ST)

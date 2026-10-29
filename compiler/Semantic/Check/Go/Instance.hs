@@ -1,3 +1,7 @@
+-- |
+-- Checking an instance declaration as cells of the table of declarations:
+-- its definition (see "Semantic.Check.Go.InstanceDefinition2"), and what it
+-- requires, read off its header once that is checked.
 module Semantic.Check.Go.Instance (check, solve, Key (..)) where
 
 import Control.Monad.ST (ST)

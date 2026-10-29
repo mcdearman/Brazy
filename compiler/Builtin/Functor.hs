@@ -1,3 +1,8 @@
+-- |
+-- The builtin class @Functor@, written as Haskell source: its methods
+-- @fmap@ and @<$@, a default for @<$@, and its fixity. 'builtinClass'
+-- compiles it into the names, Core definition and extra the compiler keeps
+-- of it.
 module Builtin.Functor where
 
 import Builtin (builtinClass)

@@ -1,3 +1,8 @@
+-- |
+-- What is checked of a type declaration once the type itself is: for a
+-- class, its methods' default definitions, with the class's parameter in
+-- scope and required to have the class. Other declarations have nothing
+-- more to check.
 module Semantic.Check.Go.TypeDeclarationExtra where
 
 import Control.Monad.ST (ST)

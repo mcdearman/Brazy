@@ -1,4 +1,9 @@
 {-# LANGUAGE_HAZY UnorderedRecords #-}
+-- |
+-- One constraint of a context. Either a class of one of the scheme's type
+-- variables, perhaps applied to types, as in @Eq a@ or @Show (f a)@, with
+-- the variable kept by its place in 'head'; or an equality @t ~ u@, which
+-- can only be here before checking.
 module Semantic.Tree.Constraint where
 
 import qualified Data.Vector.Strict as Strict (Vector)

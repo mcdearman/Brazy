@@ -1,3 +1,8 @@
+-- |
+-- Reading off what type checking worked out: types and evidence with each
+-- unknown replaced by what it was found to be, and an unknown that never
+-- was worked out defaulted. 'Solve' holds this work, to be run once
+-- checking is done.
 module Semantic.Unify.Solve where
 
 import Control.Monad (ap, liftM)

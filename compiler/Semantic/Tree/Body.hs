@@ -1,3 +1,7 @@
+-- |
+-- What a right-hand side gives, apart from its @where@: an expression, or
+-- one or more guarded branches, each the statements of its guard ending in
+-- what the branch gives.
 module Semantic.Tree.Body where
 
 import qualified Data.Strict.Vector1 as Strict

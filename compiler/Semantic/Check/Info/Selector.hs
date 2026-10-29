@@ -1,4 +1,10 @@
 {-# LANGUAGE_HAZY UnorderedRecords #-}
+-- |
+-- What is known of a field selector where it is used, once checking is
+-- done, for Core: the levity of the field, when it is in the same place in
+-- every constructor, or else, for each constructor, where the field is in
+-- it, if it has it. While checking, it is the one in
+-- "Semantic.Check.Temporary.SelectorInfo".
 module Semantic.Check.Info.Selector where
 
 import qualified Core.Tree.Type as Simple

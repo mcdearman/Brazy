@@ -1,5 +1,12 @@
 {-# LANGUAGE_HAZY UnorderedRecords #-}
 
+-- |
+-- Resolves an expression. Names become indexes; a variable or constructor
+-- applied to arguments becomes one call with all of them; arithmetic
+-- sequences become calls of the @enumFrom@ methods; record fields are
+-- matched to the constructor's own entries; and infix expressions and
+-- sections are handed to "Semantic.Resolve.Temporary.ExpressionInfix" to
+-- be grouped by fixity.
 module Semantic.Resolve.Go.Expression where
 
 import Data.Foldable (toList)

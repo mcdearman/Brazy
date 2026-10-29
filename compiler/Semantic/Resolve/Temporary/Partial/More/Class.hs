@@ -1,4 +1,7 @@
 {-# LANGUAGE_HAZY UnorderedRecords #-}
+-- |
+-- What a class declaration says, as one piece of a type declaration: its
+-- parameter, superclasses and methods.
 module Semantic.Resolve.Temporary.Partial.More.Class where
 
 import qualified Data.Vector.Strict as Strict (Vector)

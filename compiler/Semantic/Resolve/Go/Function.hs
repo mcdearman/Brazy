@@ -1,5 +1,9 @@
 {-# LANGUAGE_HAZY UnorderedRecords #-}
 
+-- |
+-- Resolves the parameters and right-hand side of one equation of a
+-- function, a parameter at a time, with the variables of each parameter
+-- in scope for the rest.
 module Semantic.Resolve.Go.Function where
 
 import Semantic.Layout (Normal)

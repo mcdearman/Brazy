@@ -1,4 +1,7 @@
 {-# LANGUAGE_HAZY UnorderedRecords #-}
+-- |
+-- One declaration in the body of an instance, which can only be a
+-- definition, and its parser.
 module Syntax.Tree.InstanceDeclaration where
 
 import Syntax.Parser (Parser, position, token)

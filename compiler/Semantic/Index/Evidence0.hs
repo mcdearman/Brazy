@@ -1,3 +1,7 @@
+-- |
+-- The index of evidence that a scope assumes: what the constraints of a
+-- polymorphic type give, in the @Local@ scope that binds its type
+-- variables, counted by place.
 module Semantic.Index.Evidence0 where
 
 import Data.Kind (Type)

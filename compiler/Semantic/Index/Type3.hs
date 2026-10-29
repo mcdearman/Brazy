@@ -1,3 +1,8 @@
+-- |
+-- What a type constructor name can be resolved to: an
+-- "Semantic.Index.Type2" index, or one of the builtin names for kinds and
+-- universes (@Type@, @Constraint@, @Small@, @Large@, @Universe@,
+-- @Levity@).
 module Semantic.Index.Type3 where
 
 import qualified Semantic.Index.Type2 as Type2

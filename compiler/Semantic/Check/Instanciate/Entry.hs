@@ -1,4 +1,9 @@
 {-# LANGUAGE_HAZY UnorderedRecords #-}
+-- |
+-- One thing a constructor holds, made fresh for checking: its type in terms
+-- of the types the data type was given, and its levity. A type with a
+-- @forall@ of its own is kept as it is, and is taken at types yet to be
+-- found where what is held is taken out.
 module Semantic.Check.Instanciate.Entry where
 
 import Control.Monad.ST (ST)

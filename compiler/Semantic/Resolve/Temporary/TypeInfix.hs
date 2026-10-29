@@ -1,3 +1,8 @@
+-- |
+-- A type of infix operators as written, before their fixities are known,
+-- and how it is then re-associated into applications of types. An
+-- operator is a promoted data constructor, @:@, or a type operator, which
+-- binds as its own fixity declaration says.
 module Semantic.Resolve.Temporary.TypeInfix where
 
 import Data.Void (Void, absurd)

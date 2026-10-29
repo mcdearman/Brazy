@@ -1,3 +1,8 @@
+-- |
+-- Where Core finds the definitions of the builtin types and classes. For a
+-- 'Type2.Index', 'index' gives the data type, class or class defaults that
+-- the @Builtin.*@ modules define for a builtin, and passes an ordinary index
+-- on to the lookup it is given; 'kind' gives the kind of any of them.
 module Core.Builtin where
 
 import {-# SOURCE #-} qualified Builtin.Applicative as Applicative

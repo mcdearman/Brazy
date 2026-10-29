@@ -1,4 +1,8 @@
 {-# LANGUAGE_HAZY UnorderedRecords #-}
+-- |
+-- What a constructor holds in one of its places, in Core: its type, which
+-- may have a @forall@ of its own, and its levity, which says whether it is
+-- held strictly.
 module Core.Tree.Entry where
 
 import Core.Instanciate (Normal, Store (Empty))

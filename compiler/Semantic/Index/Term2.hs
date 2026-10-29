@@ -1,3 +1,6 @@
+-- |
+-- What a term name can be resolved to: a term variable, a record field
+-- selector, a class method, or the builtin @runST@.
 module Semantic.Index.Term2 where
 
 import qualified Semantic.Index.Method as Method

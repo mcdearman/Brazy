@@ -1,3 +1,6 @@
+-- |
+-- Classes for the variables a syntax tree mentions: the type variables
+-- free in it, and the term variables a declaration binds.
 module Syntax.FreeVariables where
 
 import Syntax.Tree.Marked (Marked)

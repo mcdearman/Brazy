@@ -1,5 +1,11 @@
 {-# LANGUAGE_HAZY UnorderedRecords #-}
 
+-- |
+-- Resolves a pattern, and works out the variables it binds, each as a path
+-- into what is matched, so that 'augment' can put them in scope. Infix
+-- patterns are grouped by fixity in
+-- "Semantic.Resolve.Temporary.PatternInfix". A variable bound twice in one
+-- pattern is an error.
 module Semantic.Resolve.Go.Pattern where
 
 import Data.Foldable (toList)

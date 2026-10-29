@@ -1,3 +1,6 @@
+-- |
+-- A place in a tree for something the checker works out: empty at
+-- 'Resolve', and holding what was solved at 'Check'.
 module Semantic.Tree.Combinators.Inferred where
 
 import Data.Kind (Type)

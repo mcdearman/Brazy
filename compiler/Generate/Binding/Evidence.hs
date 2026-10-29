@@ -1,3 +1,6 @@
+-- |
+-- What a piece of evidence in scope is called while Core is translated
+-- into the sequent IR.
 module Generate.Binding.Evidence where
 
 import Data.Kind (Type)

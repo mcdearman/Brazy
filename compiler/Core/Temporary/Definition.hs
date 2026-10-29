@@ -1,3 +1,8 @@
+-- |
+-- The equations of a function, or the alternatives of a case, while they
+-- are simplified into Core: each a 'Function', tried in turn. 'desugar'
+-- makes them a Core expression, a lambda for each argument they match
+-- around statements that try each in turn.
 module Core.Temporary.Definition where
 
 import Core.Temporary.Function (Function)

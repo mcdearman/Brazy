@@ -1,3 +1,7 @@
+-- |
+-- 'Traversable' for the functors of "Data.Functor2": going through what a
+-- structure is built over with an applicative effect. The semantic trees
+-- and "Graph.Topological" use it.
 module Data.Traversable2 (Traversable2 (..), traverse2', sequence2', fmap2Default) where
 
 import Data.Functor.Compose (Compose (..))

@@ -1,4 +1,8 @@
 {-# LANGUAGE_HAZY UnorderedRecords #-}
+-- |
+-- An import declaration and its parser: an ordinary @import@, with its
+-- qualification, alias and list of names, or @import {-# BUILTIN #-} M@,
+-- which brings in the types and classes the compiler knows itself.
 module Syntax.Tree.Import where
 
 import Syntax.Parser (Parser, asum, betweenBuiltinPragma, position, token)

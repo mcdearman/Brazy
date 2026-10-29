@@ -1,4 +1,8 @@
 {-# LANGUAGE_HAZY UnorderedRecords #-}
+-- |
+-- A clause of a definition, as one piece of a term declaration, resolved
+-- twice: as it is, and with the type variables of the term's signature in
+-- scope. Which of them is kept depends on the signature.
 module Semantic.Resolve.Temporary.Partial.More.Function where
 
 import Semantic.Layout (Normal)

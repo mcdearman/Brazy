@@ -1,3 +1,8 @@
+-- |
+-- What a type constructor or class in a type can be: a declared one (an
+-- "Semantic.Index.Type" index), a data constructor used as a type
+-- ('Lifted'), or one of the builtin types and classes the compiler knows by
+-- name. 'split' tells these three apart.
 module Semantic.Index.Type2 where
 
 import {-# SOURCE #-} qualified Semantic.Index.Constructor as Constructor

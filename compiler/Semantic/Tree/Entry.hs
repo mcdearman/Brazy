@@ -1,5 +1,9 @@
 {-# LANGUAGE_HAZY UnorderedRecords #-}
 
+-- |
+-- One thing a constructor holds: its type, which may have a @forall@ of its
+-- own, and whether it is held lazily, strictly, or with a levity that is
+-- written for it.
 module Semantic.Tree.Entry where
 
 import Semantic.FreeVariables (FreeTypeVariables (..))

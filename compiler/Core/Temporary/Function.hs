@@ -1,4 +1,9 @@
 {-# LANGUAGE_HAZY UnorderedRecords #-}
+-- |
+-- One equation or alternative while it is simplified into Core: the
+-- patterns it matches its arguments against, then its right-hand side. Eta
+-- expansion turns each pattern for an argument still to come into a match
+-- on a variable, so that the patterns can become statements.
 module Core.Temporary.Function where
 
 import Core.Temporary.RightHandSide (RightHandSide)

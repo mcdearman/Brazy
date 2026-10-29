@@ -1,4 +1,8 @@
 {-# LANGUAGE_HAZY UnorderedRecords #-}
+-- |
+-- What is known of a record update, while checking: what is known of each
+-- constructor is still being worked out. Solving it gives the one in
+-- "Semantic.Check.Info.Update".
 module Semantic.Check.Temporary.UpdateInfo where
 
 import qualified Data.Strict.Maybe as Strict (Maybe)

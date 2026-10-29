@@ -1,3 +1,9 @@
+-- |
+-- How a builtin type or class is made from the source a @Builtin.*@ module
+-- gives it: the source is parsed, resolved and checked as a module of its
+-- own, and its names, its Core definition and, for a class, its extra are
+-- taken out, with the index it was resolved under replaced by the
+-- builtin's own.
 module Builtin (builtinData, builtinClass) where
 
 import Core.Tree.Class (Class)

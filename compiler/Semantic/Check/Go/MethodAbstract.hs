@@ -1,3 +1,6 @@
+-- |
+-- Checking a method of a class as the class declares it: its default
+-- definition, if it has one, against the method's type.
 module Semantic.Check.Go.MethodAbstract where
 
 import Control.Monad.ST (ST)

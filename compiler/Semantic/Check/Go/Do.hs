@@ -1,3 +1,7 @@
+-- |
+-- Checking the statements of a @do@ block: every action is in the same
+-- monad, which has to have @Monad@, or @MonadFail@ if a bind's pattern can
+-- fail, and a @let@ brings its declarations into scope for what follows.
 module Semantic.Check.Go.Do where
 
 import Control.Monad.ST (ST)

@@ -1,4 +1,8 @@
 {-# LANGUAGE_HAZY UnorderedRecords #-}
+-- |
+-- The part of a type declaration that holds terms: the default definitions
+-- of a class's methods, in the scope of the class's parameter. Other kinds
+-- of declaration have nothing here but their position.
 module Semantic.Tree.TypeDeclarationExtra where
 
 import qualified Data.Vector.Strict as Strict (Vector)

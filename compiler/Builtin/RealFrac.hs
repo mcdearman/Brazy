@@ -1,3 +1,8 @@
+-- |
+-- The builtin class @RealFrac@, written as Haskell source: its
+-- superclasses @Real@ and @Fractional@, its methods, and defaults for all
+-- but @properFraction@. 'builtinClass' compiles it into the names, Core
+-- definition and extra the compiler keeps of it.
 module Builtin.RealFrac where
 
 import Builtin (builtinClass)

@@ -1,5 +1,8 @@
 {-# LANGUAGE_HAZY UnorderedRecords #-}
 
+-- |
+-- One equation of a function: its parameters, each a pattern that the rest
+-- is in the scope of, and then its right-hand side.
 module Semantic.Tree.Function where
 
 import Semantic.Connect (Connect (..))

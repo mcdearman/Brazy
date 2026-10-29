@@ -1,4 +1,7 @@
 {-# LANGUAGE_HAZY UnorderedRecords #-}
+-- |
+-- What is kept of a type variable to print it back as syntax: its name.
+-- See "Semantic.Label.Context".
 module Semantic.Label.Binding.Local where
 
 import Data.Kind (Type)

@@ -1,3 +1,7 @@
+-- |
+-- What @import {-# BUILTIN #-}@ brings into scope: the builtin types such as
+-- @Char@, @Int@, @Type@ and @ST@, @runST@, and the classes, types and
+-- functions that the @Builtin.*@ modules define.
 module Semantic.Resolve.Builtin (builtin) where
 
 import {-# SOURCE #-} qualified Builtin.Applicative as Applicative

@@ -1,4 +1,8 @@
 {-# LANGUAGE_HAZY UnorderedRecords #-}
+-- |
+-- A group of type declarations with no kind written that use one another,
+-- and so are checked together. Each definition is in the scope of the
+-- group, and checking gives each its kind.
 module Semantic.Tree.TypeGroup where
 
 import qualified Core.Tree.Type as Simple

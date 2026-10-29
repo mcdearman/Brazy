@@ -1,4 +1,7 @@
 {-# LANGUAGE_HAZY UnorderedRecords #-}
+-- |
+-- A type variable where it is bound, by a @forall@ or as a parameter of a
+-- type or instance, with its kind once checked.
 module Semantic.Tree.TypePattern where
 
 import Core.Tree.Type as Simple (Type)

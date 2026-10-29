@@ -1,3 +1,8 @@
+-- |
+-- A table of something for each piece of evidence that the scopes assume,
+-- looked up by an "Semantic.Index.Evidence0" index. Only @Local@ scopes
+-- hold values; the others pass a lookup on outward, and what is found
+-- further out is shifted into the scope it was looked up from.
 module Semantic.Index.Table.Evidence0 where
 
 import Data.Vector (Vector)

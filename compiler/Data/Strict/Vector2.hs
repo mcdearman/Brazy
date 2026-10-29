@@ -1,3 +1,6 @@
+-- |
+-- Strict vectors meant to have at least two elements. 'Vector2' is only
+-- another name for a strict vector: the length is not checked.
 module Data.Strict.Vector2 where
 
 import qualified Data.Vector.Strict as Strict (Vector)

@@ -1,4 +1,8 @@
 {-# LANGUAGE_HAZY UnorderedRecords #-}
+-- |
+-- The names in scope at one point in a module: those under each qualifier,
+-- and the unqualified ones. This is the part of "Semantic.Resolve.Context"
+-- that imports and local declarations add to.
 module Semantic.Resolve.Core where
 
 import Data.Functor.Identity (Identity (..))

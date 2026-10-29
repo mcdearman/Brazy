@@ -1,4 +1,9 @@
 {-# LANGUAGE_HAZY UnorderedRecords #-}
+-- |
+-- An instance for a type the declaration group declares, of a class
+-- declared elsewhere, kept with the type by the class it is of. A derived
+-- @Functor@, @Foldable@ or @Traversable@ instance is of the type without
+-- its last parameter.
 module Semantic.Resolve.Temporary.Complete.DataInstance where
 
 import Data.Functor.Identity (Identity (..))

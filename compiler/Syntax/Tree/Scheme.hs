@@ -1,4 +1,8 @@
 {-# LANGUAGE_HAZY UnorderedRecords #-}
+-- |
+-- A type scheme, as a type signature gives it: a type, with the variables
+-- an explicit @forall@ binds, and its constraints or strictness (see
+-- "Syntax.Tree.Constraints"); and its parser.
 module Syntax.Tree.Scheme where
 
 import qualified Data.Vector.Strict as Strict

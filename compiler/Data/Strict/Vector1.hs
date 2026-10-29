@@ -1,3 +1,7 @@
+-- |
+-- Strict vectors meant to have at least one element. 'Vector1' is only
+-- another name for a strict vector: the length is not checked, and
+-- 'uncons' fails on an empty one.
 module Data.Strict.Vector1 where
 
 import qualified Data.List.NonEmpty as NonEmpty

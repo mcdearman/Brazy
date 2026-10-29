@@ -1,3 +1,8 @@
+-- |
+-- Turning a semantic tree from one layout to the other: 'connect' puts the
+-- declarations of a resolved tree in groups of ones that depend on each
+-- other, to be checked together, and 'seperate' takes the groups of a
+-- checked tree apart again.
 module Semantic.Connect where
 
 import Data.Kind (Constraint, Type)

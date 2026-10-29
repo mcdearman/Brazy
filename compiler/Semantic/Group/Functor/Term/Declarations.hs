@@ -1,5 +1,11 @@
 {-# LANGUAGE_HAZY UnorderedRecords #-}
 
+-- |
+-- Something for each term declaration of a module or of a local block,
+-- made with 'indexes' and looked up by a local 'Term.Link'. Strongly
+-- connected components are found over it to put the declarations in groups
+-- of ones that depend on each other.
+-- "Semantic.Group.Functor.Term.ModuleSet" is the same for every module.
 module Semantic.Group.Functor.Term.Declarations where
 
 import Data.Functor.Identity (Identity)

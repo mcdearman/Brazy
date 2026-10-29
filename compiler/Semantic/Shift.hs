@@ -1,3 +1,10 @@
+-- |
+-- Moving indexes and trees from one scope to another. A 'Category' is a
+-- move: the plain ones (into one more scope, under a scope, out of one),
+-- the moves of declarations into and out of the scope of a group checked
+-- together, and the rewrites Core makes of patterns as it simplifies them.
+-- 'Functor' and 'TermFunctor' are for what can be moved.
+-- "Semantic.Shift0" has only the plainest moves.
 module Semantic.Shift
   ( Category (..),
     Functor (..),

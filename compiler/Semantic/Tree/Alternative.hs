@@ -1,4 +1,7 @@
 {-# LANGUAGE_HAZY UnorderedRecords #-}
+-- |
+-- One alternative of a @case@ or @\\case@: a pattern, and the right-hand
+-- side it leads to, which is in the scope of what the pattern binds.
 module Semantic.Tree.Alternative where
 
 import Semantic.Connect (Connect (..))

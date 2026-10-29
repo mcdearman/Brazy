@@ -1,3 +1,6 @@
+-- |
+-- The definition of a type in Core: a data type, a class, or a type
+-- synonym.
 module Core.Tree.TypeDefinition where
 
 import Core.Instanciate (Store (Empty))

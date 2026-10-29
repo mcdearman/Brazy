@@ -1,3 +1,8 @@
+-- |
+-- An expression of infix operators as written, before the fixities of the
+-- operators are known, and how it is then re-associated into applications
+-- of them. Negation is a prefix operator of precedence 6, and @:@ is
+-- @infixr 5@.
 module Semantic.Resolve.Temporary.ExpressionInfix where
 
 import qualified Semantic.Index.Constructor as Constructor (cons)

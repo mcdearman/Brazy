@@ -1,4 +1,9 @@
 {-# LANGUAGE_HAZY UnorderedRecords #-}
+-- |
+-- A class constraint in a context, a class applied to a type variable and
+-- then to other types, checked against the class's kind into a tree of its
+-- own that is solved afterwards. A constraint that two types are equal is
+-- not supported here.
 module Semantic.Check.Temporary.Constraint where
 
 import Control.Monad.ST (ST)

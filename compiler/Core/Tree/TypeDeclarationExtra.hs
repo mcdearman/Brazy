@@ -1,3 +1,7 @@
+-- |
+-- What goes with a type declaration in Core besides its type: for a class,
+-- its default methods; for anything else, only what kind of declaration it
+-- is.
 module Core.Tree.TypeDeclarationExtra where
 
 import qualified Core.Substitute as Substitute

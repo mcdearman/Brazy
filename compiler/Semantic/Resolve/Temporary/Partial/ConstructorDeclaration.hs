@@ -1,5 +1,10 @@
 {-# LANGUAGE_HAZY UnorderedRecords #-}
 
+-- |
+-- One piece of what a declaration group says of a data constructor, read
+-- from a single declaration: a fixity, its place in a data declaration, or
+-- an @UNORDEREDRECORDS@ or @CONSTRUCTORFIELDS@ pragma naming it. The pieces
+-- for each constructor are then merged into its complete form.
 module Semantic.Resolve.Temporary.Partial.ConstructorDeclaration where
 
 import Data.Foldable (toList)

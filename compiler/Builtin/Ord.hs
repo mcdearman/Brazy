@@ -1,3 +1,8 @@
+-- |
+-- The builtin class @Ord@, written as Haskell source: its superclass @Eq@,
+-- its methods, each with a default, and the fixities of @<@, @<=@, @>@ and
+-- @>=@. 'builtinClass' compiles it into the names, Core definition and
+-- extra the compiler keeps of it.
 module Builtin.Ord where
 
 import Builtin (builtinClass)

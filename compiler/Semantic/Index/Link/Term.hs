@@ -1,3 +1,8 @@
+-- |
+-- A term declaration named apart from the scope it is seen from: one of a
+-- local block ('Declaration') or one at the top level of a module
+-- ('Global'), with which of the two in its type. These are the nodes when
+-- declarations are put in groups of ones that depend on each other.
 module Semantic.Index.Link.Term where
 
 import qualified Semantic.Index.Term0 as Term0

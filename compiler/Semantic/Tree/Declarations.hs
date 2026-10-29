@@ -1,5 +1,18 @@
 {-# LANGUAGE_HAZY UnorderedRecords #-}
 
+-- |
+-- The declarations of a module, or of a @let@ or @where@ ('Local'): its
+-- terms; its types; the default methods of its classes; and the instances
+-- of its types, by type and then class, and of its classes, by class and
+-- then type. 'connect' puts the definitions with no signature into binding
+-- groups, by which uses which, to be checked together, and 'seperate' takes
+-- them out again once they are checked.
+--
+-- The other parameters are for checking. While it is done, @loeb@ holds
+-- each part as something worked out once what it needs is known, @solve@
+-- is the unifier's monad, and @logical@ its variables; otherwise they are
+-- 'Identity', 'Identity' and 'Void'. @locality@ says whether the
+-- declarations are a module's or local.
 module Semantic.Tree.Declarations where
 
 import Data.Functor.Compose (Compose (..))

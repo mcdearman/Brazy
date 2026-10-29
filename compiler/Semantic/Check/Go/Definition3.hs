@@ -1,3 +1,9 @@
+-- |
+-- Checking a definition together with its label: the name and fixity it
+-- defines, or, for the right-hand side a pattern binding shares, its number.
+-- Also what is asked of a definition before its group is checked: whether
+-- it is of a function, and whether it takes apart a value of an indexed
+-- type.
 module Semantic.Check.Go.Definition3 where
 
 import Control.Monad.ST (ST)

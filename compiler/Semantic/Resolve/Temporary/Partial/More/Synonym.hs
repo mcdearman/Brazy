@@ -1,4 +1,7 @@
 {-# LANGUAGE_HAZY UnorderedRecords #-}
+-- |
+-- What a type synonym declaration says, as one piece of a type
+-- declaration: its parameters and the type it stands for.
 module Semantic.Resolve.Temporary.Partial.More.Synonym where
 
 import qualified Data.Vector.Strict as Strict (Vector)

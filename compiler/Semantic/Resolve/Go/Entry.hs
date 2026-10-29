@@ -1,5 +1,9 @@
 {-# LANGUAGE_HAZY UnorderedRecords #-}
 
+-- |
+-- Resolves one entry of a data constructor, a thing it holds: its type,
+-- which may have a @forall@ of its own, and whether it is lazy, strict, or
+-- of a levity it names.
 module Semantic.Resolve.Go.Entry where
 
 import Semantic.Resolve.Context (Context)

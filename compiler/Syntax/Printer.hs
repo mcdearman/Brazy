@@ -1,3 +1,6 @@
+-- |
+-- Syntax printed back as source, such as names and types: a sequence of
+-- lexemes, which 'build' turns into text with a space between each two.
 module Syntax.Printer (Printed, token, token', build) where
 
 import Data.Text.Lazy.Builder (Builder, fromString)

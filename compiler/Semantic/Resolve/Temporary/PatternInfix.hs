@@ -1,3 +1,7 @@
+-- |
+-- A pattern of infix constructor operators as written, before their
+-- fixities are known, and how it is then re-associated into nested
+-- constructor patterns. @:@ is @infixr 5@.
 module Semantic.Resolve.Temporary.PatternInfix where
 
 import qualified Data.Map as Map

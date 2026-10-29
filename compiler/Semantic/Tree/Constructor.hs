@@ -1,5 +1,10 @@
 {-# LANGUAGE_HAZY UnorderedRecords #-}
 
+-- |
+-- A constructor of a data type: how it was written (plainly, as an
+-- operator, or as a record), what it holds, and which type it makes a value
+-- of. The checker makes these from the constructors of a type declared
+-- with @where@ as well, with an 'Indexed' shape.
 module Semantic.Tree.Constructor where
 
 import qualified Data.Vector.Strict as Strict (Vector)

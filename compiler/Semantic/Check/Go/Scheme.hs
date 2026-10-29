@@ -1,3 +1,7 @@
+-- |
+-- Bringing the type variables and constraints of a checked type signature
+-- into scope, under the names they were written with, for what is checked
+-- inside it. Also gives the type of a checked signature, 'Scheme'.
 module Semantic.Check.Go.Scheme (Scheme (..), augment, augmentNeeding) where
 
 import Control.Monad.ST (ST)

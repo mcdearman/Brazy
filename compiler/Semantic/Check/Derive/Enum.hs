@@ -1,3 +1,9 @@
+-- |
+-- The methods of a derived @Enum@ instance, for a type whose constructors
+-- have no fields, written as Core expressions: @fromEnum@ and @toEnum@ go by
+-- the position of the constructor, and @enumFrom@ and @enumFromThen@ stop
+-- at the last or the first constructor. The other methods are the class's
+-- own.
 module Semantic.Check.Derive.Enum where
 
 import qualified Core.Tree.Type as Levity (lazy)

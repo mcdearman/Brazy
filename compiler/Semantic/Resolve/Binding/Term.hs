@@ -1,3 +1,9 @@
+-- |
+-- What the resolver knows about a variable in scope: its index (a
+-- definition, a pattern variable, a class method, a field selector or
+-- @runST@), its fixity, and, for a record field, the selector it names.
+-- The position is where it was bound, for the error when one name is bound
+-- to two different things.
 module Semantic.Resolve.Binding.Term where
 
 import Data.Functor.Classes (Show1 (..), showsPrec1)

@@ -1,3 +1,8 @@
+-- |
+-- The builtin class @Fractional@, written as Haskell source: its superclass
+-- @Num@, its methods @/@, @recip@ and @fromRational@, defaults for the
+-- first two, and the fixity of @/@. 'builtinClass' compiles it into the
+-- names, Core definition and extra the compiler keeps of it.
 module Builtin.Fractional where
 
 import Builtin (builtinClass)

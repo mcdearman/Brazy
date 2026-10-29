@@ -1,3 +1,6 @@
+-- |
+-- 'Show' for a tree of Core types whatever its logical variables are, so
+-- that a tree that holds one, like @ForallOver@, can show it.
 module Core.Type.Show where
 
 import Data.Kind (Constraint, Type)

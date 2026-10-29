@@ -1,4 +1,11 @@
 {-# LANGUAGE_HAZY UnorderedRecords #-}
+-- |
+-- The unifier. Types while they are checked have unknowns ('Logical') in
+-- them: boxes in 'STRef's that are filled in as types are made the same.
+-- Besides 'unify', here are checking kinds, the occurs check, carrying
+-- what classes ask of an unknown until it is worked out, learning what a
+-- match on a constructor tells of a type ('refine'), and moving types out
+-- of a scope.
 module Semantic.Unify.Type where
 
 import Control.Monad (foldM, when, zipWithM)

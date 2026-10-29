@@ -1,4 +1,8 @@
 {-# LANGUAGE_HAZY UnorderedRecords #-}
+-- |
+-- A class in Core: the kind of its parameter, its superclasses, and the
+-- type of each method. The type checker instanciates a class's definition
+-- for a use, with the type it is used at and the evidence for it.
 module Core.Tree.Class where
 
 import Core.Instanciate (Instanciated, Normal)

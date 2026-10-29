@@ -1,4 +1,11 @@
 {-# LANGUAGE_HAZY UnorderedRecords #-}
+-- |
+-- What a term is defined by: its equations; one name out of a pattern
+-- binding ('Piece'); the right-hand side a pattern binding's names share
+-- ('Shared'); or a function of C, imported or exported. Before checking,
+-- equations whose signature has a written @forall@ are 'Scoped': its type
+-- variables are in scope in them. The indexes say whether there is a
+-- signature ('Mark') and whether it is a shared right-hand side ('Source').
 module Semantic.Tree.Definition2 where
 
 import qualified Core.Tree.Instanciation as Simple

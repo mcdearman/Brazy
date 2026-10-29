@@ -1,3 +1,7 @@
+-- |
+-- The @==@ of a derived @Eq@ instance, written as a Core expression: two
+-- values are equal when they have the same constructor and its fields are
+-- equal, each by the @Eq@ instance of its type.
 module Semantic.Check.Derive.Eq where
 
 import Control.Monad.ST (ST)

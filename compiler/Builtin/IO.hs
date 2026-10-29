@@ -1,3 +1,7 @@
+-- |
+-- The builtin type @IO@, written as Haskell source: a newtype of
+-- @ST RealWorld@. 'builtinData' compiles it into the names and Core
+-- definition the compiler keeps of it.
 module Builtin.IO where
 
 import Builtin (builtinData)

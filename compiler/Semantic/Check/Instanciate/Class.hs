@@ -1,3 +1,7 @@
+-- |
+-- A class made fresh for checking a use of one of its methods: its
+-- parameter is a type yet to be found, the evidence for the class at that
+-- type is asked for, and the types of its methods are said in terms of it.
 module Semantic.Check.Instanciate.Class where
 
 import Control.Monad.ST (ST)

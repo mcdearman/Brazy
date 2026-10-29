@@ -1,4 +1,7 @@
 {-# LANGUAGE_HAZY UnorderedRecords #-}
+-- |
+-- The default methods of a class in Core, kept apart from the class itself.
+-- A method with no default has bottom for one.
 module Core.Tree.ClassExtra where
 
 import qualified Core.Substitute as Substitute

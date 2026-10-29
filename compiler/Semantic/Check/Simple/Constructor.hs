@@ -1,3 +1,8 @@
+-- |
+-- Make a fresh instance of a constructor from its Core declaration, given
+-- the fresh types its data type was given. A constructor of a type declared
+-- with @where@ has variables of its own: they are unknowns where it makes a
+-- value, and where it is matched those the match cannot settle are hidden.
 module Semantic.Check.Simple.Constructor where
 
 import Control.Monad.ST (ST)

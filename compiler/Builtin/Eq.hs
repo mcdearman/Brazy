@@ -1,3 +1,8 @@
+-- |
+-- The builtin class @Eq@, written as Haskell source: its methods @==@ and
+-- @/=@, each defined by default through the other, and their fixity.
+-- 'builtinClass' compiles it into the names, Core definition and extra the
+-- compiler keeps of it.
 module Builtin.Eq where
 
 import Builtin (builtinClass)

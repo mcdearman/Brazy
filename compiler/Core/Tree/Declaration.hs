@@ -1,4 +1,9 @@
 {-# LANGUAGE_HAZY UnorderedRecords #-}
+-- |
+-- A definition of a term in Core: its name, its definition as a type
+-- lambda over an expression, its type, and how many arguments it takes.
+-- Also the simplifying of a checked declaration into one, foreign imports
+-- and exports among them.
 module Core.Tree.Declaration where
 
 import Core.Arity (Arity)

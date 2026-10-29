@@ -1,3 +1,7 @@
+-- |
+-- The builtin type @Word8@, written as Haskell source: a newtype of an
+-- @Integer@. 'builtinData' compiles it into the names and Core definition
+-- the compiler keeps of it.
 module Builtin.Word8 where
 
 import Builtin (builtinData)

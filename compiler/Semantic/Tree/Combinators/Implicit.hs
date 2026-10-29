@@ -1,3 +1,8 @@
+-- |
+-- A tree with what it takes implicitly. At 'Resolve' it is the tree alone.
+-- At 'Check' it is under a type lambda: the types it is generalized over
+-- and the constraints it is given evidence for, with the tree in their
+-- scope.
 module Semantic.Tree.Combinators.Implicit where
 
 import qualified Core.Tree.TypeLambda as Simple

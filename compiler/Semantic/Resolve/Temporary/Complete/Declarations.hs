@@ -1,4 +1,10 @@
 {-# LANGUAGE_HAZY UnorderedRecords #-}
+-- |
+-- A group of declarations, as at the top of a module or in a @let@ or
+-- @where@, resolved: the terms, data constructors, types, fixities of type
+-- operators, and instances it declares. Here the pieces of each
+-- declaration are gathered by name and merged, and orphan instances are
+-- rejected. Also the bindings the group brings into scope.
 module Semantic.Resolve.Temporary.Complete.Declarations where
 
 import Control.Monad.Fix (mfix)

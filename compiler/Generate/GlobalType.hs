@@ -1,4 +1,8 @@
 {-# LANGUAGE_HAZY UnorderedRecords #-}
+-- |
+-- What is known of a top-level type when Core is translated into the
+-- sequent IR: the global names of the instances that go with it, and which
+-- fields of its constructors are strict.
 module Generate.GlobalType where
 
 import Data.Map (Map)

@@ -1,5 +1,11 @@
 {-# LANGUAGE_HAZY UnorderedRecords #-}
 
+-- |
+-- Everything a declaration group says of one data constructor, merged:
+-- the type it is of and its place among that type's constructors, its
+-- fixity (@infixl 9@ when none is given), its fields and selectors, and
+-- whether the @UNORDEREDRECORDS@ and @CONSTRUCTORFIELDS@ pragmas apply to
+-- it. From these come the constructor bindings names are resolved against.
 module Semantic.Resolve.Temporary.Complete.ConstructorDeclaration where
 
 import Data.Foldable (toList)

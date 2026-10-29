@@ -1,3 +1,6 @@
+-- |
+-- Checking the body of a right-hand side: one expression, or guards, each of
+-- which gives something of the type wanted.
 module Semantic.Check.Go.Body where
 
 import Control.Monad.ST (ST)

@@ -1,3 +1,8 @@
+-- |
+-- A method of an instance, in the scope of the instance's type parameters:
+-- the definition the instance gives it, or, where it gives none, one the
+-- checker fills in, which is the derived code for an instance from
+-- @deriving@, and otherwise the class's default.
 module Semantic.Tree.MethodConcrete where
 
 import qualified Core.Tree.TypeLambda as Simple (TypeLambda)

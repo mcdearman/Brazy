@@ -1,3 +1,8 @@
+-- |
+-- The builtin class @Show@, written as Haskell source: its methods
+-- @showsPrec@, @show@ and @showList@, each with a default. 'builtinClass'
+-- compiles it into the names, Core definition and extra the compiler keeps
+-- of it.
 module Builtin.Show where
 
 import Builtin (builtinClass)

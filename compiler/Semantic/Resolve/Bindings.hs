@@ -1,4 +1,12 @@
 {-# LANGUAGE_HAZY UnorderedRecords #-}
+-- |
+-- A set of names: the terms, constructors and types in scope under one
+-- qualifier (or none), or the names a module exports, each by name, with
+-- the 'Stability' of the imports they came from. '<>' joins two sets and
+-- rejects a name bound to two different things; '</>' lets the names on
+-- its left shadow those on its right. The @loeb@ parameter wraps each
+-- binding: 'Identity' once it is known, or a formula while
+-- "Semantic.Resolve.Import" works out what modules export.
 module Semantic.Resolve.Bindings where
 
 import Data.Functor.Identity (Identity (..))

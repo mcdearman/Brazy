@@ -1,4 +1,8 @@
 {-# LANGUAGE_HAZY UnorderedRecords #-}
+-- |
+-- One thing a constructor's declaration says it holds, checked into a tree
+-- of its own that is solved afterwards: its type, which may have a
+-- @forall@ of its own, and how strictly it is held.
 module Semantic.Check.Temporary.Entry where
 
 import Control.Monad.ST (ST)

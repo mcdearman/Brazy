@@ -1,4 +1,8 @@
 {-# LANGUAGE_HAZY UnorderedRecords #-}
+-- |
+-- A type with a @forall@ in Core: the kinds of the variables it binds,
+-- what it requires of them, and the type they are bound in. It is over any
+-- tree of types, so that the types of a binding group can share one.
 module Core.Tree.Forall where
 
 import qualified Core.Substitute as Substitute

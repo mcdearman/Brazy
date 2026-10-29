@@ -1,3 +1,9 @@
+-- |
+-- Operands and operators in the order they are written, and how they are
+-- re-associated into a tree by the operators' fixities. Expressions,
+-- patterns and types all use it; a prefix operator, as negation is in
+-- expressions, is allowed. Operators that cannot be grouped, such as two
+-- non-associative ones of the same precedence, are an error.
 module Semantic.Resolve.Temporary.Infix (Infix (..), Token (..), Pretoken (..), fixWith) where
 
 import Data.Void (Void, absurd)

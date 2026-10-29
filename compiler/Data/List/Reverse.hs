@@ -1,3 +1,6 @@
+-- |
+-- A list that grows at its end, with its last element outermost, for
+-- building a list up from the left.
 module Data.List.Reverse where
 
 data List a = Nil | List a :> a

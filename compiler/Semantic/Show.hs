@@ -1,3 +1,6 @@
+-- |
+-- A @Show@ class for semantic trees, which are indexed by layout, stage
+-- and scope: one instance shows a tree at any of them.
 module Semantic.Show where
 
 import Data.Kind (Constraint, Type)

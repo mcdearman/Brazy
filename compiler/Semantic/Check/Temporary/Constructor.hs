@@ -1,4 +1,8 @@
 {-# LANGUAGE_HAZY UnorderedRecords #-}
+-- |
+-- A constructor in a data type's declaration, checked into a tree of its
+-- own that is solved afterwards: what it holds and, for a type declared
+-- with @where@, the type it makes and the types it says are the same.
 module Semantic.Check.Temporary.Constructor where
 
 import Control.Monad.ST (ST)

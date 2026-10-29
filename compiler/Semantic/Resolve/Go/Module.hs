@@ -1,5 +1,8 @@
 {-# LANGUAGE_HAZY UnorderedRecords #-}
 
+-- |
+-- Where name resolution starts: resolves every module of a program
+-- together, since what each one imports depends on what the others export.
 module Semantic.Resolve.Go.Module where
 
 import Data.Functor.Identity (Identity)

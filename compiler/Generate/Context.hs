@@ -1,4 +1,9 @@
 {-# LANGUAGE_HAZY UnorderedRecords #-}
+-- |
+-- The context "Sequent.FromCore" translates Core into the sequent IR in:
+-- what each term, piece of evidence and type in scope is called, which
+-- terms and constructor fields are strict, and a supply of fresh names. It
+-- starts from a "Generate.Precontext" and grows as binders are entered.
 module Generate.Context where
 
 import Control.Monad.ST (ST)

@@ -1,3 +1,9 @@
+-- |
+-- Polymorphic types while types are checked. 'instanciate' gives a use of
+-- one fresh unknowns for its type variables and evidence for its
+-- constraints; 'generalizeBody' makes the unknowns left in a checked body
+-- into the type variables of a polymorphic type, with what is asked of
+-- them as its constraints.
 module Semantic.Unify.Forall where
 
 import Control.Monad (zipWithM, zipWithM_)

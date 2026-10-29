@@ -1,3 +1,8 @@
+-- |
+-- A module: its name, its declarations, and what its @default@ declaration
+-- lists. 'connect' puts the definitions of all of a program's modules that
+-- have no signature into binding groups, which may reach across modules,
+-- and 'seperate' takes them out again once they are checked.
 module Semantic.Tree.Module where
 
 import Data.Functor.Identity (Identity (..))

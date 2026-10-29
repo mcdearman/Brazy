@@ -1,5 +1,10 @@
 {-# LANGUAGE_HAZY UnorderedRecords #-}
 
+-- |
+-- One declaration of a type, a class or a synonym: its name, the names of
+-- its constructors, its definition, and its kind, which checking works
+-- out. As with terms, those with no kind written that use one another are
+-- put into groups to be checked together.
 module Semantic.Tree.TypeDeclaration where
 
 import qualified Core.Tree.Type as Simple (Type)

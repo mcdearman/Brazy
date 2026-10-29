@@ -1,5 +1,10 @@
 {-# LANGUAGE_HAZY UnorderedRecords #-}
 
+-- |
+-- Resolves a type scheme: its type variables, constraints and type. A
+-- scheme without a @forall@ binds the type variables it uses that are not
+-- already in scope. 'augment' puts the variables of an explicit @forall@
+-- in scope for what the scheme annotates.
 module Semantic.Resolve.Go.Scheme where
 
 import Data.Containers.ListUtils (nubOrd)

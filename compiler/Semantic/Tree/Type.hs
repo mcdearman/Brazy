@@ -1,5 +1,10 @@
 {-# LANGUAGE_HAZY UnorderedRecords #-}
 
+-- |
+-- Types as they are written, with names resolved. Kinds and levities are
+-- written as types too, so this has what only they use, such as 'Levity'
+-- and 'SmallType'. What is marked 'Unsupported' is only here before
+-- checking. Once checked, a use of a type synonym holds what it stands for.
 module Semantic.Tree.Type where
 
 import {-# SOURCE #-} qualified Core.Tree.Type as Simple
