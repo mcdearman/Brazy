@@ -1,3 +1,4 @@
+{-# LANGUAGE_HAZY UnorderedRecords #-}
 module Semantic.Tree.Definition2 where
 
 import qualified Core.Tree.Instanciation as Simple

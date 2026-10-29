@@ -1,3 +1,4 @@
+{-# LANGUAGE_HAZY UnorderedRecords #-}
 module Semantic.Resolve.Temporary.Partial.More.Class where
 
 import qualified Data.Vector.Strict as Strict (Vector)

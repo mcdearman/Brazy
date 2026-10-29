@@ -11,6 +11,9 @@ import qualified Syntax.Tree.Alternative as Syntax (Alternative (..))
 
 resolve :: Context scope -> Syntax.Alternative Position -> Alternative Normal Resolve scope
 resolve context (Syntax.Alternative {parameter, rightHandSide}) =
-  Alternative pattern' (RightHandSide.resolve (Pattern.augment pattern' context) rightHandSide)
+  Alternative
+    { parameter = pattern',
+      rightHandSide = RightHandSide.resolve (Pattern.augment pattern' context) rightHandSide
+    }
   where
     pattern' = Pattern.resolve context parameter

@@ -1,3 +1,4 @@
+{-# LANGUAGE_HAZY UnorderedRecords #-}
 module Semantic.Check.Temporary.StrictnessAnnotation where
 
 import Control.Monad.ST (ST)

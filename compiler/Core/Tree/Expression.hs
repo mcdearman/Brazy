@@ -496,7 +496,7 @@ call function argument = Call {function, argument}
 class Simplify source where
   simplify :: source Normal Check scope -> Expression scope
   simplifyWith :: source Normal Check scope -> Strict.Vector (Expression scope) -> Expression scope
-  simplifyWith main arguments = foldl Call (simplify main) arguments
+  simplifyWith main arguments = foldl (\function argument -> Call {function, argument}) (simplify main) arguments
 
 instance Simplify Semantic.CallHead where
   simplify = simplifyCallHead
@@ -512,8 +512,8 @@ instance Simplify Semantic.CallHead where
             (Reverse.fromList $ toList arguments)
     Semantic.Selector {selector, selectorInfo = Solved selectorInfo}
       | (argument : arguments) <- toList arguments ->
-          foldl Call (simplifySelector selector selectorInfo argument) arguments
-    _ -> foldl Call (simplify callHead) arguments
+          foldl (\function argument -> Call {function, argument}) (simplifySelector selector selectorInfo argument) arguments
+    _ -> foldl (\function argument -> Call {function, argument}) (simplify callHead) arguments
 
 simplifyCallHead :: Semantic.CallHead layout Check scope -> Expression scope
 simplifyCallHead = \case
@@ -689,14 +689,14 @@ simplifySelector selector Uniform {levity} argument =
       argument,
       instanciation = Instanciation.Mono {levity}
     }
-simplifySelector (Selector.Index typeIndex _) Disjoint {select} argument =
+simplifySelector Selector.Index {typeIndex} Disjoint {select} argument =
   Join {statements = mconcat statements}
   where
     generate index Select {selectIndex, constructorInfo} =
       case constructorInfo of
         Semantic.ConstructorInfo {entries} ->
           Statements.Bind
-            { constructor = Constructor.Index typeIndex index,
+            { constructor = Constructor.Index {typeIndex, constructorIndex = index},
               entryCount = length entries,
               check = argument,
               thenx = case selectIndex of
@@ -711,7 +711,7 @@ simplifySelector (Selector.Index typeIndex _) Disjoint {select} argument =
           Statements.Done
             { done =
                 Newtype
-                  { constructor = Constructor.Index typeIndex index,
+                  { constructor = Constructor.Index {typeIndex, constructorIndex = index},
                     argument,
                     direction = Destruct
                   }
@@ -862,7 +862,7 @@ instance Simplify Semantic.Expression where
       Join
         { statements =
             foldr1
-              Statements.Branch
+              (<>)
               (RightHandSide.desugar . RightHandSide.simplify <$> branches)
         }
     Semantic.Character {character} ->
@@ -947,3 +947,5 @@ instance Simplify Semantic.Expression where
           { constructor = Constructor.nil,
             arguments = Strict.Vector.empty
           }
+
+{-# UnorderedRecords Variable, Constructor, Selector, Method, Integer, Let, Call, Newtype #-}

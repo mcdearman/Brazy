@@ -1,3 +1,4 @@
+{-# LANGUAGE_HAZY UnorderedRecords #-}
 -- |
 -- The language extension table
 module Syntax.Extensions (Extensions (..), haskell2010, hazy) where

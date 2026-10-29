@@ -1,3 +1,4 @@
+{-# LANGUAGE_HAZY UnorderedRecords #-}
 module Semantic.Resolve.Temporary.Complete.Declaration where
 
 import Data.Foldable (toList)

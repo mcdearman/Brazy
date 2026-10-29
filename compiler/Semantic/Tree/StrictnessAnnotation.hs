@@ -1,3 +1,4 @@
+{-# LANGUAGE_HAZY UnorderedRecords #-}
 module Semantic.Tree.StrictnessAnnotation where
 
 import Semantic.FreeVariables (FreeTypeVariables (freeTypeVariables))

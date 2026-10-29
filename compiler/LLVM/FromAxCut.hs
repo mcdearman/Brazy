@@ -1,3 +1,4 @@
+{-# LANGUAGE_HAZY UnorderedRecords #-}
 -- |
 -- AxCut to LLVM IR.
 --

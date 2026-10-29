@@ -54,7 +54,7 @@ unify context position evidence (Logical (Box reference')) =
   readSTRef reference' >>= \case
     Solved evidence' -> unify context position evidence evidence'
     Unsolved {} -> writeSTRef reference' (Solved evidence)
-unify context position (Variable index instanciation) (Variable index' instanciation')
+unify context position Variable {variable = index, instanciation} Variable {variable = index', instanciation = instanciation'}
   | index == index' = do
       Instanciation.unify context position instanciation instanciation'
 unify context position (Logical (Shift logical)) evidence' = do
@@ -65,7 +65,7 @@ unify context position evidence (Logical (Shift logical')) = do
   unify (Shift.unshift context) position evidence (Logical logical')
 unify _ _ (Held term) (Held term')
   | term == term' = pure ()
-unify context position (Applied function arguments) (Applied function' arguments') = do
+unify context position Applied {function, arguments} Applied {function = function', arguments = arguments'} = do
   unify context position function function'
   sequence_ (zipWith (unify context position) arguments arguments')
 unify _ _ _ _ = error "unify evidence can't fail"
@@ -76,10 +76,10 @@ unshift ::
   Evidence s (scope ':+ scopes) ->
   ST s (Evidence s scopes)
 unshift context position = \case
-  Variable variable instanciation -> do
+  Variable {variable, instanciation} -> do
     let fail = error "unshift can't fail"
     instanciation <- Instanciation.unshift context position instanciation
-    pure $ Variable (Shift.map (Shift.Unshift fail) variable) instanciation
+    pure Variable {variable = Shift.map (Shift.Unshift fail) variable, instanciation}
   Logical (Box reference) -> do
     readSTRef reference >>= \case
       Solved evidence -> unshift context position evidence
@@ -89,15 +89,15 @@ unshift context position = \case
         writeSTRef reference (Solved $ Logical $ Shift $ Box box)
         pure $ Logical (Box box)
   Logical (Shift logical) -> pure (Logical logical)
-  Super evidence index -> do
-    evidence <- unshift context position evidence
-    pure $ Super evidence index
+  Super {base, index} -> do
+    base <- unshift context position base
+    pure Super {base, index}
   Held term -> do
     let fail = error "unshift can't fail"
     pure $ Held (Shift.map (Shift.Unshift fail) term)
-  Applied function arguments -> do
+  Applied {function, arguments} -> do
     function <- unshift context position function
     arguments <- traverse (unshift context position) arguments
-    pure $ Applied function arguments
+    pure Applied {function, arguments}
   -- It is only made of evidence that is worked out already.
   Abstract {} -> error "unshift of evidence that is a function"

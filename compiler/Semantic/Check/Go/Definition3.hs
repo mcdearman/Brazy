@@ -95,7 +95,7 @@ indexed Context {typeEnvironment} (Semantic.Label _ definition) = case definitio
     -- The patterns are two scopes in: that of the definitions this one is
     -- defined with, and that of what it defines for itself. A type that
     -- is defined in the second is not looked for.
-    constructor (Constructor.Index typeIndex _) = case Shift.partialUnshift Nothing typeIndex >>= Shift.partialUnshift Nothing of
+    constructor Constructor.Index {typeIndex} = case Shift.partialUnshift Nothing typeIndex >>= Shift.partialUnshift Nothing of
       Nothing -> pure False
       Just typeIndex -> do
         let get index = assumeData <$> TypeBinding.content (typeEnvironment Type.! index)

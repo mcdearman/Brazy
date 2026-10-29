@@ -1,3 +1,4 @@
+{-# LANGUAGE_HAZY UnorderedRecords #-}
 module Semantic.Check.Temporary.ConstructorInfo where
 
 import qualified Data.Vector.Strict as Strict

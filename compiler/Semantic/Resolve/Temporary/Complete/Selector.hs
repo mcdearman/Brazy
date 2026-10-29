@@ -1,3 +1,4 @@
+{-# LANGUAGE_HAZY UnorderedRecords #-}
 module Semantic.Resolve.Temporary.Complete.Selector where
 
 import qualified Semantic.Tree.Selector as Real

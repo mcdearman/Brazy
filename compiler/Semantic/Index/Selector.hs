@@ -1,3 +1,4 @@
+{-# LANGUAGE_HAZY UnorderedRecords #-}
 module Semantic.Index.Selector where
 
 import qualified Semantic.Index.Type2 as Type2
@@ -14,4 +15,4 @@ instance Shift0.Functor Index where
   map = Shift.mapDefault
 
 instance Shift.Functor Index where
-  map category (Index typeIndex selectorIndex) = Index (Shift.map category typeIndex) selectorIndex
+  map category Index {typeIndex, selectorIndex} = Index {typeIndex = Shift.map category typeIndex, selectorIndex}

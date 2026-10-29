@@ -1,3 +1,4 @@
+{-# LANGUAGE_HAZY UnorderedRecords #-}
 module Generate.LocalType where
 
 import Data.Map (Map)

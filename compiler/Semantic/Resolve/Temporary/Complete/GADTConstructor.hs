@@ -1,3 +1,4 @@
+{-# LANGUAGE_HAZY UnorderedRecords #-}
 module Semantic.Resolve.Temporary.Complete.GADTConstructor where
 
 import Data.Foldable (toList)

@@ -1,3 +1,4 @@
+{-# LANGUAGE_HAZY UnorderedRecords #-}
 module Core.Temporary.RightHandSide where
 
 import {-# SOURCE #-} Core.Tree.Declarations (Declarations)
@@ -60,7 +61,7 @@ instance Simplify Semantic.RightHandSide where
             Semantic.Body {body} ->
               Statements.Done {done = Expression.simplify body}
             Semantic.Body.Guards {guards} ->
-              foldr1 Statements.Branch (Statements.simplify <$> guards),
+              foldr1 (<>) (Statements.simplify <$> guards),
           declarations = Declarations.simplify declarations
         }
 

@@ -1,3 +1,4 @@
+{-# LANGUAGE_HAZY UnorderedRecords #-}
 module Semantic.Tree.TypePattern where
 
 import Core.Tree.Type as Simple (Type)

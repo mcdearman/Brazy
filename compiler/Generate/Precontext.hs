@@ -1,3 +1,4 @@
+{-# LANGUAGE_HAZY UnorderedRecords #-}
 module Generate.Precontext where
 
 import Core.Tree.Declarations (Declarations (..))

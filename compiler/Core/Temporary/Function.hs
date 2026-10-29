@@ -1,3 +1,4 @@
+{-# LANGUAGE_HAZY UnorderedRecords #-}
 module Core.Temporary.Function where
 
 import Core.Temporary.RightHandSide (RightHandSide)

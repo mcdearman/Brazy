@@ -146,14 +146,14 @@ solveEvidence context = solveEvidenceWith context Shift0.Id
 
 instance SolveEvidence EvidenceF where
   solveEvidenceWith context category position = \case
-    Evidence.Variable variable instanciation -> do
+    Evidence.Variable {variable, instanciation} -> do
       instanciation <- solveEvidenceWith context category position instanciation
       pure Evidence.Variable {variable, instanciation}
-    Evidence.Super base index -> do
+    Evidence.Super {base, index} -> do
       base <- solveEvidenceWith context category position base
       pure $ Evidence.Super {base, index}
     Evidence.Held term -> pure Evidence.Held {term}
-    Evidence.Applied function arguments -> do
+    Evidence.Applied {function, arguments} -> do
       function <- solveEvidenceWith context category position function
       arguments <- traverse (solveEvidenceWith context category position) arguments
       pure Evidence.Applied {function, arguments}

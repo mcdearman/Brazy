@@ -24,10 +24,13 @@ clauses ::
   Semantic.Definition Group Resolve scope ->
   ST s (Unify.Solve s (Solved.Definition Group Check scope))
 clauses context typex = \case
-  Semantic.Alternative function definition -> do
+  Semantic.Alternative {definition = function, alternative} -> do
     function <- Function.check context typex function
-    definition <- clauses context typex definition
-    pure $ Solved.Alternative <$> function <*> definition
+    alternative <- clauses context typex alternative
+    pure $ do
+      definition <- function
+      alternative <- alternative
+      pure Solved.Alternative {definition, alternative}
   Semantic.Definition function -> do
     function <- Function.check context typex function
     pure $ Solved.Definition <$> function

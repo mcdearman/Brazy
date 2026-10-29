@@ -1,3 +1,4 @@
+{-# LANGUAGE_HAZY UnorderedRecords #-}
 module Core.Tree.Instanciation where
 
 import qualified Core.Evidence.Functor as Core

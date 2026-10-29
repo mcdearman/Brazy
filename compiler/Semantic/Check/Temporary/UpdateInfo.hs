@@ -1,3 +1,4 @@
+{-# LANGUAGE_HAZY UnorderedRecords #-}
 module Semantic.Check.Temporary.UpdateInfo where
 
 import qualified Data.Strict.Maybe as Strict (Maybe)

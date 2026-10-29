@@ -1,3 +1,4 @@
+{-# LANGUAGE_HAZY UnorderedRecords #-}
 module Semantic.Tree.TypeDefinition where
 
 import qualified Data.Vector.Strict as Strict

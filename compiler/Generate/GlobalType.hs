@@ -1,3 +1,4 @@
+{-# LANGUAGE_HAZY UnorderedRecords #-}
 module Generate.GlobalType where
 
 import Data.Map (Map)

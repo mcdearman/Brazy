@@ -166,7 +166,7 @@ resolve context = \case
           Syntax.Record {startPosition, constructor, fields} ->
             case Constructor.get $ context != startPosition :@ constructor of
               Constructor.Binding
-                { index = constructor@(Constructor.Index typex _),
+                { index = constructor@Constructor.Index {typeIndex = typex},
                   selections,
                   fields = indexes,
                   fielded,
@@ -190,7 +190,7 @@ resolve context = \case
                         Just index <- Map.lookup root indexes = case path of
                           _ :. _ -> unneededFieldQualification position
                           Local -> Field {index, field}
-                      | Selector.Index typex' selector <- context !-% (position :@ name),
+                      | Selector.Index {typeIndex = typex', selectorIndex = selector} <- context !-% (position :@ name),
                         typex == typex',
                         Strict.Just redirect <- selections Strict.Vector.! selector =
                           Field {index = redirect, field}

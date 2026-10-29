@@ -16,10 +16,10 @@ check ::
   Unify.Type s scope ->
   Semantic.RightHandSide Group Resolve scope ->
   ST s (Unify.Solve s (Solved.RightHandSide Group Check scope))
-check context typex (Semantic.RightHandSide body declarations) = do
+check context typex Semantic.RightHandSide {body, declarations} = do
   context Declarations.:& declarations <- Declarations.check context declarations
   body <- Body.check context (shiftLogical typex) body
   pure $ do
     body <- body
     declarations <- declarations
-    pure $ Solved.RightHandSide body declarations
+    pure Solved.RightHandSide {body, declarations}

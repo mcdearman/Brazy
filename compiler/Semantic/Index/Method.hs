@@ -1,3 +1,4 @@
+{-# LANGUAGE_HAZY UnorderedRecords #-}
 module Semantic.Index.Method where
 
 import qualified Semantic.Index.Type2 as Type2
@@ -16,7 +17,7 @@ instance Shift0.Functor Index where
   map = Shift.mapDefault
 
 instance Shift.Functor Index where
-  map category (Index typeIndex selectorIndex) = Index (Shift.map category typeIndex) selectorIndex
+  map category Index {typeIndex, methodIndex} = Index {typeIndex = Shift.map category typeIndex, methodIndex}
 
 data Num
   = Plus
@@ -28,19 +29,19 @@ data Num
   | FromInteger
   deriving (Prelude.Enum, Prelude.Bounded, Prelude.Show)
 
-plus = Index Type2.Num $ Prelude.fromEnum Plus
+plus = Index {typeIndex = Type2.Num, methodIndex = Prelude.fromEnum Plus}
 
-minus = Index Type2.Num $ Prelude.fromEnum Minus
+minus = Index {typeIndex = Type2.Num, methodIndex = Prelude.fromEnum Minus}
 
-multiply = Index Type2.Num $ Prelude.fromEnum Multiply
+multiply = Index {typeIndex = Type2.Num, methodIndex = Prelude.fromEnum Multiply}
 
-negate = Index Type2.Num $ Prelude.fromEnum Negate
+negate = Index {typeIndex = Type2.Num, methodIndex = Prelude.fromEnum Negate}
 
-abs = Index Type2.Num $ Prelude.fromEnum Abs
+abs = Index {typeIndex = Type2.Num, methodIndex = Prelude.fromEnum Abs}
 
-signum = Index Type2.Num $ Prelude.fromEnum Signum
+signum = Index {typeIndex = Type2.Num, methodIndex = Prelude.fromEnum Signum}
 
-fromInteger = Index Type2.Num $ Prelude.fromEnum FromInteger
+fromInteger = Index {typeIndex = Type2.Num, methodIndex = Prelude.fromEnum FromInteger}
 
 data Enum
   = Succ
@@ -53,39 +54,39 @@ data Enum
   | EnumFromThenTo
   deriving (Prelude.Enum, Prelude.Bounded, Prelude.Show)
 
-succ = Index Type2.Enum $ Prelude.fromEnum Succ
+succ = Index {typeIndex = Type2.Enum, methodIndex = Prelude.fromEnum Succ}
 
-pred = Index Type2.Enum $ Prelude.fromEnum Pred
+pred = Index {typeIndex = Type2.Enum, methodIndex = Prelude.fromEnum Pred}
 
-toEnum = Index Type2.Enum $ Prelude.fromEnum ToEnum
+toEnum = Index {typeIndex = Type2.Enum, methodIndex = Prelude.fromEnum ToEnum}
 
-fromEnum = Index Type2.Enum $ Prelude.fromEnum FromEnum
+fromEnum = Index {typeIndex = Type2.Enum, methodIndex = Prelude.fromEnum FromEnum}
 
-enumFrom = Index Type2.Enum $ Prelude.fromEnum EnumFrom
+enumFrom = Index {typeIndex = Type2.Enum, methodIndex = Prelude.fromEnum EnumFrom}
 
-enumFromThen = Index Type2.Enum $ Prelude.fromEnum EnumFromThen
+enumFromThen = Index {typeIndex = Type2.Enum, methodIndex = Prelude.fromEnum EnumFromThen}
 
-enumFromTo = Index Type2.Enum $ Prelude.fromEnum EnumFromTo
+enumFromTo = Index {typeIndex = Type2.Enum, methodIndex = Prelude.fromEnum EnumFromTo}
 
-enumFromThenTo = Index Type2.Enum $ Prelude.fromEnum EnumFromThenTo
+enumFromThenTo = Index {typeIndex = Type2.Enum, methodIndex = Prelude.fromEnum EnumFromThenTo}
 
 data Bounded
   = MinBound
   | MaxBound
   deriving (Prelude.Enum, Prelude.Bounded, Prelude.Show)
 
-minBound = Index Type2.Bounded $ Prelude.fromEnum MinBound
+minBound = Index {typeIndex = Type2.Bounded, methodIndex = Prelude.fromEnum MinBound}
 
-maxBound = Index Type2.Bounded $ Prelude.fromEnum MaxBound
+maxBound = Index {typeIndex = Type2.Bounded, methodIndex = Prelude.fromEnum MaxBound}
 
 data Eq
   = Equal
   | NotEqual
   deriving (Prelude.Enum, Prelude.Bounded, Prelude.Show)
 
-equal = Index Type2.Eq $ Prelude.fromEnum Equal
+equal = Index {typeIndex = Type2.Eq, methodIndex = Prelude.fromEnum Equal}
 
-notEqual = Index Type2.Eq $ Prelude.fromEnum NotEqual
+notEqual = Index {typeIndex = Type2.Eq, methodIndex = Prelude.fromEnum NotEqual}
 
 data Ord
   = Compare
@@ -97,59 +98,59 @@ data Ord
   | Min
   deriving (Prelude.Enum, Prelude.Bounded, Prelude.Show)
 
-compare = Index Type2.Ord $ Prelude.fromEnum Compare
+compare = Index {typeIndex = Type2.Ord, methodIndex = Prelude.fromEnum Compare}
 
-lessThen = Index Type2.Ord $ Prelude.fromEnum LessThen
+lessThen = Index {typeIndex = Type2.Ord, methodIndex = Prelude.fromEnum LessThen}
 
-lessThenEqual = Index Type2.Ord $ Prelude.fromEnum LessThenEqual
+lessThenEqual = Index {typeIndex = Type2.Ord, methodIndex = Prelude.fromEnum LessThenEqual}
 
-greaterThen = Index Type2.Ord $ Prelude.fromEnum GreaterThen
+greaterThen = Index {typeIndex = Type2.Ord, methodIndex = Prelude.fromEnum GreaterThen}
 
-greaterThenEqual = Index Type2.Ord $ Prelude.fromEnum GreaterThenEqual
+greaterThenEqual = Index {typeIndex = Type2.Ord, methodIndex = Prelude.fromEnum GreaterThenEqual}
 
-max = Index Type2.Ord $ Prelude.fromEnum Max
+max = Index {typeIndex = Type2.Ord, methodIndex = Prelude.fromEnum Max}
 
-min = Index Type2.Ord $ Prelude.fromEnum Min
+min = Index {typeIndex = Type2.Ord, methodIndex = Prelude.fromEnum Min}
 
 data Real = ToRational
   deriving (Prelude.Enum, Prelude.Bounded, Prelude.Show)
 
-toRational = Index Type2.Real $ Prelude.fromEnum ToRational
+toRational = Index {typeIndex = Type2.Real, methodIndex = Prelude.fromEnum ToRational}
 
 data Integral = Quot | Rem | Div | Mod | QuotRem | DivMod | ToInteger
   deriving (Prelude.Enum, Prelude.Bounded, Prelude.Show)
 
-quot = Index Type2.Integral $ Prelude.fromEnum Quot
+quot = Index {typeIndex = Type2.Integral, methodIndex = Prelude.fromEnum Quot}
 
-rem = Index Type2.Integral $ Prelude.fromEnum Rem
+rem = Index {typeIndex = Type2.Integral, methodIndex = Prelude.fromEnum Rem}
 
-div = Index Type2.Integral $ Prelude.fromEnum Div
+div = Index {typeIndex = Type2.Integral, methodIndex = Prelude.fromEnum Div}
 
-mod = Index Type2.Integral $ Prelude.fromEnum Mod
+mod = Index {typeIndex = Type2.Integral, methodIndex = Prelude.fromEnum Mod}
 
-quotRem = Index Type2.Integral $ Prelude.fromEnum QuotRem
+quotRem = Index {typeIndex = Type2.Integral, methodIndex = Prelude.fromEnum QuotRem}
 
-divMod = Index Type2.Integral $ Prelude.fromEnum DivMod
+divMod = Index {typeIndex = Type2.Integral, methodIndex = Prelude.fromEnum DivMod}
 
-toInteger = Index Type2.Integral $ Prelude.fromEnum ToInteger
+toInteger = Index {typeIndex = Type2.Integral, methodIndex = Prelude.fromEnum ToInteger}
 
 data Fractional = Divide | Recip | FromRational
   deriving (Prelude.Enum, Prelude.Bounded, Prelude.Show)
 
-divide = Index Type2.Fractional $ Prelude.fromEnum Divide
+divide = Index {typeIndex = Type2.Fractional, methodIndex = Prelude.fromEnum Divide}
 
-recip = Index Type2.Fractional $ Prelude.fromEnum Recip
+recip = Index {typeIndex = Type2.Fractional, methodIndex = Prelude.fromEnum Recip}
 
-fromRational = Index Type2.Fractional $ Prelude.fromEnum FromRational
+fromRational = Index {typeIndex = Type2.Fractional, methodIndex = Prelude.fromEnum FromRational}
 
 data Functor
   = Fmap
   | Fconst
   deriving (Prelude.Enum, Prelude.Bounded, Prelude.Show)
 
-fmap = Index Type2.Functor $ Prelude.fromEnum Fmap
+fmap = Index {typeIndex = Type2.Functor, methodIndex = Prelude.fromEnum Fmap}
 
-fconst = Index Type2.Functor $ Prelude.fromEnum Fconst
+fconst = Index {typeIndex = Type2.Functor, methodIndex = Prelude.fromEnum Fconst}
 
 data Foldable
   = Fold
@@ -170,7 +171,7 @@ data Foldable
   | Product
   deriving (Prelude.Enum, Prelude.Bounded, Prelude.Show)
 
-foldr = Index Type2.Foldable $ Prelude.fromEnum Foldr
+foldr = Index {typeIndex = Type2.Foldable, methodIndex = Prelude.fromEnum Foldr}
 
 data Traversable
   = Traverse
@@ -179,7 +180,7 @@ data Traversable
   | Sequence
   deriving (Prelude.Enum, Prelude.Bounded, Prelude.Show)
 
-traverse = Index Type2.Traversable $ Prelude.fromEnum Traverse
+traverse = Index {typeIndex = Type2.Traversable, methodIndex = Prelude.fromEnum Traverse}
 
 data Ix
   = IxRange
@@ -188,11 +189,11 @@ data Ix
   | IxRangeSize
   deriving (Prelude.Enum, Prelude.Bounded, Prelude.Show)
 
-ixRange = Index Type2.Ix $ Prelude.fromEnum IxRange
+ixRange = Index {typeIndex = Type2.Ix, methodIndex = Prelude.fromEnum IxRange}
 
-ixIndex = Index Type2.Ix $ Prelude.fromEnum IxIndex
+ixIndex = Index {typeIndex = Type2.Ix, methodIndex = Prelude.fromEnum IxIndex}
 
-ixInRange = Index Type2.Ix $ Prelude.fromEnum IxInRange
+ixInRange = Index {typeIndex = Type2.Ix, methodIndex = Prelude.fromEnum IxInRange}
 
 data Applicative
   = Pure
@@ -202,15 +203,15 @@ data Applicative
   | DiscardRight
   deriving (Prelude.Enum, Prelude.Bounded, Prelude.Show)
 
-pure = Index Type2.Applicative $ Prelude.fromEnum Pure
+pure = Index {typeIndex = Type2.Applicative, methodIndex = Prelude.fromEnum Pure}
 
-ap = Index Type2.Applicative $ Prelude.fromEnum Ap
+ap = Index {typeIndex = Type2.Applicative, methodIndex = Prelude.fromEnum Ap}
 
-liftA2 = Index Type2.Applicative $ Prelude.fromEnum LiftA2
+liftA2 = Index {typeIndex = Type2.Applicative, methodIndex = Prelude.fromEnum LiftA2}
 
-discardLeft = Index Type2.Applicative $ Prelude.fromEnum DiscardLeft
+discardLeft = Index {typeIndex = Type2.Applicative, methodIndex = Prelude.fromEnum DiscardLeft}
 
-discardRight = Index Type2.Applicative $ Prelude.fromEnum DiscardRight
+discardRight = Index {typeIndex = Type2.Applicative, methodIndex = Prelude.fromEnum DiscardRight}
 
 data Monad
   = Bind
@@ -218,17 +219,17 @@ data Monad
   | Return
   deriving (Prelude.Enum, Prelude.Bounded, Prelude.Show)
 
-bind = Index Type2.Monad $ Prelude.fromEnum Bind
+bind = Index {typeIndex = Type2.Monad, methodIndex = Prelude.fromEnum Bind}
 
-thenx = Index Type2.Monad $ Prelude.fromEnum Then
+thenx = Index {typeIndex = Type2.Monad, methodIndex = Prelude.fromEnum Then}
 
-return = Index Type2.Monad $ Prelude.fromEnum Return
+return = Index {typeIndex = Type2.Monad, methodIndex = Prelude.fromEnum Return}
 
 data MonadFail
   = Fail
   deriving (Prelude.Enum, Prelude.Bounded, Prelude.Show)
 
-fail = Index Type2.MonadFail $ Prelude.fromEnum Fail
+fail = Index {typeIndex = Type2.MonadFail, methodIndex = Prelude.fromEnum Fail}
 
 data Semigroup
   = Combine
@@ -236,11 +237,11 @@ data Semigroup
   | Stimes
   deriving (Prelude.Enum, Prelude.Bounded, Prelude.Show)
 
-combine = Index Type2.Semigroup $ Prelude.fromEnum Combine
+combine = Index {typeIndex = Type2.Semigroup, methodIndex = Prelude.fromEnum Combine}
 
-sconcat = Index Type2.Semigroup $ Prelude.fromEnum Sconcat
+sconcat = Index {typeIndex = Type2.Semigroup, methodIndex = Prelude.fromEnum Sconcat}
 
-stimes = Index Type2.Semigroup $ Prelude.fromEnum Stimes
+stimes = Index {typeIndex = Type2.Semigroup, methodIndex = Prelude.fromEnum Stimes}
 
 data Monoid
   = Mempty
@@ -248,24 +249,24 @@ data Monoid
   | Mconcat
   deriving (Prelude.Enum, Prelude.Bounded, Prelude.Show)
 
-mempty = Index Type2.Monoid $ Prelude.fromEnum Mempty
+mempty = Index {typeIndex = Type2.Monoid, methodIndex = Prelude.fromEnum Mempty}
 
-mappend = Index Type2.Monoid $ Prelude.fromEnum Mappend
+mappend = Index {typeIndex = Type2.Monoid, methodIndex = Prelude.fromEnum Mappend}
 
-mconcat = Index Type2.Monoid $ Prelude.fromEnum Mconcat
+mconcat = Index {typeIndex = Type2.Monoid, methodIndex = Prelude.fromEnum Mconcat}
 
 data Show = ShowsPrec | Show | ShowList
   deriving (Prelude.Enum, Prelude.Bounded, Prelude.Show)
 
-showsPrec = Index Type2.Show $ Prelude.fromEnum ShowsPrec
+showsPrec = Index {typeIndex = Type2.Show, methodIndex = Prelude.fromEnum ShowsPrec}
 
-show = Index Type2.Show $ Prelude.fromEnum Show
+show = Index {typeIndex = Type2.Show, methodIndex = Prelude.fromEnum Show}
 
-showList = Index Type2.Show $ Prelude.fromEnum ShowList
+showList = Index {typeIndex = Type2.Show, methodIndex = Prelude.fromEnum ShowList}
 
 data Read = ReadsPrec | ReadList
   deriving (Prelude.Enum, Prelude.Bounded, Prelude.Show)
 
-readsPrec = Index Type2.Read $ Prelude.fromEnum ReadsPrec
+readsPrec = Index {typeIndex = Type2.Read, methodIndex = Prelude.fromEnum ReadsPrec}
 
-readList = Index Type2.Read $ Prelude.fromEnum ReadList
+readList = Index {typeIndex = Type2.Read, methodIndex = Prelude.fromEnum ReadList}

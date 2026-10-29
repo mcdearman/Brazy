@@ -1,3 +1,4 @@
+{-# LANGUAGE_HAZY UnorderedRecords #-}
 module Core.Tree.Constructor where
 
 import Core.Instanciate (Normal, Store (Empty))

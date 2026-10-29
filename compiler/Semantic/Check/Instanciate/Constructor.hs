@@ -1,3 +1,4 @@
+{-# LANGUAGE_HAZY UnorderedRecords #-}
 module Semantic.Check.Instanciate.Constructor where
 
 import Control.Monad.ST (ST)

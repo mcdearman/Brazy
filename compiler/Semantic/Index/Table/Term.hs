@@ -1,3 +1,4 @@
+{-# LANGUAGE_HAZY UnorderedRecords #-}
 module Semantic.Index.Table.Term
   ( Table (..),
     Bound (..),

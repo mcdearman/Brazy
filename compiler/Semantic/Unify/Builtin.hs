@@ -329,5 +329,5 @@ constrain fallthough constrain classx head = table classx head
     table Type2.Read Type2.Double [] = single
     table _ _ _ = fallthough
 
-    single = pure $ Variable (Evidence.Direct classx head) monoLazy
-    call list = pure $ Variable (Evidence.Direct classx head) $ Instanciation $ fromList list
+    single = pure Variable {variable = Evidence.Direct classx head, instanciation = monoLazy}
+    call list = pure Variable {variable = Evidence.Direct classx head, instanciation = Instanciation $ fromList list}

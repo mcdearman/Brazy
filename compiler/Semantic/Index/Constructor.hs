@@ -1,3 +1,4 @@
+{-# LANGUAGE_HAZY UnorderedRecords #-}
 module Semantic.Index.Constructor where
 
 import qualified Semantic.Index.Type as Type

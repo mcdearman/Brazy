@@ -1,3 +1,4 @@
+{-# LANGUAGE_HAZY UnorderedRecords #-}
 module Main (main) where
 
 import qualified AxCut.Lower as AxCut (lower)

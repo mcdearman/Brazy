@@ -1,3 +1,4 @@
+{-# LANGUAGE_HAZY UnorderedRecords #-}
 module Core.Tree.TypeLambda where
 
 import qualified Core.Substitute as Substitute

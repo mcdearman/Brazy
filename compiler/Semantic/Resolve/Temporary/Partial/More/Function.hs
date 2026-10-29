@@ -1,3 +1,4 @@
+{-# LANGUAGE_HAZY UnorderedRecords #-}
 module Semantic.Resolve.Temporary.Partial.More.Function where
 
 import Semantic.Layout (Normal)

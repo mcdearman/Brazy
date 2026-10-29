@@ -90,3 +90,5 @@ desugar cases
         { left = Function.desugarUnitary definition,
           right = go alternative
         }
+
+{-# UnorderedRecords Alternative #-}

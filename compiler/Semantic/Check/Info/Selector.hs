@@ -1,3 +1,4 @@
+{-# LANGUAGE_HAZY UnorderedRecords #-}
 module Semantic.Check.Info.Selector where
 
 import qualified Core.Tree.Type as Simple

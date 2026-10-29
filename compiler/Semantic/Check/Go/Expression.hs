@@ -132,7 +132,7 @@ holding
   context@Context {typeEnvironment, termEnvironment}
   resultType
   constructorPosition
-  constructor@(Constructor.Index typeIndex constructorIndex)
+  constructor@Constructor.Index {typeIndex, constructorIndex}
   arguments
   through = do
     datax <- do
@@ -229,7 +229,7 @@ check
       fields
     } =
     do
-      let Constructor.Index typeIndex constructorIndex = constructor
+      let Constructor.Index {typeIndex, constructorIndex} = constructor
       datax <- do
         let get index = assumeData <$> TypeBinding.content (typeEnvironment Type.! index)
         Builtin.index pure get typeIndex

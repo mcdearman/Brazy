@@ -35,29 +35,32 @@ instance Shift.TermFunctor Definition where
 instance Shift.Functor (Definition layout stage) where
   map category = \case
     Definition function -> Definition (Shift.map category function)
-    Alternative function definition ->
+    Alternative {definition, alternative} ->
       Alternative
-        (Shift.map category function)
-        (Shift.map category definition)
+        { definition = Shift.map category definition,
+          alternative = Shift.map category alternative
+        }
 
 instance FreeTermVariables Definition where
   freeTermVariables target = \case
     Definition function -> freeTermVariables target function
-    Alternative function definition ->
+    Alternative {definition, alternative} ->
       concat
-        [ freeTermVariables target function,
-          freeTermVariables target definition
+        [ freeTermVariables target definition,
+          freeTermVariables target alternative
         ]
 
 instance Connect Definition where
   connect = \case
     Definition function -> Definition (connect function)
-    Alternative function definition -> Alternative (connect function) (connect definition)
+    Alternative {definition, alternative} -> Alternative {definition = connect definition, alternative = connect alternative}
   seperate = \case
     Definition function -> Definition (seperate function)
-    Alternative function definition -> Alternative (seperate function) (seperate definition)
+    Alternative {definition, alternative} -> Alternative {definition = seperate definition, alternative = seperate alternative}
 
 merge :: NonEmpty (Function layout stage scope) -> Definition layout stage scope
 merge (definition :| []) = Definition definition
 merge (definition1 :| (definition2 : definitions)) =
-  Alternative definition1 (merge (definition2 :| definitions))
+  Alternative {definition = definition1, alternative = merge (definition2 :| definitions)}
+
+{-# UnorderedRecords Alternative #-}

@@ -1,3 +1,4 @@
+{-# LANGUAGE_HAZY UnorderedRecords #-}
 module Core.Tree.Constraints where
 
 import qualified Core.Substitute as Substitute

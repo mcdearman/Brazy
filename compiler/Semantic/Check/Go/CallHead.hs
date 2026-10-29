@@ -51,7 +51,7 @@ check context@Context {termEnvironment} typex Semantic.Variable {variablePositio
       pure $ variable context variablePosition index instanciation
 check context@Context {typeEnvironment} typex Semantic.Constructor {constructorPosition, constructor = index} =
   do
-    let Constructor.Index typeIndex constructorIndex = index
+    let Constructor.Index {typeIndex, constructorIndex} = index
     datax <- do
       let get index = assumeData <$> TypeBinding.content (typeEnvironment Type.! index)
       Builtin.index pure get typeIndex
@@ -68,7 +68,7 @@ check
   context@Context {typeEnvironment}
   typex
   Semantic.Selector {selectorPosition, selector} = do
-    let Selector.Index typeIndex selectorIndex = selector
+    let Selector.Index {typeIndex, selectorIndex} = selector
     datax <- do
       let get index = assumeData <$> TypeBinding.content (typeEnvironment Type.! index)
       Builtin.index pure get typeIndex
@@ -90,7 +90,7 @@ check
   typex
   Semantic.Method {methodPosition, method} = do
     case method of
-      Method.Index typeIndex methodIndex -> do
+      Method.Index {typeIndex, methodIndex} -> do
         classx <- do
           let get index = assumeClass <$> TypeBinding.content (typeEnvironment Type.! index)
           Builtin.index pure get typeIndex

@@ -1,3 +1,4 @@
+{-# LANGUAGE_HAZY UnorderedRecords #-}
 module Generate.Global where
 
 import Data.Text (Text)

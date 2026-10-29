@@ -1,3 +1,4 @@
+{-# LANGUAGE_HAZY UnorderedRecords #-}
 -- |
 -- @Ix@, derived, by another type's instance. A type whose constructors hold
 -- nothing has its places numbered as the constructors are, in the order

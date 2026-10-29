@@ -1,3 +1,4 @@
+{-# LANGUAGE_HAZY UnorderedRecords #-}
 module Semantic.Tree.Alternative where
 
 import Semantic.Connect (Connect (..))
@@ -22,10 +23,11 @@ instance Shift0.Functor (Alternative layout stage) where
   map = Shift.mapDefault
 
 instance Shift.Functor (Alternative layout stage) where
-  map category (Alternative patternx rightHandSide) =
+  map category Alternative {parameter, rightHandSide} =
     Alternative
-      (Shift.map category patternx)
-      (Shift.map (Shift.Over category) rightHandSide)
+      { parameter = Shift.map category parameter,
+        rightHandSide = Shift.map (Shift.Over category) rightHandSide
+      }
 
 instance FreeTermVariables Alternative where
   freeTermVariables target Alternative {rightHandSide} =

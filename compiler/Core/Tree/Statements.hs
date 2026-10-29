@@ -1,3 +1,4 @@
+{-# LANGUAGE_HAZY UnorderedRecords #-}
 module Core.Tree.Statements where
 
 import qualified Core.Substitute as Substitute
@@ -64,7 +65,7 @@ data Statements scope
   deriving (Show)
 
 instance Semigroup (Statements scope) where
-  (<>) = Branch
+  left <> right = Branch {left, right}
 
 instance Monoid (Statements scope) where
   mempty = Bottom
