@@ -1429,6 +1429,23 @@ kept, and eval and apply:
       saved. A comprehension over `zip`, and `and` over that, make neither
       list: `queens` makes 12% fewer blocks and `spectral` 29% fewer, which
       takes it from 0.89 seconds to 0.59 (test `zip-fusion`)
+- [x] Numbers and forced thunks are given back without going round the
+      runtime. A block that holds nothing, a `Double` or an `Integer` kept in
+      its block, goes straight to the list of free blocks of its size when
+      its count reaches zero, where it went on the list of blocks to be
+      taken apart first; and a forced thunk or a `Double` whose inside the
+      program owns is given back by the program, as a constructed value is.
+      `nbody` takes 0.83 seconds where it took 1.18, `spectral` 0.48, and
+      `queens` 0.66
+- [ ] A function that does not call itself, given an instance that is
+      known, is not copied for it. Tried for `queens`, whose `safe` is
+      given the instances of `Int` as a local function with a class in its
+      type: in the copy the methods were known and done where they were
+      called, but the copy was made from the function as it was a round of
+      putting functions where they are called before, so what it went
+      through lists with was no longer made into loops, and the program made
+      more blocks than without it. Copies would need as many rounds as the
+      functions they are made of
 
 Where it stands against GHC with `-O1`, on 2026-10-29, each workload made
 big enough to be timed (in `~/perf2` of the machine it was measured on).
