@@ -1,4 +1,9 @@
 {-# LANGUAGE_HAZY UnorderedRecords #-}
+-- |
+-- A binding group: definitions with no type signature that use one
+-- another, and so are checked together. Each is in the scope of the
+-- group, where the others are known by their place in it. Checking gives
+-- the group one @forall@ and context, with a type for each definition.
 module Semantic.Tree.Group where
 
 import Core.Tree.Forall (ForallOver (..))

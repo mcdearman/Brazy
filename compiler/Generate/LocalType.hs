@@ -1,4 +1,7 @@
 {-# LANGUAGE_HAZY UnorderedRecords #-}
+-- |
+-- What the instances that go with a type of a local scope are called, for
+-- "Generate.Context" when Core is translated into the sequent IR.
 module Generate.LocalType where
 
 import Data.Map (Map)

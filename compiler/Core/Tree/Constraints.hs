@@ -1,4 +1,8 @@
 {-# LANGUAGE_HAZY UnorderedRecords #-}
+-- |
+-- What a @forall@ or type lambda of Core requires: its constraints, which
+-- evidence is passed for, or, when it has none, the levity of the value.
+-- Also what an instance requires.
 module Core.Tree.Constraints where
 
 import qualified Core.Substitute as Substitute

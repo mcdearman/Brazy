@@ -1,5 +1,11 @@
 {-# LANGUAGE_HAZY UnorderedRecords #-}
 
+-- |
+-- Resolves an instance, whether written out or derived, given the class's
+-- methods: its type parameters, its prerequisites, and each method's
+-- definition, put in the class's order. A method left out, and every
+-- method of a derived instance, is marked to be generated. Defining a name
+-- that is not one of the class's visible methods is an error.
 module Semantic.Resolve.Go.Instance where
 
 import Data.Foldable (toList)

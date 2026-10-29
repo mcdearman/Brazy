@@ -1,5 +1,10 @@
 {-# LANGUAGE_HAZY UnorderedRecords #-}
 
+-- |
+-- One declaration of a term: its name, its definition, and its type, which
+-- checking works out. A pattern binding such as @(a, b) = e@ makes an
+-- unnamed declaration for the right-hand side its names share, besides one
+-- for each name.
 module Semantic.Tree.Declaration where
 
 import qualified Core.Tree.Forall as Simple (ForallOver)

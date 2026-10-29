@@ -1,3 +1,7 @@
+-- |
+-- Using a type that is already checked, in Core's form: make a fresh
+-- instance of it, or bring its type variables into scope as rigid ones,
+-- with what its constraints and their superclasses say is known of them.
 module Semantic.Check.Scheme where
 
 import Control.Monad (zipWithM)

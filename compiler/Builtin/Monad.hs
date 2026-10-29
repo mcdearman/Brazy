@@ -1,3 +1,8 @@
+-- |
+-- The builtin class @Monad@, written as Haskell source: its superclass
+-- @Applicative@, its methods @>>=@, @>>@ and @return@, defaults for the
+-- last two, and their fixities. 'builtinClass' compiles it into the names,
+-- Core definition and extra the compiler keeps of it.
 module Builtin.Monad where
 
 import Builtin (builtinClass)

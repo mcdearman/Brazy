@@ -1,3 +1,6 @@
+-- |
+-- Resolves one alternative of a @case@ expression or a lambda case: its
+-- pattern, then its right-hand side with the pattern's variables in scope.
 module Semantic.Resolve.Go.Alternative where
 
 import Semantic.Layout (Normal)

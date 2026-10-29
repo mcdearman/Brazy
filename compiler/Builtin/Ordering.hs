@@ -1,3 +1,7 @@
+-- |
+-- The builtin type @Ordering@, written as Haskell source: its constructors
+-- @LT@, @EQ@ and @GT@. 'builtinData' compiles it into the names and Core
+-- definition the compiler keeps of it.
 module Builtin.Ordering where
 
 import Builtin (builtinData)

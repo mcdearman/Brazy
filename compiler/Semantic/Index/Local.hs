@@ -1,3 +1,6 @@
+-- |
+-- The index of a type variable: one of those bound in the nearest @Local@
+-- scope, counted by place, or one further out under 'Shift'.
 module Semantic.Index.Local where
 
 import Data.Kind (Type)

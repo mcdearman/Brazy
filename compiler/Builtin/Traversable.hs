@@ -1,3 +1,8 @@
+-- |
+-- The builtin class @Traversable@, written as Haskell source: its
+-- superclasses @Functor@ and @Foldable@ and its methods, each with a
+-- default. 'builtinClass' compiles it into the names, Core definition and
+-- extra the compiler keeps of it.
 module Builtin.Traversable where
 
 import Builtin (builtinClass)

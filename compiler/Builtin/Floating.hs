@@ -1,3 +1,8 @@
+-- |
+-- The builtin class @Floating@, written as Haskell source: its superclass
+-- @Fractional@, its methods, defaults for @**@, @logBase@, @sqrt@, @tan@ and
+-- @tanh@, and the fixity of @**@. 'builtinClass' compiles it into the
+-- names, Core definition and extra the compiler keeps of it.
 module Builtin.Floating where
 
 import Builtin (builtinClass)

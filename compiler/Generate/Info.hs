@@ -1,3 +1,6 @@
+-- |
+-- Whether a levity of Core is strict, for "Sequent.FromCore". Only @Lazy@
+-- and @Strict@ are expected; any other type is an error.
 module Generate.Info where
 
 import Core.Tree.Type (Type)

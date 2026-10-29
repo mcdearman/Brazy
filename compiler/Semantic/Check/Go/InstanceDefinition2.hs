@@ -1,4 +1,11 @@
 {-# LANGUAGE_HAZY UnorderedRecords #-}
+-- |
+-- Checking an instance: its header, which says its parameters and what it
+-- requires, and its methods, each against the class's type for it at the
+-- instance's type. A method the instance leaves out is the class's default;
+-- in an instance from a @deriving@ clause, the methods that are derived are
+-- made by the modules under @Semantic.Check.Derive@. What such an instance
+-- requires, when nothing says, is worked out from what the type holds.
 module Semantic.Check.Go.InstanceDefinition2 where
 
 import qualified Core.Tree.Type as Levity (lazy)

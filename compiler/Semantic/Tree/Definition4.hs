@@ -1,3 +1,8 @@
+-- |
+-- A term's definition with its type signature, or the mark that it has
+-- none. In the 'Layout.Group' layout a definition with no signature is not
+-- here any more: one member of its binding group holds the whole 'Group',
+-- and each of the others is a 'Link' to it, with its place in the group.
 module Semantic.Tree.Definition4 where
 
 import Core.Tree.Constraints (ConstraintsF (..))

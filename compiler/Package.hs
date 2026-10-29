@@ -1,4 +1,9 @@
 {-# LANGUAGE_HAZY UnorderedRecords #-}
+-- |
+-- A package the compiler is given: its directory, the extensions its
+-- modules are read with, and its modules. 'load' reads the @package@ file,
+-- which lists the extensions, a @;@, and the path of each module; a
+-- module's source is read from the @header@ directory when it is needed.
 module Package (Package (..), Module (..), load) where
 
 import Control.Monad (void)

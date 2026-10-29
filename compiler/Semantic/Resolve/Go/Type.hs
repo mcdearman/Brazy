@@ -1,5 +1,11 @@
 {-# LANGUAGE_HAZY UnorderedRecords #-}
 
+-- |
+-- Resolves a type: type variables to local indexes, type constructors and
+-- classes to their indexes, the builtin kinds such as @Type@ and
+-- @Constraint@ to nodes of their own, and promoted data constructors to
+-- lifted ones. Infix types are grouped by fixity in
+-- "Semantic.Resolve.Temporary.TypeInfix".
 module Semantic.Resolve.Go.Type where
 
 import qualified Semantic.Index.Constructor as Constructor

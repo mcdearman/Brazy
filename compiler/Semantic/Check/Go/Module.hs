@@ -1,3 +1,9 @@
+-- |
+-- Checking a whole program: the declarations of every module go in one
+-- table of cells tied together (see "Graph.Topological"), so a declaration
+-- is checked when something first needs it, whatever module it is in. Each
+-- module's @default@ declaration says what its types that are never worked
+-- out may be taken to be.
 module Semantic.Check.Go.Module (Module (..), check) where
 
 import Control.Monad.ST (ST)

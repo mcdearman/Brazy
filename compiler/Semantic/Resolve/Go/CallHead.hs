@@ -1,3 +1,8 @@
+-- |
+-- Turns the index of the variable or constructor at the head of a call
+-- into a 'CallHead': a variable, a field selector, a class method or a
+-- constructor. @runST@ cannot be one; "Semantic.Resolve.Go.Expression"
+-- handles a call of it apart.
 module Semantic.Resolve.Go.CallHead where
 
 import Error (badRunSTCall)

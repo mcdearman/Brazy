@@ -1,3 +1,7 @@
+-- |
+-- What a use of a polymorphic value is given while types are checked:
+-- evidence for each of its constraints, or, if it has none, its levity.
+-- Here are unifying two of these and moving one out of a scope.
 module Semantic.Unify.Instanciation where
 
 import Control.Monad.ST (ST)

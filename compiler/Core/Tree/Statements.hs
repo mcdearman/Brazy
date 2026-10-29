@@ -1,4 +1,9 @@
 {-# LANGUAGE_HAZY UnorderedRecords #-}
+-- |
+-- Statements of Core, which a @Join@ expression holds: matches on one
+-- constructor, @let@s, strict @let@s, and branches tried in turn, ending in
+-- an expression or in bottom. Here the patterns and guards of the checked
+-- program are made into matches on one constructor at a time.
 module Core.Tree.Statements where
 
 import qualified Core.Substitute as Substitute

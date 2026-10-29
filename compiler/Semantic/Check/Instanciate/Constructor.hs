@@ -1,4 +1,9 @@
 {-# LANGUAGE_HAZY UnorderedRecords #-}
+-- |
+-- A constructor made fresh for checking, as part of a fresh data type: what
+-- it holds, the type it makes, and, for a constructor of a type declared
+-- with @where@, the types it hides, what it requires of its types and what
+-- types it says are the same.
 module Semantic.Check.Instanciate.Constructor where
 
 import Control.Monad.ST (ST)

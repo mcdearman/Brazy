@@ -1,3 +1,8 @@
+-- |
+-- The @showsPrec@ of a derived @Show@ instance, written as a Core
+-- expression: a constructor is shown the way it was declared, before its
+-- arguments, between them, or with its fields as a record, and in brackets
+-- when the precedence it is shown at asks for them.
 module Semantic.Check.Derive.Show where
 
 import {-# SOURCE #-} qualified Builtin.Show as Show

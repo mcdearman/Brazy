@@ -1,3 +1,8 @@
+-- |
+-- The methods of a derived @Bounded@ instance, written as Core expressions.
+-- For a type whose constructors have no fields they are the first and the
+-- last constructor; for a type of one constructor they are that constructor
+-- given the bound of each field.
 module Semantic.Check.Derive.Bounded where
 
 import Control.Monad.ST (ST)

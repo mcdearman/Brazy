@@ -1,3 +1,8 @@
+-- |
+-- Checking a type declaration as cells of the table of declarations: its
+-- definition (see "Semantic.Check.Go.TypeDefinition2"), and its kind, which
+-- is its kind signature's, what the group it is checked with works out, or
+-- its synonym's.
 module Semantic.Check.Go.TypeDeclaration where
 
 import Control.Monad.ST (ST)

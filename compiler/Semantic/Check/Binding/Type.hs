@@ -1,4 +1,9 @@
 {-# LANGUAGE_HAZY UnorderedRecords #-}
+-- |
+-- What the checker's context holds for a type or class: its kind, its
+-- declaration in Core's form, what it is a name for if it is a synonym, and
+-- the instances of it that are known. Types that are being checked together
+-- have only a kind so far.
 module Semantic.Check.Binding.Type where
 
 import Control.Monad.ST (ST)

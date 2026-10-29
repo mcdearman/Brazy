@@ -1,3 +1,7 @@
+-- |
+-- A type index that names a declaration directly, with no 'Normal.Shift':
+-- one of the nearest local block, or a top-level one. The declarations a
+-- tree uses, found to put declarations in groups, are given as these.
 module Semantic.Index.Type0 where
 
 import qualified Semantic.Index.Type as Normal

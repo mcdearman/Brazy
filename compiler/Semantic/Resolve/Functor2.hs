@@ -1,3 +1,7 @@
+-- |
+-- A class for traversing the wrapper (@loeb@) around each binding in the
+-- resolver's sets of names, and a newtype that gives such a set the shape
+-- the knot-tying in "Graph.Topological" expects.
 module Semantic.Resolve.Functor2 where
 
 import Data.Functor.Compose (Compose (..))

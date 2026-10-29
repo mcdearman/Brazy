@@ -1,3 +1,6 @@
+-- |
+-- Checking a type synonym: its kind, against its kind signature if it has
+-- one, and the type it stands for, with its parameters in scope.
 module Semantic.Check.Go.Synonym where
 
 import Control.Monad.ST (ST)

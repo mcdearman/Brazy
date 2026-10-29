@@ -1,3 +1,11 @@
+-- |
+-- Expressions of Core, the small typed language that checked trees are
+-- simplified into before "Sequent.FromCore" translates them into the
+-- sequent IR. Classes are explicit in it: a method is called with the
+-- evidence for its class, and evidence can be held as a value. There are
+-- no patterns: a 'Join' holds 'Statements' that match one constructor at a
+-- time. Also the simplifying of checked expressions, @do@ blocks and list
+-- comprehensions into Core, and helpers that build common expressions.
 module Core.Tree.Expression where
 
 import {-# SOURCE #-} qualified Builtin.Applicative as Applicative

@@ -1,3 +1,5 @@
+-- |
+-- Checking a definition by clauses, each clause against the same type.
 module Semantic.Check.Go.Definition where
 
 import Control.Monad.ST (ST)

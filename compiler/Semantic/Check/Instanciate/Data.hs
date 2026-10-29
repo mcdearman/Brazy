@@ -1,4 +1,9 @@
 {-# LANGUAGE_HAZY UnorderedRecords #-}
+-- |
+-- A data type made fresh for checking: the types it is given, which are
+-- yet to be found, with its constructors and selectors in terms of them.
+-- From it come the types of its constructors and selectors and what is
+-- known of a selector or a record update.
 module Semantic.Check.Instanciate.Data where
 
 import Control.Monad.ST (ST)

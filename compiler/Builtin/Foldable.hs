@@ -1,3 +1,8 @@
+-- |
+-- The builtin class @Foldable@, written as Haskell source: its methods,
+-- defaults for all but @foldr@, and the fixity of @elem@. 'builtinClass'
+-- compiles it into the names, Core definition and extra the compiler keeps
+-- of it.
 module Builtin.Foldable where
 
 import Builtin (builtinClass)

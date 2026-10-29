@@ -1,4 +1,7 @@
 {-# LANGUAGE_HAZY UnorderedRecords #-}
+-- |
+-- An instance in Core: the evidence it holds for its class's superclasses,
+-- what it requires, and the definition of each method.
 module Core.Tree.Instance where
 
 import qualified Core.Substitute as Substitute

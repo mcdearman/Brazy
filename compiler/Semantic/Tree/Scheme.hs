@@ -1,5 +1,10 @@
 {-# LANGUAGE_HAZY UnorderedRecords #-}
 
+-- |
+-- A type scheme, as a signature writes it: its type variables, its context,
+-- and its type. The variables are those of a written @forall@, or, when
+-- there is none ('implicit'), the ones it uses that are not already in
+-- scope.
 module Semantic.Tree.Scheme where
 
 import qualified Data.Vector.Strict as Strict (Vector)

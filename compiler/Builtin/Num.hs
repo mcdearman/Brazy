@@ -1,3 +1,8 @@
+-- |
+-- The builtin class @Num@, written as Haskell source: its methods, defaults
+-- for @-@ and @negate@, and the fixities of @+@, @-@ and @*@. 'builtinClass'
+-- compiles it into the names, Core definition and extra the compiler keeps
+-- of it.
 module Builtin.Num where
 
 import Builtin (builtinClass)

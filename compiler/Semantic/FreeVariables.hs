@@ -1,3 +1,8 @@
+-- |
+-- The term and type declarations a resolved tree uses from one scope: a
+-- 'Target' says how many scopes further out than the tree's own that scope
+-- is. This is how it is found which declarations depend on which, so that
+-- they can be put in groups.
 module Semantic.FreeVariables where
 
 import Data.Kind (Constraint, Type)

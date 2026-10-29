@@ -1,3 +1,8 @@
+-- |
+-- Gathering pairs of a key and a value into a vector with one element per
+-- key, the values of each key combined in the order they came. Keys are
+-- placed in the order they first appear, or, for the @Int@ functions, are
+-- the positions themselves. The primed functions give strict vectors.
 module Order
   ( orderListInt,
     orderListInt',

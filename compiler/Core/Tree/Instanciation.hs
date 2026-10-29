@@ -1,4 +1,8 @@
 {-# LANGUAGE_HAZY UnorderedRecords #-}
+-- |
+-- What a use of a variable gives the @forall@ of its type in Core: the
+-- evidence for each constraint it requires, or, when it requires none, the
+-- levity of the value.
 module Core.Tree.Instanciation where
 
 import qualified Core.Evidence.Functor as Core

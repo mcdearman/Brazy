@@ -1,3 +1,8 @@
+-- |
+-- Checking the declaration of one term, as cells of the table of
+-- declarations (see "Graph.Topological"): its definition, and its type,
+-- which is its signature's if it has one and otherwise what the group it is
+-- checked with works out.
 module Semantic.Check.Go.Declaration where
 
 import Control.Monad.ST (ST)

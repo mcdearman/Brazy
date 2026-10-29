@@ -1,3 +1,8 @@
+-- |
+-- Whether a type has to be known when the program runs. A rigid type
+-- variable carries a 'Mask' saying whether it may be asked for that, and
+-- a use of a type asks with an 'Erasure'; see @mark@ in
+-- "Semantic.Unify.Type".
 module Semantic.Check.Mask where
 
 -- |

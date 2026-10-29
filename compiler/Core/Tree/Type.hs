@@ -1,3 +1,7 @@
+-- |
+-- Types of Core, kinds and levities among them. While the type checker
+-- works they may hold its logical variables; a 'Type' holds none. Also the
+-- simplifying of checked types into Core, which expands type synonyms.
 module Core.Tree.Type where
 
 import Core.Substitute (Category (..))

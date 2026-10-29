@@ -1,4 +1,8 @@
 {-# LANGUAGE_HAZY UnorderedRecords #-}
+-- |
+-- A constructor of an ordinary data declaration, resolved, with its named
+-- fields and, for each selector of the type, which of its fields that
+-- selector reads, if any.
 module Semantic.Resolve.Temporary.Complete.Constructor where
 
 import Data.Foldable (toList)

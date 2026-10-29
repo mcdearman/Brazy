@@ -1,4 +1,12 @@
 {-# LANGUAGE_HAZY UnorderedRecords #-}
+-- |
+-- The command line. It reads the flags, loads the packages (@hazy-internal@
+-- and @base@, unless @--bare@ or @--bare-runtime@ leaves them out) and the
+-- modules it is given, files or directories of them, and takes them as far
+-- through the pipeline as it is asked: checking by default, or printing a
+-- stage, running the program on the AxCut machine, compiling it with clang
+-- to a native executable or object, writing a package (@--pack@), or
+-- starting an interactive session.
 module Main (main) where
 
 import qualified AxCut.Lower as AxCut (lower)

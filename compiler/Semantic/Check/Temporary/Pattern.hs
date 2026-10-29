@@ -1,4 +1,10 @@
 {-# LANGUAGE_HAZY UnorderedRecords #-}
+-- |
+-- Patterns, checked against the type of what they match into a tree of
+-- their own that is solved afterwards. Matching on a constructor may tell
+-- what type variables are, hide types, and give evidence for what the
+-- constructor requires; all of that is known inside the match, through the
+-- context a pattern's variables are bound in.
 module Semantic.Check.Temporary.Pattern where
 
 import Control.Monad (foldM, when, zipWithM)

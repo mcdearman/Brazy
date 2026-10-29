@@ -1,3 +1,7 @@
+-- |
+-- What comes before the type in a type scheme: the class constraints
+-- written before @=>@, or else how its values are kept, lazy when nothing
+-- is written, strict after @!@, or of a levity given as a type after @~!@.
 module Syntax.Tree.Constraints where
 
 import qualified Data.Vector.Strict as Strict

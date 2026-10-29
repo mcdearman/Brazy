@@ -1,4 +1,8 @@
 {-# LANGUAGE_HAZY UnorderedRecords #-}
+-- |
+-- How strictly a constructor holds something, as its declaration says:
+-- lazily, strictly, or with a levity given as a type, checked into a tree
+-- of its own that is solved afterwards.
 module Semantic.Check.Temporary.StrictnessAnnotation where
 
 import Control.Monad.ST (ST)

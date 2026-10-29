@@ -1,5 +1,8 @@
 {-# LANGUAGE_HAZY UnorderedRecords #-}
 
+-- |
+-- Check a type signature written on an expression or a pattern, and solve
+-- it straight away.
 module Semantic.Check.TypeAnnotation where
 
 import Control.Monad.ST (ST)

@@ -1,5 +1,8 @@
 {-# LANGUAGE_HAZY UnorderedRecords #-}
 
+-- |
+-- An instance, written or asked for with @deriving@, and what it requires
+-- of its parameters, which checking works out.
 module Semantic.Tree.Instance where
 
 import qualified Core.Tree.Constraints as Core

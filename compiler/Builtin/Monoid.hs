@@ -1,3 +1,8 @@
+-- |
+-- The builtin class @Monoid@, written as Haskell source: its superclass
+-- @Semigroup@ and its methods @mempty@, @mappend@ and @mconcat@, each with a
+-- default. 'builtinClass' compiles it into the names, Core definition and
+-- extra the compiler keeps of it.
 module Builtin.Monoid where
 
 import Builtin (builtinClass)

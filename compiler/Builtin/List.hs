@@ -1,3 +1,7 @@
+-- |
+-- The builtin list type, written as Haskell source: its constructors @Nil@
+-- and @Cons@, and the fixity of @Cons@. 'builtinData' compiles it into the
+-- names and Core definition the compiler keeps of it.
 module Builtin.List where
 
 import Builtin (builtinData)

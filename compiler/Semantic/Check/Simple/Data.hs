@@ -1,3 +1,7 @@
+-- |
+-- Make a fresh instance of a data type from its Core declaration, to make
+-- values of it or to take them apart, with the levity of everything its
+-- constructors hold marked as needed when the program runs.
 module Semantic.Check.Simple.Data where
 
 import Control.Monad.ST (ST)

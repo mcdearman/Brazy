@@ -1,4 +1,6 @@
 {-# LANGUAGE_HAZY UnorderedRecords #-}
+-- |
+-- A record selector of a data type, by name, with the resolved selector.
 module Semantic.Resolve.Temporary.Complete.Selector where
 
 import qualified Semantic.Tree.Selector as Real

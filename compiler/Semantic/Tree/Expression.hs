@@ -1,5 +1,11 @@
 {-# LANGUAGE_HAZY UnorderedRecords #-}
 
+-- |
+-- Expressions, with names resolved. No operators are left to arrange: a
+-- call of a variable, constructor, selector or method is a 'CallHead' with
+-- its arguments, and any other call is a 'Call'. Checking fills in what it
+-- found, such as the evidence a number literal is used with, and makes a
+-- few nodes the resolver does not, such as 'Generalized'.
 module Semantic.Tree.Expression where
 
 import qualified Core.Tree.Evidence as Simple (Evidence)

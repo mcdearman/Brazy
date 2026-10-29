@@ -1,3 +1,8 @@
+-- |
+-- The builtin tuple types, one for each size. Unlike the other builtins
+-- they are built directly in Core, not from source: a single constructor,
+-- named @Tuple@ and the size (as @Tuple2@), with one lazy field for each
+-- type parameter.
 module Builtin.Tuple where
 
 import Core.Instanciate (Store (Empty))

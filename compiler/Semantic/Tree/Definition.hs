@@ -1,3 +1,6 @@
+-- |
+-- The equations that define a function, in the order they were written:
+-- each one after the first is the 'alternative' to the one before it.
 module Semantic.Tree.Definition where
 
 import Data.List.NonEmpty (NonEmpty (..))

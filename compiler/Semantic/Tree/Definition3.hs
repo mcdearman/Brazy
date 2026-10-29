@@ -1,3 +1,7 @@
+-- |
+-- A term's definition, labelled with its name and fixity, or, for the
+-- right-hand side a pattern binding's names share, with the number it is
+-- known by.
 module Semantic.Tree.Definition3 where
 
 import Semantic.Connect (Connect (..))

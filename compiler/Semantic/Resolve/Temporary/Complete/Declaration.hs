@@ -1,4 +1,11 @@
 {-# LANGUAGE_HAZY UnorderedRecords #-}
+-- |
+-- A term declaration once all its pieces are gathered: the clauses of a
+-- definition, its type signature, its fixity (@infixl 9@ when none is
+-- given), and any foreign import or export; more than one signature,
+-- fixity and so on is an error. It is a real declaration, or a record
+-- selector or class method, which only need a binding. Also the term
+-- bindings a declaration group makes.
 module Semantic.Resolve.Temporary.Complete.Declaration where
 
 import Data.Foldable (toList)

@@ -1,3 +1,12 @@
+-- |
+-- Scopes as a type-level list. An 'Environment' is the scopes a name can
+-- be seen from, innermost first, joined by ':+' and ending in 'Global',
+-- the top level of every module. A 'Scope' is the kind of one: a block of
+-- declarations, the variables of a pattern, type variables bound together
+-- ('Local'), a group of declarations checked together, or one of the
+-- simpler scopes Core makes of patterns. Indexes and trees are typed by
+-- the environment they are in; the classes here show and compare such
+-- types.
 module Semantic.Scope
   ( Environment ((:+)),
     Scope,

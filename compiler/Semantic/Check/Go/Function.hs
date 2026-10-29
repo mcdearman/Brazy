@@ -1,3 +1,7 @@
+-- |
+-- Checking one clause of a function: the pattern of each parameter, one at
+-- a time, and then the right-hand side, against what the function gives
+-- once it has them all.
 module Semantic.Check.Go.Function where
 
 import Control.Monad.ST (ST)

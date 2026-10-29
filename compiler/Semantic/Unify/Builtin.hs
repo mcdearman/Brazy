@@ -1,3 +1,8 @@
+-- |
+-- The instances of the builtin classes for the builtin types, such as
+-- @Eq Int@ or @Ord [a]@: given a class and a type constructor, the evidence
+-- of the instance, once what it needs of the type's arguments is asked
+-- for. Anything not in the table falls through to the caller.
 module Semantic.Unify.Builtin where
 
 import Core.Tree.Evidence (EvidenceF (..))

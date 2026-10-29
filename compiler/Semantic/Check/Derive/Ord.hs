@@ -1,3 +1,8 @@
+-- |
+-- The @compare@ of a derived @Ord@ instance, written as a Core expression:
+-- values with the same constructor compare by their fields, from the left,
+-- and values with different constructors by the order the constructors are
+-- declared in.
 module Semantic.Check.Derive.Ord where
 
 import Control.Monad.ST (ST)

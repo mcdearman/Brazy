@@ -1,4 +1,8 @@
 {-# LANGUAGE_HAZY UnorderedRecords #-}
+-- |
+-- The index of a class method: the class and the method's place in it.
+-- Also the methods of the builtin classes (@Num@, @Eq@, @Ord@, @Monad@,
+-- @Show@ and the rest), with an enumeration for each class.
 module Semantic.Index.Method where
 
 import qualified Semantic.Index.Type2 as Type2

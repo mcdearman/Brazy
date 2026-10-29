@@ -1,5 +1,10 @@
 {-# LANGUAGE_HAZY UnorderedRecords #-}
 
+-- |
+-- Patterns. A pattern either matches anything ('Wildcard') or looks at the
+-- value ('Match'), and either may give the whole value names: that is how
+-- a variable, and a pattern with @\@@, are kept. A pattern with a type
+-- written for it is only here before checking.
 module Semantic.Tree.Pattern where
 
 import qualified Core.Tree.Evidence as Simple

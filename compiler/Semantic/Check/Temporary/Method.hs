@@ -1,4 +1,7 @@
 {-# LANGUAGE_HAZY UnorderedRecords #-}
+-- |
+-- A method a class declares, with its type signature, checked into a tree
+-- of its own that is solved afterwards.
 module Semantic.Check.Temporary.Method where
 
 import Control.Monad.ST (ST)

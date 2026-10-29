@@ -1,4 +1,9 @@
 {-# LANGUAGE_HAZY UnorderedRecords #-}
+-- |
+-- A constructor of a GADT declaration, resolved: its type, the fields it
+-- names if it is written as a record, and for each selector of the type
+-- where in this constructor it selects from. One entry of the declaration
+-- can name several constructors.
 module Semantic.Resolve.Temporary.Complete.GADTConstructor where
 
 import Data.Foldable (toList)

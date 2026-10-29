@@ -1,4 +1,8 @@
 {-# LANGUAGE_HAZY UnorderedRecords #-}
+-- |
+-- The global names of every definition and instance of the modules being
+-- compiled, and which constructor fields are strict, worked out before
+-- Core is translated into the sequent IR. "Generate.Context" starts from it.
 module Generate.Precontext where
 
 import Core.Tree.Declarations (Declarations (..))

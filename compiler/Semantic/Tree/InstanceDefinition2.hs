@@ -1,4 +1,8 @@
 {-# LANGUAGE_HAZY UnorderedRecords #-}
+-- |
+-- An instance's body with its 'Header': its type parameters and what it
+-- requires of them, as written, or for a derived instance as the checker
+-- works it out.
 module Semantic.Tree.InstanceDefinition2 where
 
 import qualified Core.Tree.Constraints as Core (Constraints)

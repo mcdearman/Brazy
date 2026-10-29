@@ -1,3 +1,7 @@
+-- |
+-- Resolves one constraint: a class applied to a type variable the scheme
+-- binds, with any further type arguments, or an equality between two
+-- types.
 module Semantic.Resolve.Go.Constraint where
 
 import Error (constraintNonLocal, illegalConstraint)

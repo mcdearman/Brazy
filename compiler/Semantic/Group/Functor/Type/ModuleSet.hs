@@ -1,3 +1,8 @@
+-- |
+-- Something for each top-level type declaration of every module, looked up
+-- by a global 'Type.Link'. Strongly connected components are found over it
+-- to put the top-level declarations in groups of ones that depend on each
+-- other.
 module Semantic.Group.Functor.Type.ModuleSet where
 
 import Data.Traversable (fmapDefault, foldMapDefault)

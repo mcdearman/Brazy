@@ -1,4 +1,11 @@
 {-# LANGUAGE_HAZY UnorderedRecords #-}
+-- |
+-- What the resolver carries down through a module: every module's exports,
+-- the names in scope under each qualifier and unqualified, the type
+-- variables in scope, and the language extensions. Its operators look a
+-- name up and give its binding or its index, or an error when it is not
+-- in scope, when a name used as a field is not one, or when an unordered
+-- record's constructor is used by position.
 module Semantic.Resolve.Context
   ( Context (..),
     typeFixity,

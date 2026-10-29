@@ -1,4 +1,9 @@
 {-# LANGUAGE_HAZY UnorderedRecords #-}
+-- |
+-- The index of a data constructor: the type it builds and its place among
+-- that type's constructors. Also the constructors of the builtin types
+-- (@Bool@, lists, tuples, @Ordering@, @Ratio@, @IO@ and so on), each named
+-- by an enumeration, and 'run' to tell them apart.
 module Semantic.Index.Constructor where
 
 import qualified Semantic.Index.Type as Type

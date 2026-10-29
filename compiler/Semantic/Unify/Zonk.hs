@@ -1,3 +1,7 @@
+-- |
+-- Replacing the unknowns of a type that are worked out with what they were
+-- found to be, while the unknowns left are moved one scope out. A type is
+-- written this way when it is generalized.
 module Semantic.Unify.Zonk where
 
 import Control.Monad.ST (ST)

@@ -1,4 +1,8 @@
 {-# LANGUAGE_HAZY UnorderedRecords #-}
+-- |
+-- A term abstracted over type variables in Core: the kinds of the
+-- variables, what it requires of them, and the term in their scope. A
+-- definition is one, and is a function of the evidence it requires.
 module Core.Tree.TypeLambda where
 
 import qualified Core.Substitute as Substitute

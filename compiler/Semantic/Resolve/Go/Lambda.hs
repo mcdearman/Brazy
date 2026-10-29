@@ -1,5 +1,8 @@
 {-# LANGUAGE_HAZY UnorderedRecords #-}
 
+-- |
+-- Resolves a lambda's parameters after the first, one at a time with the
+-- variables of those before in scope, and then its body.
 module Semantic.Resolve.Go.Lambda where
 
 import Semantic.Layout (Normal)

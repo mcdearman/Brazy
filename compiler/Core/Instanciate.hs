@@ -1,3 +1,7 @@
+-- |
+-- Whether a definition in Core's trees is as it was declared ('Normal') or
+-- has been instanciated by the type checker for one use ('Instanciated'),
+-- and 'Store', a field that only an instanciated definition fills in.
 module Core.Instanciate where
 
 data Instanciate = Normal | Instanciated

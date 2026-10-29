@@ -1,4 +1,7 @@
 {-# LANGUAGE_HAZY UnorderedRecords #-}
+-- |
+-- How a constructor holds a value: lazily, strictly, or with a levity
+-- written for it as a type.
 module Semantic.Tree.StrictnessAnnotation where
 
 import Semantic.FreeVariables (FreeTypeVariables (freeTypeVariables))

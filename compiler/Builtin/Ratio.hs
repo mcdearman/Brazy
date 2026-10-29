@@ -1,3 +1,7 @@
+-- |
+-- The builtin type @Ratio@, written as Haskell source: its constructor
+-- @:%@, whose fields are strict, and its fixity. 'builtinData' compiles it
+-- into the names and Core definition the compiler keeps of it.
 module Builtin.Ratio where
 
 import Builtin (builtinData)

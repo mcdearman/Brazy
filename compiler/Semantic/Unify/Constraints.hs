@@ -1,3 +1,6 @@
+-- |
+-- A type synonym: the Core constraints of a polymorphic type, whose types
+-- may hold the type checker's unknowns.
 module Semantic.Unify.Constraints where
 
 import Core.Tree.Constraints (ConstraintsF (..))

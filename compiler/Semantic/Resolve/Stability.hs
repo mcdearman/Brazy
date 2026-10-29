@@ -1,3 +1,9 @@
+-- |
+-- Whether the names under one qualifier would stay the same if an imported
+-- module exported more, as the @StableImports@ extension requires. With it
+-- on, an import of a whole module other than the @Prelude@, or of all of
+-- one but what it hides, is unstable, and may not share its qualifier with
+-- any other import.
 module Semantic.Resolve.Stability where
 
 import Error (unstableImports)

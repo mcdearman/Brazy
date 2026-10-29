@@ -1877,7 +1877,8 @@ Planned toggles and TODOs:
 - [x] A module may be its body alone, as the report has it: it is then
       `module Main (main) where`. Hazy asked for the header (test
       `headerless-module`, which agrees with GHC)
-- [ ] Top-level documentation for every module
+- [x] Top-level documentation for every module. Each module of the
+      compiler says, above its header, what it is for and where it sits
 
 ## Track B: further experiments
 

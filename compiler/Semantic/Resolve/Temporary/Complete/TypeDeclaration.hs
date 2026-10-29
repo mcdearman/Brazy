@@ -1,4 +1,11 @@
 {-# LANGUAGE_HAZY UnorderedRecords #-}
+-- |
+-- A type declaration once its pieces are gathered: one data, GADT, class
+-- or synonym declaration, and at most one kind signature. It holds the
+-- resolved declaration with its constructors, selectors or methods, which
+-- the terms and constructors of the group refer to; a newtype must have
+-- exactly one lazy field. Also the type bindings a declaration group
+-- makes, with the fixities of type operators.
 module Semantic.Resolve.Temporary.Complete.TypeDeclaration where
 
 import Data.Foldable (toList)

@@ -1,3 +1,7 @@
+-- |
+-- The builtin type @Ptr@, written as Haskell source: a newtype of an
+-- @Int@. 'builtinData' compiles it into the names and Core definition the
+-- compiler keeps of it.
 module Builtin.Ptr where
 
 import Builtin (builtinData)

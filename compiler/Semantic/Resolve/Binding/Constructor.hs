@@ -1,3 +1,9 @@
+-- |
+-- What the resolver knows about a data constructor in scope: its index and
+-- fixity, its record fields by name and how the type's selectors map onto
+-- them, whether it is an unordered record, and whether matching it can
+-- fail. The position is where it was bound, for the error when one name is
+-- bound to two different constructors.
 module Semantic.Resolve.Binding.Constructor where
 
 import Data.Functor.Classes (Show1 (..), showsPrec1)

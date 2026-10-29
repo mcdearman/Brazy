@@ -1,3 +1,8 @@
+-- |
+-- A table of something for each type variable in scope, looked up by an
+-- "Semantic.Index.Local" index. Only @Local@ scopes hold values; the
+-- others pass a lookup on outward, and what is found further out is
+-- shifted into the scope it was looked up from.
 module Semantic.Index.Table.Local
   ( Table (..),
     (!),

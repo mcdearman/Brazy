@@ -1,4 +1,7 @@
 {-# LANGUAGE_HAZY UnorderedRecords #-}
+-- |
+-- What is known of a class method where it is used, for Core: how many
+-- constraints (superclasses) its class has.
 module Semantic.Check.Info.Method where
 
 import qualified Core.Substitute as Substitute

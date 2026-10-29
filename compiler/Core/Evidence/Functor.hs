@@ -1,3 +1,8 @@
+-- |
+-- A class for Core trees that hold evidence, to change the logical
+-- variables of evidence and of types in them: the unknowns the type checker
+-- leaves in a tree while it works, which a finished tree has none of. With
+-- it, a way to move a tree and its logical variables into a larger scope.
 module Core.Evidence.Functor where
 
 import Data.Kind (Constraint, Type)

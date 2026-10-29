@@ -1,3 +1,8 @@
+-- |
+-- Checking what defines one name against its type: clauses, one of the
+-- names a pattern binding defines, the right-hand side such a binding
+-- shares, or a foreign import or export. 'checkManual' is for a name with a
+-- type signature, and 'checkAuto' for one whose type is worked out.
 module Semantic.Check.Go.Definition2 where
 
 import Control.Monad.ST (ST)

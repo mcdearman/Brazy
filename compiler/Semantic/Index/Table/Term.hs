@@ -1,4 +1,11 @@
 {-# LANGUAGE_HAZY UnorderedRecords #-}
+-- |
+-- A table of something for each term in scope, looked up by an
+-- "Semantic.Index.Term" index, with a level for each scope: the
+-- declarations of a block, the variables of a pattern (a 'Bound' tree in
+-- the pattern's shape), the members of a group, and every module's
+-- top-level declarations. What is found further out is shifted into the
+-- scope it was looked up from. Contexts keep their term bindings in one.
 module Semantic.Index.Table.Term
   ( Table (..),
     Bound (..),

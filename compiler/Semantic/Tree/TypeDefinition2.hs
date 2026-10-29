@@ -1,3 +1,8 @@
+-- |
+-- A type's definition with the kind written for it, or the mark that it
+-- has none; or a type synonym. In the 'Layout.Group' layout a definition
+-- with no kind written is not here any more: one member of its group holds
+-- the whole 'TypeGroup', and each of the others is a 'Link' to it.
 module Semantic.Tree.TypeDefinition2 where
 
 import Data.Functor.Classes (Show1, showsPrec1)

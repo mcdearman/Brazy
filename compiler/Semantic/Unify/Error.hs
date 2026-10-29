@@ -1,3 +1,9 @@
+-- |
+-- The errors the unifier finds (two types that cannot be made the same, a
+-- type that would be part of itself, a missing instance, a type that
+-- escapes its scope, and so on), and 'abort', which reports one. The types
+-- are printed back as syntax, with each unknown in them named
+-- @__flexible_@ and a number.
 module Semantic.Unify.Error where
 
 import Control.Monad (liftM2)

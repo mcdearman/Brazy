@@ -1,3 +1,6 @@
+-- |
+-- Resolves a right-hand side: its @where@ declarations first, then its
+-- body with them in scope.
 module Semantic.Resolve.Go.RightHandSide where
 
 import Semantic.Layout (Normal)

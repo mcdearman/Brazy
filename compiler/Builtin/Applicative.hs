@@ -1,3 +1,8 @@
+-- |
+-- The builtin class @Applicative@, written as Haskell source: its
+-- superclass @Functor@, its methods, defaults for all but @pure@, and their
+-- fixities. 'builtinClass' compiles it into the names, Core definition and
+-- extra the compiler keeps of it.
 module Builtin.Applicative where
 
 import Builtin (builtinClass)

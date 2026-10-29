@@ -1,4 +1,8 @@
 {-# LANGUAGE_HAZY UnorderedRecords #-}
+-- |
+-- An instance of a class the declaration group declares, kept with the
+-- class by the type it is for. An instance of a class from elsewhere, for
+-- a type declared here, is a data instance instead.
 module Semantic.Resolve.Temporary.Complete.ClassInstance where
 
 import Data.Foldable (toList)

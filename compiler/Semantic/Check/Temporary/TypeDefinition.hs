@@ -1,4 +1,9 @@
 {-# LANGUAGE_HAZY UnorderedRecords #-}
+-- |
+-- The definition of a data type, a type declared with @where@, or a class,
+-- checked against its kind into a tree of its own that is solved
+-- afterwards. Once solved, a type declared with @where@ is a data type like
+-- any other, some of whose constructors say what type they make.
 module Semantic.Check.Temporary.TypeDefinition where
 
 import Control.Monad.ST (ST)

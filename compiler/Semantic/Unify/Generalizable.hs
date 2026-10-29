@@ -1,3 +1,8 @@
+-- |
+-- Collecting the unknowns in a type that are still not worked out, for
+-- them to become type variables when a type is generalized. With
+-- 'Naming', the types that stand for themselves alone are collected too,
+-- so that an error can name them.
 module Semantic.Unify.Generalizable where
 
 import Control.Monad.ST (ST)

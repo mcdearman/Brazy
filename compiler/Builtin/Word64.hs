@@ -1,3 +1,7 @@
+-- |
+-- The builtin type @Word64@, written as Haskell source: a newtype of an
+-- @Integer@. 'builtinData' compiles it into the names and Core definition
+-- the compiler keeps of it.
 module Builtin.Word64 where
 
 import Builtin (builtinData)

@@ -1,3 +1,9 @@
+-- |
+-- The stages of a semantic tree, as a type-level tag: 'Resolve', once
+-- names are resolved to indexes, and 'Check', once types are checked.
+-- 'Equal' witnesses that two stages are the same; a field of type
+-- 'Unsupported' marks a construct the checker does not take, which can
+-- then only be in a resolved tree.
 module Semantic.Stage where
 
 import Data.Kind (Constraint, Type)

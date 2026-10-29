@@ -1,3 +1,10 @@
+-- |
+-- Checking a set of declarations, of terms, types and instances, as one
+-- table of cells tied together (see "Graph.Topological"): each is checked
+-- when something first needs it, and a cycle among them is an error.
+-- 'checkImpl' builds the table, and is shared with
+-- "Semantic.Check.Go.Module"; 'check' does it for the declarations of a
+-- @let@ or @where@, and gives back the context they are in scope in.
 module Semantic.Check.Go.Declarations where
 
 import Control.Monad.ST (ST)

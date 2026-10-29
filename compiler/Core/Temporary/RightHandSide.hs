@@ -1,4 +1,8 @@
 {-# LANGUAGE_HAZY UnorderedRecords #-}
+-- |
+-- A right-hand side while it is simplified into Core: its body or guards
+-- with the @where@ declarations they see, or an expression, applied to the
+-- arguments eta expansion gives it. 'desugar' makes it statements.
 module Core.Temporary.RightHandSide where
 
 import {-# SOURCE #-} Core.Tree.Declarations (Declarations)

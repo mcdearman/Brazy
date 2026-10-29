@@ -1,4 +1,7 @@
 {-# LANGUAGE_HAZY UnorderedRecords #-}
+-- |
+-- A constraint in Core: a class, and what it is required of, a type
+-- variable that the enclosing @forall@ binds applied to some types.
 module Core.Tree.Constraint where
 
 import qualified Core.Substitute as Substitute

@@ -1,3 +1,9 @@
+-- |
+-- The builtin class @Integral@, written as Haskell source: its superclasses
+-- @Real@ and @Enum@, its methods, defaults for all but @quotRem@ and
+-- @toInteger@, and the fixities of @quot@, @rem@, @div@ and @mod@.
+-- 'builtinClass' compiles it into the names, Core definition and extra the
+-- compiler keeps of it.
 module Builtin.Integral where
 
 import Builtin (builtinClass)

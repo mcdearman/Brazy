@@ -1,3 +1,8 @@
+-- |
+-- The builtin class @Semigroup@, written as Haskell source: its methods
+-- @<>@, @sconcat@ and @stimes@, each with a default, and the fixity of
+-- @<>@. 'builtinClass' compiles it into the names, Core definition and
+-- extra the compiler keeps of it.
 module Builtin.Semigroup where
 
 import Builtin (builtinClass)

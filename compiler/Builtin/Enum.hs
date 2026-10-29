@@ -1,3 +1,8 @@
+-- |
+-- The builtin class @Enum@, written as Haskell source: its methods, and
+-- defaults for all but @toEnum@ and @fromEnum@ that go through those two.
+-- 'builtinClass' compiles it into the names, Core definition and extra the
+-- compiler keeps of it.
 module Builtin.Enum where
 
 import Builtin (builtinClass)

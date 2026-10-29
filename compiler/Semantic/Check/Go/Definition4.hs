@@ -1,4 +1,13 @@
 {-# LANGUAGE_HAZY UnorderedRecords #-}
+-- |
+-- Checking the definition of a term as cells of the table of declarations.
+-- One with a type signature is checked against it, and a foreign call's
+-- marshalling is worked out from it. Ones without are checked as a group,
+-- with the others they use and are used by, whose types are worked out
+-- together and generalized; a 'Link' is one whose group another declaration
+-- holds. 'Solve' says whether what is checked is solved at once ('now', for
+-- a module's declarations) or with what it is inside ('delay', for local
+-- ones).
 module Semantic.Check.Go.Definition4 where
 
 import Control.Monad.ST (ST)

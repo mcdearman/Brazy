@@ -1,3 +1,9 @@
+-- |
+-- Substitution in Core's trees: the types and evidence that the innermost
+-- local scope binds are replaced with given ones, under any binders, and
+-- the indexes of the rest are shifted as that scope goes away. 'Category'
+-- says what is done, and 'Functor' and its kin are the trees it can be done
+-- to. Also turns a tree with no logical variables into one of any.
 module Core.Substitute where
 
 import {-# SOURCE #-} Core.Tree.Evidence (EvidenceF)

@@ -1,3 +1,10 @@
+-- |
+-- The index a term variable is resolved to: which scope it is bound in,
+-- counted outward by 'Shift', and where in that scope. It is a declaration
+-- of a local block, a variable a pattern binds (a 'Bound' path into the
+-- pattern), a member of a group of declarations checked together, a
+-- top-level declaration (by module and place), or a variable of one of the
+-- simpler scopes Core makes as it simplifies patterns.
 module Semantic.Index.Term where
 
 import Semantic.Scope

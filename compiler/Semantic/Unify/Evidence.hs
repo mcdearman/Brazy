@@ -1,3 +1,8 @@
+-- |
+-- Evidence for classes while types are checked. Evidence may be an unknown
+-- in an 'STRef', filled in once the type it is for is worked out. Here are
+-- unifying two pieces of evidence, which never fails by itself, and moving
+-- evidence out of a scope.
 module Semantic.Unify.Evidence where
 
 import Control.Monad.ST (ST)

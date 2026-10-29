@@ -1,4 +1,7 @@
 {-# LANGUAGE_HAZY UnorderedRecords #-}
+-- |
+-- A module in Core: its name and its declarations. A checked module is
+-- simplified into one, and the sequent IR is made from these.
 module Core.Tree.Module where
 
 import Core.Tree.Declarations (Declarations)

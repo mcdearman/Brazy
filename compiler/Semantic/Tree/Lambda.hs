@@ -1,5 +1,8 @@
 {-# LANGUAGE_HAZY UnorderedRecords #-}
 
+-- |
+-- The rest of a lambda after its first parameter: any further parameters,
+-- each a pattern that the rest is in the scope of, and then its body.
 module Semantic.Tree.Lambda where
 
 import Semantic.Connect (Connect (..))

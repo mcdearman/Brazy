@@ -1,4 +1,9 @@
 {-# LANGUAGE_HAZY UnorderedRecords #-}
+-- |
+-- The names of the terms, type variables and types in scope, in tables
+-- looked up by the indexes they were resolved to. With it a resolved type
+-- can be printed back as syntax ("Semantic.Label.Go.Type"), as error
+-- messages need.
 module Semantic.Label.Context where
 
 import qualified Semantic.Index.Local as Local (Index)

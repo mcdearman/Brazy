@@ -1,3 +1,7 @@
+-- |
+-- What a type signature has in place of a context, checked into a tree of
+-- its own that is solved afterwards: the class constraints it requires, or
+-- else a levity given as a type, or lazy, or strict.
 module Semantic.Check.Temporary.Constraints where
 
 import Control.Monad.ST (ST)

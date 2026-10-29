@@ -1,3 +1,6 @@
+-- |
+-- Resolves the body of a right-hand side: a plain expression, or guards,
+-- each of which is resolved as a list of statements.
 module Semantic.Resolve.Go.Body where
 
 import Semantic.Layout (Normal)

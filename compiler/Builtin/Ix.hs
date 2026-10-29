@@ -1,3 +1,7 @@
+-- |
+-- The builtin class @Ix@, written as Haskell source: its superclass @Ord@,
+-- its methods, and a default for @rangeSize@. 'builtinClass' compiles it
+-- into the names, Core definition and extra the compiler keeps of it.
 module Builtin.Ix where
 
 import Builtin (builtinClass)

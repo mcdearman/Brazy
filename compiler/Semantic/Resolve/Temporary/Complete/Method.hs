@@ -1,4 +1,8 @@
 {-# LANGUAGE_HAZY UnorderedRecords #-}
+-- |
+-- A class method once its pieces in the class declaration are gathered:
+-- its type signature, which it must have exactly one of, and its default
+-- definition, if any clauses are given.
 module Semantic.Resolve.Temporary.Complete.Method where
 
 import Data.Foldable (toList)

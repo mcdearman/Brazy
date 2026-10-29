@@ -1,3 +1,8 @@
+-- |
+-- The context of a type scheme: the class constraints it lists, or else
+-- how a value of the type is evaluated: 'Lazy' when no context is written,
+-- 'Strict' for a scheme written after @!@, and 'Value' with the levity
+-- written after @~!@.
 module Semantic.Tree.Constraints where
 
 import qualified Data.Vector.Strict as Strict

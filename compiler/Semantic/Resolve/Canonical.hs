@@ -1,3 +1,7 @@
+-- |
+-- What each module exports, by its full name. Imports are looked up here,
+-- and a module that is not in the table is reported as not found.
+-- "Semantic.Resolve.Import" builds it for all modules together.
 module Semantic.Resolve.Canonical where
 
 import Data.Functor.Identity (Identity)

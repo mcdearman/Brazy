@@ -1,3 +1,8 @@
+-- |
+-- A class for Core types and the trees made of them, to change the logical
+-- variables in them: the unknowns the type checker leaves in a type while
+-- it works, which a finished type has none of. With it, a way to move a
+-- tree and its logical variables into a larger scope.
 module Core.Type.Functor where
 
 import Data.Kind (Constraint, Type)

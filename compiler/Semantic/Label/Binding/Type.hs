@@ -1,4 +1,8 @@
 {-# LANGUAGE_HAZY UnorderedRecords #-}
+-- |
+-- What is kept of a type declaration to print it back as syntax: its
+-- qualified name and the names of its constructors, for a constructor used
+-- as a type. See "Semantic.Label.Context".
 module Semantic.Label.Binding.Type where
 
 import Data.Kind (Type)

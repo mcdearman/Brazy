@@ -1,5 +1,10 @@
 {-# LANGUAGE_HAZY UnorderedRecords #-}
 
+-- |
+-- A type as written, checked against a kind into a tree of its own that is
+-- solved afterwards. Inside types that are checked together, a name for a
+-- type is looked into and checked as if it were written out, since what it
+-- was found to be may wait for those very types.
 module Semantic.Check.Temporary.Type where
 
 import Control.Monad.ST (ST)

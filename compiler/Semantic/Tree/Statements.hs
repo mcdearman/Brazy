@@ -1,4 +1,10 @@
 {-# LANGUAGE_HAZY UnorderedRecords #-}
+-- |
+-- Statements, of a @do@ block, a list comprehension, or a guard, as the
+-- 'Syntax' index says. Each is in the scope of what the ones before it
+-- bind, and the last is an expression ('Done'): for a guard, what its
+-- branch gives. Checking fills in what each statement needs, such as the
+-- @Monad@ evidence for a @do@ block.
 module Semantic.Tree.Statements where
 
 import qualified Core.Tree.Evidence as Simple (Evidence)

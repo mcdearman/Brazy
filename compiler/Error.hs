@@ -1,3 +1,10 @@
+-- |
+-- The errors the compiler reports in a program it is given. Each kind of
+-- error is a function that throws a 'HazyError': its kind ('Type'), where
+-- it is, other places it is about, and a message. 'fail' prints an error
+-- and exits; 'allow' lets a run that expects a kind of error
+-- (@--debug-fail@) pass when that kind is thrown. The names of what the
+-- lexer and parser expect to find are here too.
 module Error
   ( HazyError (..),
     Type,

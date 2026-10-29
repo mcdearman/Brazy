@@ -1,3 +1,7 @@
+-- |
+-- Resolves the statements of a @do@ block, a list comprehension or a guard,
+-- each in the scope of the bindings before it, ending in the final
+-- expression. A bind whose pattern can fail is marked so.
 module Semantic.Resolve.Go.Statements where
 
 import Data.Foldable (toList)

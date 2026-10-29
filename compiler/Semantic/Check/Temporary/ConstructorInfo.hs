@@ -1,4 +1,8 @@
 {-# LANGUAGE_HAZY UnorderedRecords #-}
+-- |
+-- What is known of a constructor where it is used, while checking: the
+-- levities and the evidence it holds are still being worked out. Solving it
+-- gives the one in "Semantic.Check.Info.Constructor".
 module Semantic.Check.Temporary.ConstructorInfo where
 
 import qualified Data.Vector.Strict as Strict

@@ -1,3 +1,8 @@
+-- |
+-- The builtin class @Read@, written as Haskell source: its methods
+-- @readsPrec@ and @readList@, with a default for @readList@ that reads a
+-- list in brackets. 'builtinClass' compiles it into the names, Core
+-- definition and extra the compiler keeps of it.
 module Builtin.Read where
 
 import Builtin (builtinClass)

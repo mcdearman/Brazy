@@ -1,3 +1,10 @@
+-- |
+-- Checking an expression against the type it is wanted at. Each kind of
+-- expression is checked here, and calls' heads, @case@ alternatives, @do@
+-- blocks, comprehensions, lambdas and local declarations are handed to
+-- their own modules. A constructor that holds something with a @forall@ of
+-- its own, and what is given to @runST@, are checked against that type
+-- rather than as a plain call.
 module Semantic.Check.Go.Expression where
 
 import qualified Core.Tree.Type as Levity (lazy)

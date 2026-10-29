@@ -1,4 +1,7 @@
 {-# LANGUAGE_HAZY UnorderedRecords #-}
+-- |
+-- The body of a class declaration: its declarations after @where@, or none
+-- when there is no @where@.
 module Syntax.Tree.ClassDeclarations where
 
 import qualified Data.Vector.Strict as Strict

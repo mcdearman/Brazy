@@ -1,3 +1,7 @@
+-- |
+-- Checking the guards of a right-hand side: conditions, which are @Bool@,
+-- pattern guards, and @let@s, ending in what the guarded right-hand side
+-- gives.
 module Semantic.Check.Go.Statements where
 
 import Control.Monad.ST (ST)

@@ -1,3 +1,7 @@
+-- |
+-- The plainest moves between scopes: none, into one more scope, and the
+-- two composed, with classes for what they can move. The full set of
+-- moves is in "Semantic.Shift", whose classes build on these.
 module Semantic.Shift0 where
 
 import Data.Kind (Constraint, Type)
