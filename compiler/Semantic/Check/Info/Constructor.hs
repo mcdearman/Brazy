@@ -1,3 +1,4 @@
+{-# LANGUAGE_HAZY UnorderedRecords #-}
 module Semantic.Check.Info.Constructor where
 
 import Core.Tree.Evidence (Evidence)

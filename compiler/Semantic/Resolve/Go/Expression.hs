@@ -148,14 +148,14 @@ resolveWith context expression [] = case expression of
   Syntax.Record {startPosition, constructor, fields} ->
     case Constructor.get $ context != constructor of
       Constructor.Binding
-        { index = Constructor.Index typex constructorIndex,
+        { index = Constructor.Index {typeIndex = typex, constructorIndex},
           fields = indexes,
           selections,
           fielded
         } ->
           Record
             { constructorPosition = startPosition,
-              constructor = Constructor.Index typex constructorIndex,
+              constructor = Constructor.Index {typeIndex = typex, constructorIndex},
               constructorInfo = Inferred,
               fields = fmap resolveField fields
             }
@@ -170,13 +170,13 @@ resolveWith context expression [] = case expression of
                 Just index <- Map.lookup root indexes = case path of
                   _ :. _ -> unneededFieldQualification position
                   Local -> Field {index, field}
-              | Selector.Index typex' selector <- context !-% name,
+              | Selector.Index {typeIndex = typex', selectorIndex = selector} <- context !-% name,
                 typex == typex',
                 Strict.Just redirect <- selections Strict.Vector.! selector =
                   Field {index = redirect, field}
               | otherwise = mismatchSelectors position
   Syntax.Update {base, updatePosition, updates} -> case first of
-    Selector.Index typex _ ->
+    Selector.Index {typeIndex = typex} ->
       Update
         { base = resolve context base,
           updatePosition,
@@ -192,7 +192,7 @@ resolveWith context expression [] = case expression of
             let index = context !-* position :@ Local :- localName
              in make variable $ resolveTerm2 position index []
         make name@(position :@ _) field
-          | Selector.Index typex' selector <- context !-% name,
+          | Selector.Index {typeIndex = typex', selectorIndex = selector} <- context !-% name,
             typex == typex' =
               Field {index = selector, field}
           | otherwise = mismatchSelectors position

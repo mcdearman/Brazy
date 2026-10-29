@@ -211,9 +211,9 @@ constrainWith context_ position classx_ term_ arguments_ = constrainWith context
               arguments <- for dependencies $ \constraint@Simple.Constraint.Constraint {classx} ->
                 let argument = substituteType (Vector.fromList arguments) (Simple.argument constraint)
                  in constrain context position classx argument
-              pure $ Evidence.Variable variable (Instanciation arguments)
+              pure Evidence.Variable {variable, instanciation = Instanciation arguments}
             Value {levity} ->
-              pure $ Evidence.Variable variable Instanciation.Mono {levity = logicalType levity}
+              pure Evidence.Variable {variable, instanciation = Instanciation.Mono {levity = logicalType levity}}
       where
         variable = Evidence.Direct (Type2.Index classx) index
     plainly context@Context {typeEnvironment} classx (Constructor (Type2.Index index)) arguments
@@ -229,9 +229,9 @@ constrainWith context_ position classx_ term_ arguments_ = constrainWith context
               arguments <- for dependencies $ \constraint@Simple.Constraint.Constraint {classx} ->
                 let argument = substituteType (Vector.fromList arguments) (Simple.argument constraint)
                  in constrain context position classx argument
-              pure $ Evidence.Variable variable (Instanciation arguments)
+              pure Evidence.Variable {variable, instanciation = Instanciation arguments}
             Value {levity} ->
-              pure $ Evidence.Variable variable Instanciation.Mono {levity = logicalType levity}
+              pure Evidence.Variable {variable, instanciation = Instanciation.Mono {levity = logicalType levity}}
       where
         variable = Evidence.Direct classx (Type2.Index index)
     plainly context classx (Call function argument) arguments =

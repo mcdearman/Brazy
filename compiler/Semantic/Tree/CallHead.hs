@@ -1,3 +1,4 @@
+{-# LANGUAGE_HAZY UnorderedRecords #-}
 module Semantic.Tree.CallHead where
 
 import qualified Core.Tree.Evidence as Simple (Evidence)

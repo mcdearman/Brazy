@@ -1,3 +1,4 @@
+{-# LANGUAGE_HAZY UnorderedRecords #-}
 module Semantic.Resolve.Temporary.Partial.More.Choice where
 
 import qualified Semantic.Index.Term as Term (Bound (..), Index)

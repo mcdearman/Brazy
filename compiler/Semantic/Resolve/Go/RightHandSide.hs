@@ -12,4 +12,4 @@ import qualified Syntax.Tree.RightHandSide as Syntax (RightHandSide (..))
 resolve :: Context scope -> Syntax.RightHandSide Position -> RightHandSide Normal Resolve scope
 resolve context Syntax.RightHandSide {body, declarations}
   | (context, locals) <- Declarations.resolve context declarations =
-      RightHandSide (Body.resolve context body) locals
+      RightHandSide {body = Body.resolve context body, declarations = locals}

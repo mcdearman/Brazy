@@ -1,3 +1,4 @@
+{-# LANGUAGE_HAZY UnorderedRecords #-}
 -- |
 -- AxCut: the second IR of the native pipeline, which a machine can run as it
 -- stands.

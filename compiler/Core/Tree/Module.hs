@@ -1,3 +1,4 @@
+{-# LANGUAGE_HAZY UnorderedRecords #-}
 module Core.Tree.Module where
 
 import Core.Tree.Declarations (Declarations)

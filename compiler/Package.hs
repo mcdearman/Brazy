@@ -1,3 +1,4 @@
+{-# LANGUAGE_HAZY UnorderedRecords #-}
 module Package (Package (..), Module (..), load) where
 
 import Control.Monad (void)

@@ -1,3 +1,4 @@
+{-# LANGUAGE_HAZY UnorderedRecords #-}
 module Semantic.Tree.InstanceDefinition2 where
 
 import qualified Core.Tree.Constraints as Core (Constraints)

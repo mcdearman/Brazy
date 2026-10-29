@@ -1,3 +1,4 @@
+{-# LANGUAGE_HAZY UnorderedRecords #-}
 module Semantic.Check.Temporary.Pattern where
 
 import Control.Monad (foldM, when, zipWithM)
@@ -427,7 +428,7 @@ check context@Context {typeEnvironment} levity typex = \case
           patterns
         } ->
           do
-            let Constructor.Index typeIndex constructorIndex = constructor
+            let Constructor.Index {typeIndex, constructorIndex} = constructor
             datax <- do
               let get index = assumeData <$> TypeBinding.content (typeEnvironment Type.! index)
               Builtin.index pure get typeIndex
@@ -460,7 +461,7 @@ check context@Context {typeEnvironment} levity typex = \case
           constructor,
           fields
         } -> do
-          let Constructor.Index typeIndex constructorIndex = constructor
+          let Constructor.Index {typeIndex, constructorIndex} = constructor
           datax <- do
             let get index = assumeData <$> TypeBinding.content (typeEnvironment Type.! index)
             Builtin.index pure get typeIndex

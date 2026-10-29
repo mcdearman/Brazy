@@ -1,3 +1,4 @@
+{-# LANGUAGE_HAZY UnorderedRecords #-}
 -- |
 -- What a function of C is given and gives, as C has them. This is kept
 -- apart from how it is worked out ("Core.Foreign") so that the semantic

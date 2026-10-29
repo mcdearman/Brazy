@@ -1,3 +1,4 @@
+{-# LANGUAGE_HAZY UnorderedRecords #-}
 -- |
 -- The sequent calculus: the first IR of the native pipeline, after Core.
 --

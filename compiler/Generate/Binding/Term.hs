@@ -1,3 +1,4 @@
+{-# LANGUAGE_HAZY UnorderedRecords #-}
 module Generate.Binding.Term where
 
 import Data.Kind (Type)

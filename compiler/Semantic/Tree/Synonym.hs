@@ -1,3 +1,4 @@
+{-# LANGUAGE_HAZY UnorderedRecords #-}
 module Semantic.Tree.Synonym where
 
 import qualified Core.Tree.Type as Core

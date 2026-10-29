@@ -1,3 +1,4 @@
+{-# LANGUAGE_HAZY UnorderedRecords #-}
 module Graph.Topological1 where
 
 import Control.Monad.ST (ST)

@@ -1,3 +1,4 @@
+{-# LANGUAGE_HAZY UnorderedRecords #-}
 module Semantic.Check.Instanciate.Data where
 
 import Control.Monad.ST (ST)
@@ -51,7 +52,7 @@ constructed :: ConstructorInstance s scope -> Type2.Index scope -> Unify.Type s 
 constructed ConstructorInstance {result} typeIndex = foldl (#) (Core.constructor typeIndex) result
 
 selectorFunction :: DataInstance s scope -> Selector.Index scope -> Unify.Type s scope
-selectorFunction instancex (Selector.Index typeIndex selectorIndex) =
+selectorFunction instancex Selector.Index {typeIndex, selectorIndex} =
   selected instancex typeIndex selectorIndex -#> selectorType instancex selectorIndex
 
 -- |

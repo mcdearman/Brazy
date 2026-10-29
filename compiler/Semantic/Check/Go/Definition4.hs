@@ -1,3 +1,4 @@
+{-# LANGUAGE_HAZY UnorderedRecords #-}
 module Semantic.Check.Go.Definition4 where
 
 import Control.Monad.ST (ST)

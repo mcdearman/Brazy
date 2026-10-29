@@ -1,3 +1,4 @@
+{-# LANGUAGE_HAZY UnorderedRecords #-}
 module Semantic.Check.Info.Method where
 
 import qualified Core.Substitute as Substitute

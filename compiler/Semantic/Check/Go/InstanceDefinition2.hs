@@ -1,3 +1,4 @@
+{-# LANGUAGE_HAZY UnorderedRecords #-}
 module Semantic.Check.Go.InstanceDefinition2 where
 
 import qualified Core.Tree.Type as Levity (lazy)

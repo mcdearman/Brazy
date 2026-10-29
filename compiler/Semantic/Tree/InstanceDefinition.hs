@@ -1,3 +1,4 @@
+{-# LANGUAGE_HAZY UnorderedRecords #-}
 module Semantic.Tree.InstanceDefinition where
 
 import qualified Core.Tree.EvidenceSet as Core

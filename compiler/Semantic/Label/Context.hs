@@ -1,3 +1,4 @@
+{-# LANGUAGE_HAZY UnorderedRecords #-}
 module Semantic.Label.Context where
 
 import qualified Semantic.Index.Local as Local (Index)

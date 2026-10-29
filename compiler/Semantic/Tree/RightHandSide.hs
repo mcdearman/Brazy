@@ -1,3 +1,4 @@
+{-# LANGUAGE_HAZY UnorderedRecords #-}
 module Semantic.Tree.RightHandSide where
 
 import Semantic.Connect (Connect (..))
@@ -20,18 +21,21 @@ instance Shift0.Functor (RightHandSide layout stage) where
   map = Shift.mapDefault
 
 instance Shift.Functor (RightHandSide layout stage) where
-  map category (RightHandSide body declarations) =
-    RightHandSide (Shift.map (Shift.Over category) body) (Shift.map category declarations)
+  map category RightHandSide {body, declarations} =
+    RightHandSide
+      { body = Shift.map (Shift.Over category) body,
+        declarations = Shift.map category declarations
+      }
 
 instance FreeTermVariables RightHandSide where
-  freeTermVariables target (RightHandSide body declarations) =
+  freeTermVariables target RightHandSide {body, declarations} =
     concat
       [ freeTermVariables (FreeVariables.Over target) body,
         freeTermVariables target declarations
       ]
 
 instance Connect RightHandSide where
-  connect (RightHandSide body declarations) =
-    RightHandSide (connect body) (connect declarations)
-  seperate (RightHandSide body declarations) =
-    RightHandSide (seperate body) (seperate declarations)
+  connect RightHandSide {body, declarations} =
+    RightHandSide {body = connect body, declarations = connect declarations}
+  seperate RightHandSide {body, declarations} =
+    RightHandSide {body = seperate body, declarations = seperate declarations}

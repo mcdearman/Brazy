@@ -217,3 +217,5 @@ loebST2 ::
     (Formula2 t s a b b) ->
   ST s (t a b)
 loebST2 spreadsheet = fmap (unpack2 . runTwo) $ loebST $ Two $ pack2 spreadsheet
+
+{-# UnorderedRecords Unmarked, Temporary, Permanent, Formula #-}

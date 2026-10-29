@@ -1,3 +1,4 @@
+{-# LANGUAGE_HAZY UnorderedRecords #-}
 module Semantic.Tree.Group where
 
 import Core.Tree.Forall (ForallOver (..))

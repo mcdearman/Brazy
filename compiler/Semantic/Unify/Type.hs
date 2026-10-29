@@ -1,3 +1,4 @@
+{-# LANGUAGE_HAZY UnorderedRecords #-}
 module Semantic.Unify.Type where
 
 import Control.Monad (foldM, when, zipWithM)

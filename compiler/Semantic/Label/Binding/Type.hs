@@ -1,3 +1,4 @@
+{-# LANGUAGE_HAZY UnorderedRecords #-}
 module Semantic.Label.Binding.Type where
 
 import Data.Kind (Type)

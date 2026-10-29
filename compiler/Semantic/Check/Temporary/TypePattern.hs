@@ -1,3 +1,4 @@
+{-# LANGUAGE_HAZY UnorderedRecords #-}
 module Semantic.Check.Temporary.TypePattern where
 
 import {-# SOURCE #-} Semantic.Check.Context (Context)

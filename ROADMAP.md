@@ -1866,7 +1866,14 @@ Planned toggles and TODOs:
       left section is a function of the operator's second argument, with
       what is on its left worked out once, as GHC has it (test
       `postfix-operators`, which agrees with GHC)
-- [ ] Use `UnorderedRecords` throughout the compiler (after M6)
+- [x] Use `UnorderedRecords` throughout the compiler. Every module that
+      declares a record has the pragma, so a record of more than one field
+      is matched and made by the names of its fields, not by where they
+      are. A record of one field is still used by where its field is, as
+      there is no order to get wrong, and so is one whose constructor is an
+      operator (`:@`, `:::`), as an operator is: their modules name each of
+      their other records in a pragma of its own instead,
+      `{-# UnorderedRecords A, B #-}`
 - [x] A module may be its body alone, as the report has it: it is then
       `module Main (main) where`. Hazy asked for the header (test
       `headerless-module`, which agrees with GHC)

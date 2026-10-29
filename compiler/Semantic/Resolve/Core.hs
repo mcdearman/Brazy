@@ -1,3 +1,4 @@
+{-# LANGUAGE_HAZY UnorderedRecords #-}
 module Semantic.Resolve.Core where
 
 import Data.Functor.Identity (Identity (..))

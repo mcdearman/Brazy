@@ -48,6 +48,8 @@ data Detail scope = Binding
   }
   deriving (Show)
 
+{-# UnorderedRecords Binding #-}
+
 combine
   position1
   position2

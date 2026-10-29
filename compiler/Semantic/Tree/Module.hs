@@ -171,3 +171,5 @@ newtype ModuleSet loeb layout stage scope = ModuleSet {runModuleSet :: Vector (M
 
 instance Traversable2 ModuleSet where
   traverse2 f (ModuleSet program) = ModuleSet <$> traverse (traverse2 f) program
+
+{-# UnorderedRecords Module #-}

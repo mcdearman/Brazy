@@ -129,3 +129,5 @@ tarjan Index {(!)} childrenRaw nodesRaw = unsafePerformIO $ do
   runLazyIO $ for nodes $ \node -> LazyIO $ stToIO $ do
     visit node
     readSTRef (result node)
+
+{-# UnorderedRecords Group, Link, State #-}

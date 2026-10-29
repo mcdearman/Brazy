@@ -1,3 +1,4 @@
+{-# LANGUAGE_HAZY UnorderedRecords #-}
 -- |
 -- @Functor@, @Foldable@ and @Traversable@, derived. Each goes through what
 -- each constructor holds, and finds where the type's last parameter is in

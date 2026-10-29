@@ -1,3 +1,4 @@
+{-# LANGUAGE_HAZY UnorderedRecords #-}
 module Generate.Binding.Type where
 
 import Data.Map (Map)

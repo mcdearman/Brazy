@@ -1,3 +1,4 @@
+{-# LANGUAGE_HAZY UnorderedRecords #-}
 module Semantic.Check.Temporary.TypeDefinition where
 
 import Control.Monad.ST (ST)

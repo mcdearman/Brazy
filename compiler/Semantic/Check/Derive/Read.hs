@@ -1,3 +1,4 @@
+{-# LANGUAGE_HAZY UnorderedRecords #-}
 -- |
 -- @Read@, derived. A value is read as it is shown: each constructor is an
 -- alternative, of the words it is written with and what it holds, read one

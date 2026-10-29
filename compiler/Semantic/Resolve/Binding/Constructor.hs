@@ -59,6 +59,8 @@ data Detail scope = Binding
   }
   deriving (Show)
 
+{-# UnorderedRecords Binding #-}
+
 combine position1 position2 binding@Binding {index = index1} Binding {index = index2}
   | index1 == index2 = binding
   | otherwise = duplicateConstructorEntries [position1, position2]

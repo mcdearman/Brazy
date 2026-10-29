@@ -1,3 +1,4 @@
+{-# LANGUAGE_HAZY UnorderedRecords #-}
 module Semantic.Check.Temporary.EntryInfo where
 
 import qualified Semantic.Check.Info.Entry as Solved

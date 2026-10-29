@@ -141,3 +141,5 @@ instance Core.Functor EvidenceF where
     Held {term} -> Held {term}
     Abstract {count, body} -> Abstract {count, body = Core.map f g body}
     Applied {function, arguments} -> Applied {function = Core.map f g function, arguments = Core.map f g <$> arguments}
+
+{-# UnorderedRecords Variable, Super, Abstract, Applied #-}
