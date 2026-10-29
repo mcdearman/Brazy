@@ -44,9 +44,7 @@ data Entry
 parse :: Parser (Scheme Position) -> Parser Entry
 parse scheme =
   asum
-    [ try $ lazy <$> scheme,
-      lazy <$> betweenParens Scheme.parse,
-      strict
+    [ strict
         <$> (position <* bang)
         <*> asum
           [ -- A tuple is in brackets as well, and is a type.
@@ -60,7 +58,9 @@ parse scheme =
           [ -- A tuple is in brackets as well, and is a type.
             try $ betweenParens Scheme.parse,
             Scheme.mono <$> Type.parse3
-          ]
+          ],
+      try $ lazy <$> scheme,
+      lazy <$> betweenParens Scheme.parse
     ]
   where
     lazy entry =

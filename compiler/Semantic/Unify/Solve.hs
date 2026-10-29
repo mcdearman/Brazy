@@ -1,5 +1,6 @@
 module Semantic.Unify.Solve where
 
+import qualified Core.Tree.Type as Levity (lazy)
 import Control.Monad (ap, liftM)
 import Control.Monad.ST (ST)
 import Core.Tree.Constraint (ConstraintF (..))
@@ -98,7 +99,9 @@ instance SolveType ConstraintsF where
     Constraints constraints -> do
       constraints <- traverse (solveWith category position) constraints
       pure $ Constraints constraints
-    None -> pure None
+    Value {levity} -> do
+      levity <- solveWith category position levity
+      pure Value {levity}
 
 instance (SolveType typef) => SolveType (ForallOver typef) where
   solveWith category position ForallOver {parameters, constraints, result} = do
@@ -107,19 +110,19 @@ instance (SolveType typef) => SolveType (ForallOver typef) where
     result <- solveWith (Shift0.Shift Shift0.:. category) position result
     pure ForallOver {parameters, constraints, result}
 
-type SolveEvidence :: (Kind.Type -> Environment -> Kind.Type) -> Constraint
+type SolveEvidence :: (Kind.Type -> Kind.Type -> Environment -> Kind.Type) -> Constraint
 class SolveEvidence evidencef where
   solveEvidenceWith ::
     Shift0.Category scopex scope ->
     Position ->
-    evidencef (Evidence.Logical s scopex) scope ->
-    Solve s (evidencef Void scope)
+    evidencef (Evidence.Logical s scopex) (Type.Logical s scopex) scope ->
+    Solve s (evidencef Void Void scope)
 
 solveEvidence ::
   (SolveEvidence evidencef) =>
   Position ->
-  evidencef (Evidence.Logical s scope) scope ->
-  Solve s (evidencef Void scope)
+  evidencef (Evidence.Logical s scope) (Type.Logical s scope) scope ->
+  Solve s (evidencef Void Void scope)
 solveEvidence = solveEvidenceWith Shift0.Id
 
 instance SolveEvidence EvidenceF where
@@ -151,7 +154,7 @@ instance SolveEvidence EvidenceF where
               pure
                 Evidence.Variable
                   { variable = Index.Evidence.Direct (Evidence.classOf classx) (Default.typeOf typex),
-                    instanciation = Mono
+                    instanciation = Mono {levity = Levity.lazy}
                   }
             Nothing -> unsupportedFeatureConstraintedTypeDefaulting position
         Evidence.Unsolved {fallback = Nothing} -> unsupportedFeatureConstraintedTypeDefaulting position
@@ -161,7 +164,9 @@ instance SolveEvidence InstanciationF where
     Instanciation instanciation -> do
       instanciation <- traverse (solveEvidenceWith category position) instanciation
       pure $ Instanciation instanciation
-    Mono -> pure Mono
+    Mono {levity} -> do
+      levity <- solveWith category position levity
+      pure Mono {levity}
 
 -- todo, figure out how to make sure nodes that are being solved early have a
 -- rigid context

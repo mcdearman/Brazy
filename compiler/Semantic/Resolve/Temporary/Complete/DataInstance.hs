@@ -127,6 +127,6 @@ shortened classIndex declarations parameters prerequisites
                 | kept <- Strict.Vector.filter other wanted,
                   not (null kept) ->
                     Constraints.Constraints kept
-              _ -> Constraints.None
+              _ -> Constraints.Lazy
           )
   | otherwise = (parameters, prerequisites)

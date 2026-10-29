@@ -1,16 +1,16 @@
-module Semantic.Check.Simple.SelectorInfo where
+module Semantic.Check.Info.Selector where
 
 import qualified Core.Tree.Type as Simple
 import qualified Data.Strict.Maybe as Strict (Maybe)
 import qualified Data.Vector.Strict as Strict (Vector)
-import Semantic.Check.Simple.ConstructorInfo (ConstructorInfo)
+import Semantic.Check.Info.Constructor (ConstructorInfo)
 import qualified Semantic.Scope as Scope
 import qualified Semantic.Shift as Shift
 import qualified Semantic.Shift0 as Shift0
 
 data SelectorInfo scope
   = Uniform
-      { strict :: !(Simple.Type scope)
+      { levity :: !(Simple.Type scope)
       }
   | Disjoint
       { select :: !(Strict.Vector (Select scope))
@@ -32,7 +32,7 @@ instance Shift0.Functor SelectorInfo where
 
 instance Shift.Functor SelectorInfo where
   map category = \case
-    Uniform {strict} -> Uniform {strict = Shift.map category strict}
+    Uniform {levity} -> Uniform {levity = Shift.map category levity}
     Disjoint {select} -> Disjoint {select = Shift.map category <$> select}
 
 instance Shift0.Functor Select where

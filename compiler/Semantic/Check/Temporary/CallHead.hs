@@ -2,25 +2,25 @@ module Semantic.Check.Temporary.CallHead where
 
 import Control.Monad.ST (ST)
 import qualified Core.Builtin as Builtin
+import qualified Core.Tree.Class as Class
 import Core.Tree.Type ((-#>))
 import Core.Tree.TypeDeclaration (assumeClass, assumeData)
 import qualified Data.Vector.Strict as Strict.Vector
-import qualified Semantic.Check.ClassInstance as ClassInstance
-import qualified Semantic.Check.ConstructorInstance as ConstructorInstance
+import qualified Semantic.Check.Instanciate.Class as ClassInstance
+import qualified Semantic.Check.Instanciate.Constructor as ConstructorInstance
 import Semantic.Check.Context (Context (..))
-import Semantic.Check.DataInstance (DataInstance (..))
-import qualified Semantic.Check.DataInstance as DataInstance
-import qualified Semantic.Check.EntryInstance as EntryInstance (taken)
-import qualified Semantic.Check.Simple.Class as Simple.Class
+import Semantic.Check.Instanciate.Data (DataInstance (..))
+import qualified Semantic.Check.Instanciate.Data as DataInstance
+import qualified Semantic.Check.Instanciate.Entry as EntryInstance (taken)
 import qualified Semantic.Check.Simple.Data as Simple.Data
-import Semantic.Check.Simple.MethodInfo (MethodInfo)
-import Semantic.Check.Simple.Scheme (instanciate)
+import Semantic.Check.Info.Method (MethodInfo)
+import Semantic.Check.Scheme (instanciate)
 import Semantic.Check.Temporary.ConstructorInfo (ConstructorInfo)
 import qualified Semantic.Check.Temporary.ConstructorInfo as ConstructorInfo
 import Semantic.Check.Temporary.SelectorInfo (SelectorInfo)
 import qualified Semantic.Check.Temporary.SelectorInfo as SelectorInfo
-import Semantic.Check.TermBinding (TermBinding (..), Type (..))
-import qualified Semantic.Check.TypeBinding as TypeBinding
+import Semantic.Check.Binding.Term (TermBinding (..), Type (..))
+import qualified Semantic.Check.Binding.Type as TypeBinding
 import qualified Semantic.Index.Constructor as Constructor
 import qualified Semantic.Index.Method as Method
 import qualified Semantic.Index.Selector as Selector
@@ -33,6 +33,7 @@ import qualified Semantic.Tree.CallHead as Solved
 import Semantic.Tree.Combinators.Inferred (Inferred (..))
 import qualified Semantic.Unify as Unify
 import Syntax.Position (Position)
+import Core.Tree.Class (EvidenceInfo(..))
 
 data CallHead s scope
   = Variable
@@ -108,10 +109,10 @@ check
         classx <- do
           let get index = assumeClass <$> TypeBinding.content (typeEnvironment Type.! index)
           Builtin.index pure get typeIndex
-        instancex <- Simple.Class.instanciate context methodPosition typeIndex classx
+        instancex <- ClassInstance.instanciate context methodPosition typeIndex classx
         let function = ClassInstance.methodFunction instancex methodIndex
             methodInfo = ClassInstance.info instancex
-            evidence = ClassInstance.evidence instancex
+            EvidenceInfo evidence = Class.evidence instancex
         (typex', instanciation) <- Unify.instanciate context methodPosition function
         Unify.unify context methodPosition typex typex'
         pure Method {methodPosition, method, evidence, instanciation, methodInfo}

@@ -1,22 +1,20 @@
 module Semantic.Resolve.Temporary.PatternInfix where
 
-import Data.Functor.Identity (Identity (..))
 import qualified Data.Map as Map
 import qualified Data.Vector.Strict as Strict.Vector
 import Data.Void (Void, absurd)
 import qualified Semantic.Index.Constructor as Constructor (cons)
-import qualified Semantic.Resolve.Binding.Constructor as Constructor (BindingF (..), Detail (..))
+import qualified Semantic.Resolve.Binding.Constructor as Constructor (Detail (..), get)
 import Semantic.Resolve.Context (Context (..), (!=~))
 import qualified Semantic.Resolve.Go.Pattern as Pattern (resolve)
 import Semantic.Resolve.Temporary.Infix (Infix (..))
 import qualified Semantic.Resolve.Temporary.Infix as Infix
 import Semantic.Stage (Resolve)
 import Semantic.Tree.Combinators.Inferred (Inferred (..))
-import Semantic.Tree.Pattern (Pattern ())
-import qualified Semantic.Tree.Pattern as Pattern (Pattern (..))
+import Semantic.Tree.Pattern (Failable (..), Pattern ())
+import qualified Semantic.Tree.Pattern as Pattern (Bindings (..), Pattern (..))
 import Syntax.Position (Position)
-import Syntax.Tree.Associativity (Associativity (..))
-import Syntax.Tree.Fixity (Fixity (..))
+import Syntax.Tree.Fixity (Associativity (..), Fixity (..))
 import qualified Syntax.Tree.PatternInfix as Syntax (Infix (..))
 import Prelude hiding (Either (Left, Right))
 
@@ -32,42 +30,52 @@ instance Infix.Token (Index scope) where
     Constructor _ Constructor.Binding {fixity} -> fixity
     Cons _ -> Fixity {associativity = Right, precedence = 5}
 
-resolve :: Context scope -> Syntax.Infix Position -> Infix Void (Index scope) (Pattern Resolve scope)
+resolve ::
+  Context scope ->
+  Syntax.Infix Position ->
+  Infix Void (Index scope) (Pattern Position Resolve scope)
 resolve context = \case
   Syntax.Pattern {patternx} -> Single (Pattern.resolve context patternx)
-  Syntax.Infix {left, operator, operatorPosition, right}
-    | _ Constructor.:@ Identity binding <- context !=~ operator ->
-        Infix
-          (Pattern.resolve context left)
-          (Constructor operatorPosition binding)
-          (resolve context right)
+  Syntax.Infix {left, operator, operatorPosition, right} ->
+    Infix
+      (Pattern.resolve context left)
+      (Constructor operatorPosition $ Constructor.get $ context !=~ operator)
+      (resolve context right)
   Syntax.InfixCons {left, operatorPosition, right} ->
     Infix (Pattern.resolve context left) (Cons operatorPosition) (resolve context right)
 
-fixWith :: Maybe Associativity -> Int -> Infix Void (Index scope) (Pattern Resolve scope) -> Pattern Resolve scope
+fixWith ::
+  Maybe Associativity ->
+  Int ->
+  Infix Void (Index scope) (Pattern Position Resolve scope) ->
+  Pattern Position Resolve scope
 fixWith = Infix.fixWith absurd operators
   where
-    operators pattern1 index pattern2 = case index of
-      Constructor position Constructor.Binding {index, single} ->
-        Pattern.Constructor
-          { names = Map.empty,
-            irrefutable = Prelude.False,
-            constructorPosition = position,
-            constructor = index,
-            patterns = Strict.Vector.fromList [pattern1, pattern2],
-            single,
-            constructorInfo = Inferred
-          }
-      Cons constructorPosition ->
-        Pattern.Constructor
-          { names = Map.empty,
-            irrefutable = Prelude.False,
-            constructorPosition,
-            constructor = Constructor.cons,
-            patterns = Strict.Vector.fromList [pattern1, pattern2],
-            single = False,
-            constructorInfo = Inferred
-          }
+    operators pattern1 index pattern2 =
+      Pattern.Match
+        { startPosition = Pattern.startPosition pattern1,
+          names = Map.empty,
+          levity = Inferred,
+          irrefutable = Prelude.False,
+          match =
+            case index of
+              Constructor position Constructor.Binding {index, failable} ->
+                Pattern.Constructor
+                  { constructorPosition = position,
+                    constructor = index,
+                    patterns = Strict.Vector.fromList [pattern1, pattern2],
+                    failable,
+                    constructorInfo = Inferred
+                  }
+              Cons constructorPosition ->
+                Pattern.Constructor
+                  { constructorPosition,
+                    constructor = Constructor.cons,
+                    patterns = Strict.Vector.fromList [pattern1, pattern2],
+                    failable = Failable,
+                    constructorInfo = Inferred
+                  }
+        }
 
-fix :: Infix Void (Index scope) (Pattern Resolve scope) -> Pattern Resolve scope
+fix :: Infix Void (Index scope) (Pattern Position Resolve scope) -> Pattern Position Resolve scope
 fix = fixWith Nothing 0

@@ -2,14 +2,15 @@ module Semantic.Tree.CallHead where
 
 import qualified Core.Tree.Evidence as Simple (Evidence)
 import qualified Core.Tree.Evidence as Evidence (EvidenceF (Variable, instanciation, variable))
-import qualified Core.Tree.Instanciation as Instanciation (InstanciationF (Instanciation, Mono))
+import qualified Core.Tree.Instanciation as Instanciation (InstanciationF (Instanciation, Mono, levity))
 import qualified Core.Tree.Instanciation as Simple (Instanciation)
+import qualified Core.Tree.Type as Core.Type (strict)
 import qualified Data.Vector.Strict as Strict.Vector (fromList)
 import qualified Semantic.Index.Evidence as Evidence (Index (Index))
 import Data.Kind (Type)
-import Semantic.Check.Simple.ConstructorInfo (ConstructorInfo)
-import Semantic.Check.Simple.MethodInfo (MethodInfo)
-import Semantic.Check.Simple.SelectorInfo (SelectorInfo)
+import Semantic.Check.Info.Constructor (ConstructorInfo)
+import Semantic.Check.Info.Method (MethodInfo)
+import Semantic.Check.Info.Selector (SelectorInfo)
 import Semantic.Connect (Connect (..))
 import Semantic.FreeVariables (FreeTermVariables (..))
 import qualified Semantic.FreeVariables as FreeVariables
@@ -93,12 +94,12 @@ given ::
   Inferred Simple.Instanciation stage scope ->
   Inferred Simple.Instanciation stage scope'
 given category variable = \case
-  Solved Instanciation.Mono
+  Solved Instanciation.Mono {}
     | Just evidence <- Shift.grouped category variable ->
         Solved $
           Instanciation.Instanciation $
             Strict.Vector.fromList
-              [ Evidence.Variable {variable = Evidence.Index assumed, instanciation = Instanciation.Mono}
+              [ Evidence.Variable {variable = Evidence.Index assumed, instanciation = Instanciation.Mono {levity = Core.Type.strict}}
               | assumed <- evidence
               ]
   instanciation -> Shift.map category instanciation

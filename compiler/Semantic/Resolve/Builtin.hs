@@ -32,6 +32,7 @@ import {-# SOURCE #-} qualified Builtin.Word16 as Word16
 import {-# SOURCE #-} qualified Builtin.Word32 as Word32
 import {-# SOURCE #-} qualified Builtin.Word64 as Word64
 import {-# SOURCE #-} qualified Builtin.Ratio as Ratio
+import {-# SOURCE #-} qualified Builtin.Read as Read
 import {-# SOURCE #-} qualified Builtin.Real as Real
 import {-# SOURCE #-} qualified Builtin.RealFloat as RealFloat
 import {-# SOURCE #-} qualified Builtin.RealFrac as RealFrac
@@ -51,8 +52,7 @@ import qualified Semantic.Resolve.Binding.Type as Type
 import Semantic.Resolve.Bindings (Bindings (..), BindingsF (..))
 import Syntax.Lexer (constructorIdentifier, variableIdentifier)
 import qualified Syntax.Position as Position
-import Syntax.Tree.Associativity (Associativity (..))
-import Syntax.Tree.Fixity (Fixity (..))
+import Syntax.Tree.Fixity (Associativity (..), Fixity (..))
 import Syntax.Variable (ConstructorIdentifier, Variable (..))
 import Prelude hiding
   ( Applicative (..),
@@ -67,7 +67,6 @@ import Prelude hiding
     Ord (..),
     Real (..),
   )
-import {-# SOURCE #-} qualified Builtin.Read as Read
 
 builtinType :: [Char] -> Type3.Index scope -> (ConstructorIdentifier, Type.Binding scope)
 builtinType name index = (constructorIdentifier $ pack name, binding)

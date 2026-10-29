@@ -1,17 +1,20 @@
 module Semantic.Check.Temporary.Expression where
 
+import qualified Core.Tree.Type as Levity (lazy)
 import Control.Monad (when, zipWithM)
 import Control.Monad.ST (ST)
 import qualified Core.Builtin as Builtin
-import qualified Core.Tree.Constructor (Constructor (..))
-import qualified Core.Tree.Data (Data (..))
+import qualified Core.Tree.Constructor (ConstructorF (..))
+import qualified Core.Tree.Data (Data (..), DefinitionF (..))
 import qualified Core.Tree.Entry (quantified)
-import Core.Tree.Constraints (ConstraintsF (None))
+import Core.Tree.Constraints (ConstraintsF (Value, levity))
 import Core.Tree.Forall (ForallOver (..))
-import Core.Tree.Instanciation (InstanciationF (Mono))
+import Core.Tree.Instanciation (InstanciationF (Mono, levity))
+import qualified Core.Tree.Data as Data
 import qualified Core.Tree.Forall as Forall
 import Core.Tree.Type ((#), (-#>))
 import qualified Core.Tree.Type as Core
+import qualified Core.Tree.Type as Type (lazy)
 import Core.Tree.TypeDeclaration (assumeData)
 import qualified Core.Tree.TypeLambda as Simple
 import Core.Type.Functor (shiftLogical)
@@ -23,19 +26,19 @@ import Data.Traversable (for)
 import qualified Data.Vector.Strict as Strict (Vector)
 import qualified Data.Vector.Strict as Strict.Vector
 import Error (badRunSTCall, mismatchedConstructorArguments)
-import qualified Semantic.Check.ConstructorInstance as ConstructorInstance
+import qualified Semantic.Check.Instanciate.Constructor as ConstructorInstance
 import Semantic.Check.Context (Context (..))
-import Semantic.Check.DataInstance (DataInstance (DataInstance))
-import qualified Semantic.Check.DataInstance as DataInstance
-import Semantic.Check.EntryInstance (EntryInstance (..))
-import qualified Semantic.Check.EntryInstance as EntryInstance (entry)
+import Semantic.Check.Instanciate.Data (DataInstance (DataInstance))
+import qualified Semantic.Check.Instanciate.Data as DataInstance
+import Semantic.Check.Instanciate.Entry (EntryInstance (..))
+import qualified Semantic.Check.Instanciate.Entry as EntryInstance (entry)
 import qualified Semantic.Check.Go.Declarations as Declarations
 import qualified Semantic.Check.Go.Definition4 as Definition4
 import Semantic.Check.Go.Scheme (Scheme)
 import qualified Semantic.Check.Mask as Mask
 import qualified Semantic.Check.Simple.Data as Simple.Data
-import Semantic.Check.Simple.Scheme (instanciate)
-import qualified Semantic.Check.Simple.Scheme as Rigid (augment)
+import Semantic.Check.Scheme (instanciate)
+import qualified Semantic.Check.Scheme as Rigid (augment)
 import Semantic.Check.Temporary.Alternative (Alternative)
 import qualified Semantic.Check.Temporary.Alternative as Alternative
 import Semantic.Check.Temporary.CallHead (CallHead)
@@ -46,25 +49,21 @@ import Semantic.Check.Temporary.ConstructorInfo (ConstructorInfo)
 import qualified Semantic.Check.Temporary.ConstructorInfo as ConstructorInfo
 import Semantic.Check.Temporary.Do (Do)
 import qualified Semantic.Check.Temporary.Do as Do
-import Semantic.Check.Temporary.ExpressionField (Field)
-import qualified Semantic.Check.Temporary.ExpressionField as Field
 import Semantic.Check.Temporary.Lambda (Lambda)
 import qualified Semantic.Check.Temporary.Lambda as Lambda
 import Semantic.Check.Temporary.Pattern (Pattern)
 import qualified Semantic.Check.Temporary.Pattern as Pattern
 import Semantic.Check.Temporary.RightHandSide (RightHandSide)
 import qualified Semantic.Check.Temporary.RightHandSide as RightHandSide
-import Semantic.Check.Temporary.Select (Select)
-import qualified Semantic.Check.Temporary.Select as Select
 import Semantic.Check.Temporary.UpdateInfo (UpdateInfo)
 import qualified Semantic.Check.Temporary.UpdateInfo as UpdateInfo
-import qualified Semantic.Check.TermBinding as TermBinding (TermBinding (..), Type (..))
+import qualified Semantic.Check.Binding.Term as TermBinding (TermBinding (..), Type (..))
 import qualified Semantic.Check.TypeAnnotation as Annotation
-import qualified Semantic.Check.TypeBinding as TypeBinding
+import qualified Semantic.Check.Binding.Type as TypeBinding
 import qualified Semantic.Index.Constructor as Constructor
 import qualified Semantic.Index.Local as Local (Index (Local))
 import qualified Semantic.Index.Table.Term as Term ((!))
-import qualified Semantic.Index.Table.Type as Type
+import qualified Semantic.Index.Table.Type as Type ((!))
 import qualified Semantic.Index.Term as Term.Index (Index)
 import qualified Semantic.Index.Type2 as Type2
 import Semantic.Layout (Group)
@@ -77,9 +76,8 @@ import qualified Semantic.Tree.CallHead as Head (CallHead (..))
 import Semantic.Tree.Combinators.Inferred (Inferred (Solved))
 import qualified Semantic.Tree.Declarations as Proper.Declarations
 import Semantic.Tree.Expression (Explicit (..))
-import qualified Semantic.Tree.Expression as Semantic (Expression (..))
+import qualified Semantic.Tree.Expression as Semantic (Expression (..), Field (..))
 import qualified Semantic.Tree.Expression as Solved
-import qualified Semantic.Tree.Select as Semantic (Select (..))
 import qualified Semantic.Unify as Unify
 import Syntax.Position (Position)
 import Syntax.StringLiteral (StringLiteral)
@@ -88,7 +86,8 @@ import qualified Prelude
 
 data Expression s scope
   = CallHead
-      { callHead :: !(CallHead s scope)
+      { callHead :: !(CallHead s scope),
+        arguments :: !(Strict.Vector (Expression s scope))
       }
   | Integer
       { startPosition :: !Position,
@@ -130,7 +129,7 @@ data Expression s scope
       { base :: !(Expression s scope),
         updatePosition :: !Position,
         updateType :: !(Type2.Index scope),
-        updates :: !(Strict.Vector1 (Select s scope)),
+        updates :: !(Strict.Vector1 (Field s scope)),
         updateInfo :: !(UpdateInfo s scope),
         permissive :: !Prelude.Bool
       }
@@ -236,8 +235,8 @@ construction ::
   Maybe (Position, Constructor.Index scope, [Semantic.Expression Group Resolve scope])
 construction expression arguments = case expression of
   Semantic.Call {function, argument} -> construction function (argument : arguments)
-  Semantic.CallHead {callHead = Head.Constructor {constructorPosition, constructor}} ->
-    Just (constructorPosition, constructor, arguments)
+  Semantic.CallHead {callHead = Head.Constructor {constructorPosition, constructor}, arguments = given} ->
+    Just (constructorPosition, constructor, toList given ++ arguments)
   _ -> Nothing
 
 -- |
@@ -268,7 +267,7 @@ holding
     datax <- do
       let get index = assumeData <$> TypeBinding.content (typeEnvironment Type.! index)
       Builtin.index pure get typeIndex
-    let Core.Tree.Data.Data {constructors = declared} = datax
+    let Core.Tree.Data.Data {definition = Core.Tree.Data.Definition {constructors = declared}} = datax
         Core.Tree.Constructor.Constructor {entries = held} = declared Strict.Vector.! constructorIndex
     applies <- case through of
       Nothing -> pure Prelude.True
@@ -289,12 +288,12 @@ holding
         arguments <- zipWithM (fill context) filled arguments
         constructorInfo <- ConstructorInstance.built context instancex
         let callHead = CallHead.Constructor {constructorPosition, constructor, constructorInfo}
-            made = CallHead {callHead}
+            made given = CallHead {callHead, arguments = Strict.Vector.fromList given}
         pure $ Just $ case (through, reverse arguments) of
           (Just (variablePosition, variable), final : before) ->
-            let apply = CallHead.Variable {variablePosition, variable, instanciation = Mono}
-             in Call (Call CallHead {callHead = apply} (foldl Call made (reverse before))) final
-          _ -> foldl Call made arguments
+            let apply = CallHead.Variable {variablePosition, variable, instanciation = Mono {levity = Levity.lazy}}
+             in CallHead {callHead = apply, arguments = Strict.Vector.fromList [made (reverse before), final]}
+          _ -> made arguments
       else pure Nothing
 
 -- |
@@ -305,7 +304,7 @@ applying = \case
   TermBinding.Rigid
     ForallOver
       { parameters,
-        constraints = None,
+        constraints = Value {},
         result =
           Core.Function
             (Core.Function (Core.Variable from) (Core.Variable to))
@@ -313,10 +312,42 @@ applying = \case
       } -> length parameters == 2 && from == from' && to == to' && from /= to
   _ -> Prelude.False
 
+data Field s scope
+  = Field
+  { index :: !Int,
+    field :: !(Expression s scope)
+  }
+
 check :: Context s scope -> Unify.Type s scope -> Semantic.Expression Group Resolve scope -> ST s (Expression s scope)
-check context typex Semantic.CallHead {callHead} = do
-  callHead <- CallHead.check context typex callHead
-  pure CallHead {callHead}
+check context@Context {termEnvironment} typex call@Semantic.CallHead {callHead, arguments} = do
+  special <- case (callHead, toList arguments) of
+    -- An action given to runST through a function that only applies, as in
+    -- @runST $ do ...@. Running the action is all that is left of it: what
+    -- such a function could evaluate first is the action, and running it
+    -- evaluates that.
+    (Head.Variable {variable}, [Semantic.RunSTAlone {startPosition}, imperative]) -> do
+      let TermBinding.TermBinding binding = termEnvironment Term.! variable
+      applies <- applying <$> binding
+      if applies
+        then Just <$> check context typex Semantic.RunST {startPosition, imperative}
+        else badRunSTCall startPosition
+    -- A constructor given the last thing it is given through a function
+    -- that only applies, as in @C $ x@.
+    (Head.Variable {variablePosition, variable}, [left, right])
+      | Just (position, constructor, given) <- construction left [] ->
+          holding context typex position constructor (given ++ [right]) (Just (variablePosition, variable))
+    _
+      | Just (position, constructor, given) <- construction call [] ->
+          holding context typex position constructor given Nothing
+      | otherwise -> pure Nothing
+  case special of
+    Just expression -> pure expression
+    Nothing -> do
+      types <- sequence $ Strict.Vector.replicate (length arguments) $ Unify.fresh Core.typex
+      let function = foldr (-#>) typex types
+      callHead <- CallHead.check context function callHead
+      arguments <- sequence $ Strict.Vector.zipWith (check context) types arguments
+      pure CallHead {callHead, arguments}
 check
   context@Context {typeEnvironment}
   typex
@@ -339,44 +370,18 @@ check
       ConstructorInstance.mark context instancex
       Unify.unify context constructorPosition typex base
       constructorInfo <- ConstructorInstance.built context instancex
-      fields <- traverse (Field.check lookup) fields
+      let checkField Semantic.Field {index, field} = do
+            field <- lookup index field
+            pure Field {index, field}
+      fields <- traverse checkField fields
       pure $ Record {constructorPosition, constructor, fields, constructorInfo}
 check context typex Semantic.List {startPosition, items} = do
   inner <- Unify.fresh Core.typex
   Unify.unify context startPosition typex (Core.list inner)
   items <- traverse (check context inner) items
   pure List {startPosition, items}
-check context@Context {termEnvironment} resultType call@Semantic.Call {function, argument} = do
+check context resultType call@Semantic.Call {function, argument} = do
   special <- case call of
-    -- An action given to runST through a function that only applies, as in
-    -- @runST $ do ...@. Running the action is all that is left of it: what
-    -- such a function could evaluate first is the action, and running it
-    -- evaluates that.
-    Semantic.Call
-      { function =
-          Semantic.Call
-            { function = Semantic.CallHead {callHead = Head.Variable {variable}},
-              argument = Semantic.RunSTAlone {startPosition}
-            },
-        argument = imperative
-      } -> do
-        let TermBinding.TermBinding binding = termEnvironment Term.! variable
-        applies <- applying <$> binding
-        if applies
-          then Just <$> check context resultType Semantic.RunST {startPosition, imperative}
-          else badRunSTCall startPosition
-    -- A constructor given the last thing it is given through a function
-    -- that only applies, as in @C $ x@.
-    Semantic.Call
-      { function =
-          Semantic.Call
-            { function = Semantic.CallHead {callHead = Head.Variable {variablePosition, variable}},
-              argument = left
-            },
-        argument = right
-      }
-        | Just (position, constructor, arguments) <- construction left [] ->
-            holding context resultType position constructor (arguments ++ [right]) (Just (variablePosition, variable))
     _
       | Just (position, constructor, arguments) <- construction call [] ->
           holding context resultType position constructor arguments Nothing
@@ -439,13 +444,15 @@ check
       Builtin.index pure get updateType
     instancex <- Simple.Data.instanciateMark context updatePosition datax
     let typex' = DataInstance.baseType instancex updateType
+        updateInfo = DataInstance.updateInfo instancex
+        checkSelect Semantic.Field {index, field} = do
+          -- What is put in has the type that the value holds there.
+          Unify.unify context updatePosition typex (DataInstance.selected instancex updateType index)
+          field <- fill context (DataInstance.selectorEntry instancex index) field
+          pure Field {index, field}
     Unify.unify context updatePosition typex typex'
     base <- check context typex base
-    updates <- sequence $ flip fmap updates $ \update@Semantic.Select {pick} -> do
-      -- What is put in has the type that the value holds there.
-      Unify.unify context updatePosition typex (DataInstance.selected instancex updateType pick)
-      Select.check (\pick -> fill context (DataInstance.selectorEntry instancex pick)) update
-    let updateInfo = DataInstance.updateInfo instancex
+    updates <- sequence $ flip fmap updates checkSelect
     pure
       Update
         { base,
@@ -470,7 +477,7 @@ check context typex Semantic.Lambda {startPosition, parameter, body} = do
   -- matching on a constructor that says what type it makes tells nothing
   -- of a type that is not known yet.
   Unify.unify context startPosition typex (parameterType -#> resultType)
-  parameter <- Pattern.check context parameterType parameter
+  parameter <- Pattern.check context Type.lazy parameterType parameter
   body <- Lambda.check (Pattern.augment parameter context) (shiftLogical resultType) body
   Pattern.sealed context parameter [parameterType, resultType]
   pure Lambda {startPosition, parameter, body}
@@ -518,7 +525,7 @@ check context typex Semantic.RunST {startPosition, imperative} = do
       scheme =
         ForallOver
           { parameters = Strict.Vector.singleton Core.typex,
-            constraints = None,
+            constraints = Value {levity = Levity.lazy},
             result = Core.Constructor Type2.ST # state # Shift0.map Shift0.Shift typex
           }
   imperative <- generalize context startPosition scheme imperative
@@ -532,11 +539,15 @@ check context typex Semantic.Negate {startPosition, negative} = do
 
 solve :: Expression s scope -> Unify.Solve s (Solved.Expression Group Check scope)
 solve = \case
-  CallHead {callHead} -> do
+  CallHead {callHead, arguments} -> do
     callHead <- CallHead.solve callHead
-    pure Solved.CallHead {callHead}
+    arguments <- traverse solve arguments
+    pure Solved.CallHead {callHead, arguments}
   Record {constructorPosition, constructor, constructorInfo, fields} -> do
-    fields <- traverse Field.solve fields
+    let solveField Field {index, field} = do
+          field <- solve field
+          pure $ Solved.Field {index, field}
+    fields <- traverse solveField fields
     constructorInfo <- ConstructorInfo.solve constructorInfo
     pure
       Solved.Record
@@ -547,7 +558,10 @@ solve = \case
         }
   Update {base, updatePosition, updateType, updates, updateInfo, permissive} -> do
     base <- solve base
-    updates <- traverse Select.solve updates
+    let solveField Field {index, field} = do
+          field <- solve field
+          pure $ Solved.Field {index, field}
+    updates <- traverse solveField updates
     updateInfo <- UpdateInfo.solve updateInfo
     pure
       Solved.Update

@@ -21,7 +21,7 @@ import Error
   )
 import Semantic.Check.Context (Context (..))
 import qualified Semantic.Check.Context as Context
-import qualified Semantic.Check.LocalBinding as LocalBinding (Equality (Expanding), LocalBinding (..), shiftEquality)
+import qualified Semantic.Check.Binding.Local as LocalBinding (Equality (Expanding), LocalBinding (..), shiftEquality)
 import qualified Semantic.Check.Temporary.TypePattern as Unsolved (TypePattern (..))
 import qualified Semantic.Index.Local as Local
 import qualified Semantic.Index.Table.Local as Local.Table

@@ -14,12 +14,9 @@ import Control.Monad (replicateM)
 import Control.Monad.ST (ST, runST)
 import qualified Core.Foreign as Foreign
 import Core.Tree.Constraints (ConstraintsF (..))
-import Core.Tree.ConstructorInfo (ConstructorInfo (..))
 import Core.Tree.Declaration (Declaration (..))
 import Core.Tree.Declarations (Declarations (..))
 import qualified Core.Tree.Declarations as Declarations (none)
-import Core.Tree.EntryInfo (EntryInfo (EntryInfo))
-import qualified Core.Tree.EntryInfo
 import Core.Tree.Evidence (Evidence)
 import qualified Core.Tree.Evidence as Evidence (EvidenceF (..))
 import Core.Tree.EvidenceSet (EvidenceSet (..))
@@ -29,7 +26,6 @@ import Core.Tree.Instance (Instance (..))
 import Core.Tree.Instanciation (Instanciation, InstanciationF (Instanciation))
 import qualified Core.Tree.Instanciation as Instanciation
 import Core.Tree.MethodConcrete (MethodConcrete (..))
-import Core.Tree.MethodInfo (MethodInfo (..))
 import qualified Core.Tree.Module as Core (Module (..))
 import Core.Tree.Statements (Statements)
 import qualified Core.Tree.Statements as Statements (Statements (..))
@@ -405,7 +401,7 @@ moduleDefinitions
       -- An instance, and its methods as definitions of their own if it
       -- needs nothing.
       instanceDefinitions global instancex@Instance {prerequisites, members} = case prerequisites of
-        None ->
+        Value {} ->
           (global, runST (globalInstance pre (Just global) instancex)) : do
             (index, method) <- zip [0 ..] (toList members)
             pure (Runtime.member global index, runST (globalMember pre method))
@@ -429,7 +425,7 @@ globalDeclaration :: Precontext -> Global.Global -> TypeLambda Scope.Global -> S
 globalDeclaration pre global definition = do
   context <- Context.start pre
   case definition of
-    TypeLambdaOver {constraints = None, result = Core.ForeignExport {foreignCall, exported}} ->
+    TypeLambdaOver {constraints = Value {}, result = Core.ForeignExport {foreignCall, exported}} ->
       exportOf (Context.evidenceBindings Vector.empty context) global foreignCall exported
     _ -> declaration context definition
 
@@ -486,8 +482,8 @@ named context consumer continue = case consumer of
 -- |
 -- Use a variable or call a function of evidence.
 implicit :: Context s scope -> Bool -> Producer -> Instanciation scope -> Consumer -> ST s Statement
-implicit _ False producer Instanciation.Mono consumer = pure $ Cut producer (Force consumer)
-implicit _ True producer Instanciation.Mono consumer = pure $ Cut producer consumer
+implicit _ False producer Instanciation.Mono {} consumer = pure $ Cut producer (Force consumer)
+implicit _ True producer Instanciation.Mono {} consumer = pure $ Cut producer consumer
 implicit context _ producer (Instanciation arguments) consumer =
   generateEvidences context (toList arguments) $ \arguments ->
     pure $ Cut producer (Apply arguments consumer)
@@ -531,7 +527,7 @@ instanceOf context = \case
 knownMethod :: Context s scope -> Evidence scope -> Int -> Maybe Producer
 knownMethod context dictionary index = case dictionary of
   Evidence.Variable {variable = Direct _ (Tuple _)} -> Nothing
-  Evidence.Variable {variable = variable@Direct {}, instanciation = Instanciation.Mono}
+  Evidence.Variable {variable = variable@Direct {}, instanciation = Instanciation.Mono {}}
     | (Global global, _) <- instanceOf context variable -> Just (Global (Runtime.member global index))
   _ -> Nothing
 
@@ -545,7 +541,7 @@ number = \case
     { function =
         Core.Method
           { method = Method.Index {typeIndex = Type2.Num, methodIndex},
-            evidence = Evidence.Variable {variable = Direct Type2.Num target, instanciation = Instanciation.Mono}
+            evidence = Evidence.Variable {variable = Direct Type2.Num target, instanciation = Instanciation.Mono {}}
           },
       argument = Core.Integer {integer}
     }
@@ -561,12 +557,12 @@ number = \case
     { function =
         Core.Method
           { method = Method.Index {typeIndex = Type2.Fractional, methodIndex},
-            evidence = Evidence.Variable {variable = Direct Type2.Fractional target, instanciation = Instanciation.Mono}
+            evidence = Evidence.Variable {variable = Direct Type2.Fractional target, instanciation = Instanciation.Mono {}}
           },
       argument = Core.Constructor {arguments}
     }
       | methodIndex == fromRational',
-        [Core.Integer {integer = top}, Core.Integer {integer = bottom}] <- toList arguments,
+        [TypeLambdaOver {result = Core.Integer {integer = top}}, TypeLambdaOver {result = Core.Integer {integer = bottom}}] <- toList arguments,
         bottom /= 0 -> case target of
           Type2.Double -> Just (Double (fromRational (top % bottom)))
           Type2.Float -> Just (Double (realToFrac (fromRational (top % bottom) :: Float)))
@@ -591,11 +587,11 @@ generateEvidence context = \case
             name <- fresh context
             body <- continue (Variable name)
             pure $ Cut (Global global) (Apply arguments (MuTilde (byValue name) body))
-        Instanciation.Mono -> error "bad tuple instance"
+        Instanciation.Mono {} -> error "bad tuple instance"
   Evidence.Variable {variable, instanciation} -> \continue -> do
     let (producer, strict) = instanceOf context variable
     case instanciation of
-      Instanciation.Mono
+      Instanciation.Mono {}
         | strict -> continue producer
         | otherwise -> do
             name <- fresh context
@@ -672,22 +668,23 @@ object context = \case
 delayed :: Context s scope -> Expression scope -> ST s Producer
 delayed context = \case
   expression | Just literal <- number expression -> pure (Literal literal)
-  Core.Variable {variable = index, instanciation = Instanciation.Mono} ->
+  Core.Variable {variable = index, instanciation = Instanciation.Mono {}} ->
     pure $ fst $ variable context index
   Core.Constructor
     { constructor = Constructor.Index {constructorIndex},
-      arguments,
-      constructorInfo = ConstructorInfo {entries}
+      arguments
     }
-      | all lazy entries -> do
-          arguments <- traverse (delayed context) (toList arguments)
+      | all lazy arguments -> do
+          arguments <- traverse (\TypeLambdaOver {result} -> delayed (Context.evidenceBindings Vector.empty context) result) (toList arguments)
           pure $ Constructor constructorIndex arguments
   Core.Character {character} -> pure $ Literal $ Int $ fromIntegral $ ord character
   Core.Integer {integer} -> pure $ Literal $ Integer integer
   Core.Newtype {argument} -> delayed context argument
   expression -> object context expression
   where
-    lazy EntryInfo {strict} = not (Info.strict strict)
+    lazy = \case
+      TypeLambdaOver {constraints = Value {levity}} -> not (Info.strict levity)
+      TypeLambdaOver {constraints = Constraints {}} -> False
 
 -- |
 -- Evaluate an expression. What the consumer is given is a value.
@@ -715,7 +712,7 @@ evaluate context expression consumer = case expression of
     { method = Method.Index {methodIndex},
       evidence = dictionary,
       instanciation,
-      methodInfo = MethodInfo {constraintCount}
+      constraintCount
     } -> generateEvidence context dictionary $ \dictionary -> do
       name <- fresh context
       body <- implicit context False (Variable name) instanciation consumer
@@ -723,29 +720,34 @@ evaluate context expression consumer = case expression of
   Core.Selector
     { selector = Selector.Index {selectorIndex},
       argument,
-      selectorInfo = EntryInfo {strict}
+      instanciation
     } -> do
       name <- fresh context
-      let field
-            | Info.strict strict = consumer
-            | otherwise = Force consumer
+      let field = case instanciation of
+            Instanciation.Mono {levity}
+              | Info.strict levity -> consumer
+            _ -> Force consumer
       evaluate context argument $
         MuTilde (byValue name) (Primitive (Field selectorIndex) [Variable name] field)
   Core.Constructor
     { constructor = Constructor.Index {constructorIndex},
-      arguments,
-      constructorInfo = ConstructorInfo {entries}
+      arguments
     } -> do
       let go [] continue = continue []
-          go ((EntryInfo {strict}, argument) : rest) continue
-            | Info.strict strict = do
-                name <- fresh context
-                body <- go rest (continue . (Variable name :))
-                evaluate context argument (MuTilde (byValue name) body)
-            | otherwise = do
-                argument <- delayed context argument
-                go rest (continue . (argument :))
-      go (zip (toList entries) (toList arguments)) $ \fields ->
+          go (definition@TypeLambdaOver {constraints, result} : rest) continue = case constraints of
+            Value {levity}
+              | Info.strict levity -> do
+                  name <- fresh context
+                  body <- go rest (continue . (Variable name :))
+                  evaluate (Context.evidenceBindings Vector.empty context) result (MuTilde (byValue name) body)
+              | otherwise -> do
+                  argument <- delayed (Context.evidenceBindings Vector.empty context) result
+                  go rest (continue . (argument :))
+            -- What requires something is a function of the evidence for it.
+            Constraints {} -> do
+              function <- declaration context definition
+              go rest (continue . (function :))
+      go (toList arguments) $ \fields ->
         pure $ Cut (Constructor constructorIndex fields) consumer
   Core.Integer {integer} -> pure $ Cut (Literal $ Integer integer) consumer
   Core.Character {character} ->
@@ -781,7 +783,7 @@ evaluate context expression consumer = case expression of
   -- evaluated.
   Core.Run {imperative} -> evaluate context imperative (Apply [] (Force consumer))
   Core.Generalized {definition = definition@TypeLambdaOver {constraints, result}} -> case constraints of
-    None -> evaluate (Context.evidenceBindings Vector.empty context) result consumer
+    Value {} -> evaluate (Context.evidenceBindings Vector.empty context) result consumer
     Constraints {} -> do
       function <- declaration context definition
       pure $ Cut function consumer
@@ -872,7 +874,7 @@ headed name = \case
 -- |
 -- Whether each field of the constructor a clause tests for holds a value.
 fields :: Head s -> [Bool]
-fields (Head _ _ _ ConstructorInfo {entries} _ _) = [Info.strict strict | EntryInfo {strict} <- toList entries]
+fields (Head _ _ _ stricts _ _) = stricts
 
 -- |
 -- What a clause goes on to do when its test has matched, given the names of
@@ -890,7 +892,7 @@ data Head s where
     !Text ->
     !Bool ->
     !Int ->
-    ConstructorInfo scope ->
+    [Bool] ->
     Context s scope ->
     Statements (Scope.SimplePattern ':+ scope) ->
     Head s
@@ -901,18 +903,18 @@ data Head s where
 peel :: Context s scope -> Statements scope -> Maybe (Head s)
 peel context = \case
   Statements.LetOne
-    { declaration = Core.Variable {variable = index, instanciation = Instanciation.Mono},
+    { declaration = Core.Variable {variable = index, instanciation = Instanciation.Mono {}},
       body
     }
       | (Variable name, _) <- variable context index -> peel (singleBinding name context) body
   Statements.Bind
-    { constructor = Constructor.Index {constructorIndex},
-      constructorInfo,
-      check = Core.Variable {variable = index, instanciation = Instanciation.Mono},
+    { constructor = constructor@Constructor.Index {constructorIndex},
+      entryCount,
+      check = Core.Variable {variable = index, instanciation = Instanciation.Mono {}},
       thenx
     }
       | (Variable name, strict) <- variable context index ->
-          Just (Head name strict constructorIndex constructorInfo context thenx)
+          Just (Head name strict constructorIndex (Context.held context constructor entryCount) context thenx)
   _ -> Nothing
 
 -- |
@@ -932,19 +934,20 @@ attemptOne :: Context s scope -> Statements scope -> Consumer -> Statement -> ST
 attemptOne context statements success failure = case statements of
   Statements.Done {done} -> evaluate context done success
   Statements.Bind
-    { constructor = Constructor.Index {constructorIndex},
-      constructorInfo = constructorInfo@ConstructorInfo {entries},
+    { constructor = constructor@Constructor.Index {constructorIndex},
+      entryCount,
       check,
       thenx
     } -> do
-      names <- replicateM (length entries) (fresh context)
-      let binders = zipWith binder names (toList entries)
-          binder name EntryInfo {strict}
-            | Info.strict strict = byValue name
+      names <- replicateM entryCount (fresh context)
+      let stricts = Context.held context constructor entryCount
+          binders = zipWith binder names stricts
+          binder name strict
+            | strict = byValue name
             | otherwise = byNeed name
       thenx <-
         attempt
-          (Context.patternBindings (Strict.Vector.fromList names) constructorInfo context)
+          (Context.patternBindings (Strict.Vector.fromList names) stricts context)
           thenx
           success
           failure
@@ -981,11 +984,11 @@ declaration :: Context s scope -> TypeLambda scope -> ST s Producer
 declaration context TypeLambdaOver {constraints, result = expression} = do
   let count = case constraints of
         Constraints constraints -> length constraints
-        None -> 0
+        Value {} -> 0
   names <- Vector.replicateM count (fresh context)
   context <- pure $ Context.evidenceBindings names context
   case constraints of
-    None -> object context expression
+    Value {} -> object context expression
     Constraints {} -> do
       result <- fresh context
       body <- evaluate context expression (Covariable result)
@@ -1027,7 +1030,7 @@ generateInstance :: Context s scope -> Maybe Global.Global -> Instance scope -> 
 generateInstance context lifted Instance {evidence = EvidenceSet supers, prerequisites, members} = do
   let count = case prerequisites of
         Constraints count -> length count
-        None -> 0
+        Value {} -> 0
   names <- Vector.replicateM count (fresh context)
   context <- pure $ Context.evidenceBindings names context
   result <- fresh context
@@ -1039,5 +1042,5 @@ generateInstance context lifted Instance {evidence = EvidenceSet supers, prerequ
         declaration context definition
     pure $ Cut (Constructor 0 (supers ++ members)) (Covariable result)
   pure $ case prerequisites of
-    None -> Thunk result body
+    Value {} -> Thunk result body
     Constraints {} -> Function (byValue <$> toList names) result body

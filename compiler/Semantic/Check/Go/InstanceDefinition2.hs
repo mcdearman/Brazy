@@ -1,5 +1,6 @@
 module Semantic.Check.Go.InstanceDefinition2 where
 
+import qualified Core.Tree.Type as Levity (lazy)
 import Control.Monad (filterM)
 import Control.Monad.ST (ST)
 import qualified Core.Builtin as Builtin
@@ -11,9 +12,9 @@ import Core.Substitute (substituteType)
 import qualified Core.Tree.Constraint as Core (Constraint, ConstraintF (..))
 import qualified Core.Tree.Constraint as Core.Constraint (argument)
 import qualified Core.Tree.Constraints as Core.Constraints (ConstraintsF (..), Prerequisites (..), simplify)
-import qualified Core.Tree.Constructor as Core.Constructor (Constructor (..), Shape (..))
-import qualified Core.Tree.Data as Core.Data (Data (..))
-import qualified Core.Tree.Entry as Core.Entry (Entry (..))
+import qualified Core.Tree.Constructor as Core.Constructor (ConstructorF (..), Shape (..))
+import qualified Core.Tree.Data as Core.Data (Data (..), DefinitionF (..))
+import qualified Core.Tree.Entry as Core.Entry (EntryF (..))
 import qualified Core.Tree.Data as Core (Data)
 import qualified Core.Tree.Evidence as Core (Evidence)
 import qualified Core.Tree.Evidence as Core.Evidence
@@ -38,10 +39,11 @@ import qualified Data.Vector as Vector
 import qualified Data.Vector.Strict as Strict
 import qualified Data.Vector.Strict as Strict.Vector
 import Data.Void (Void)
-import Error (cannotDerive, cyclicalTypeChecking, unsupportedFeatureEqualityConstraints)
+import Error (cannotDerive, cyclicalTypeChecking, strictDeclaration, unsupportedFeatureEqualityConstraints)
 import qualified Graph.Topological as Topological
+import qualified Semantic.Check.Binding.Type as TypeBinding
 import Semantic.Check.Context (Context (..))
-import Semantic.Check.LocalBinding (Equality (Equality))
+import Semantic.Check.Binding.Local (Equality (Equality))
 import qualified Semantic.Check.Context as Context
 import qualified Semantic.Check.Derive.Bounded as Bounded
 import qualified Semantic.Check.Derive.Enum as Enum
@@ -54,13 +56,12 @@ import qualified Semantic.Check.Derive.Show as Show
 import Semantic.Check.Go.Definition4 (Solve (..))
 import qualified Semantic.Check.Go.Scheme as Scheme
 import qualified Semantic.Check.Mask as Mask
-import qualified Semantic.Check.Simple.Scheme as Core.Scheme
+import qualified Semantic.Check.Scheme as Core.Scheme
 import qualified Semantic.Check.Temporary.Constraints as Unsolved.Constraints (check, solve)
 import qualified Semantic.Check.Temporary.Definition as Definition
 import qualified Semantic.Check.Temporary.Scheme as Unsolved (augment)
 import qualified Semantic.Check.Temporary.Type as Unsolved.Type (check, solve)
 import qualified Semantic.Check.Temporary.TypePattern as Unsolved (TypePattern (..), solve)
-import qualified Semantic.Check.TypeBinding as TypeBinding
 import qualified Semantic.Index.Evidence as Evidence
 import qualified Semantic.Index.Evidence0 as Evidence0
 import qualified Semantic.Index.Local as Local
@@ -79,7 +80,7 @@ import qualified Semantic.Tree.Combinators.Implicit as Implicit
 import Semantic.Tree.Combinators.Inferred (Inferred (Solved))
 import qualified Semantic.Tree.Combinators.Inferred as Inferred (get)
 import qualified Semantic.Tree.Constraint as Semantic (Constraint (..))
-import Semantic.Tree.Constraints (Constraints (Constraints, None))
+import Semantic.Tree.Constraints (Constraints (Constraints, Lazy))
 import Semantic.Tree.InstanceDefinition (InstanceDefinition (..))
 import Semantic.Tree.InstanceDefinition2 (Annotation (..), Header (..), InstanceDefinition2 (..))
 import Semantic.Tree.MethodConcrete (Auto, MethodConcrete (..))
@@ -142,16 +143,16 @@ requirements Context {typeEnvironment} derived self datax
     -- argument of.
     functorial = derived `elem` [Type2.Functor, Type2.Foldable, Type2.Traversable]
     indexed :: Core.Data.Data scope' -> Bool
-    indexed Core.Data.Data {constructors} = any telling constructors
+    indexed Core.Data.Data {definition = Core.Data.Definition {constructors}} = any telling constructors
     telling Core.Constructor.Constructor {shape} = case shape of
       Core.Constructor.Ordinary -> False
       Core.Constructor.Indexed {} -> True
     -- The types of what a type holds, in the type's own parameters.
     held :: Core.Data.Data scope' -> [Core.Type (Local ':+ scope')]
-    held Core.Data.Data {parameters = typeParameters, constructors} =
+    held Core.Data.Data {parameters = typeParameters, definition = Core.Data.Definition {constructors}} =
       [ found
       | Core.Constructor.Constructor {entries} <- toList constructors,
-        Core.Entry.Entry {entry = Core.ForallOver {parameters, constraints = Core.Constraints.None, result}} <- toList entries,
+        Core.Entry.Entry {entry = Core.ForallOver {parameters, constraints = Core.Constraints.Value {}, result}} <- toList entries,
         null parameters,
         let typex = Shift.map (Shift.Unshift $ error "a type variable that nothing binds") result,
         found <-
@@ -208,7 +209,7 @@ requirements Context {typeEnvironment} derived self datax
               _ -> do
                 Core.Constraints.Prerequisites {required} <- prerequisites
                 case required of
-                  Core.Constraints.None -> pure []
+                  Core.Constraints.Value {} -> pure []
                   Core.Constraints.Constraints wanted ->
                     fmap concat $ for (toList wanted) $ \constraint@Core.Constraint {classx = next} ->
                       simplify
@@ -223,7 +224,7 @@ requirements Context {typeEnvironment} derived self datax
                 unused =
                   Core.Evidence.Variable
                     { variable = Evidence.Direct asked head,
-                      instanciation = Core.Instanciation.Mono
+                      instanciation = Core.Instanciation.Mono {levity = Levity.lazy}
                     }
                 record next typex = do
                   more <- simplify visiting next typex
@@ -306,20 +307,25 @@ checkHeader position key information Header {parameters, prerequisites, lenient}
                   Semantic.Equality {} -> pure True
             kept <- filterM fits (toList wanted)
             pure $ case kept of
-              [] -> None
+              [] -> Lazy
               _ -> Constraints (Strict.Vector.fromList kept)
           _ -> pure prerequisites
         -- A parameter that is required to be a type is taken out of what
         -- is required: it needs no evidence. It has to be a parameter that
         -- is said to be a type, on either side.
+        case prerequisites of
+          Constraints {} -> pure ()
+          Lazy -> pure ()
+          _ -> strictDeclaration position
         let (classes, equalities) = case prerequisites of
-              None -> (None, [])
+              Lazy -> (Lazy, [])
               Constraints wanted ->
                 ( case [constraint | constraint@Semantic.Constraint {} <- toList wanted] of
-                    [] -> None
+                    [] -> Lazy
                     classes -> Constraints (Strict.Vector.fromList classes),
                   [equality left right startPosition | Semantic.Equality {startPosition, left, right} <- toList wanted]
                 )
+              levity -> (levity, [])
         prerequisites <- Unsolved.Constraints.check context classes
         equated <- for equalities $ \(index, typex) -> do
           let kind = shiftLogical (Unsolved.typex (parameters Strict.Vector.! index))
@@ -343,7 +349,7 @@ checkHeader position key information Header {parameters, prerequisites, lenient}
               requirements context (keyIndex key) (keyHead key) datax
             else pure Nothing
         let needed = case found of
-              Just [] -> Core.Constraints.None
+              Just [] -> Core.Constraints.Value {levity = Levity.lazy}
               Just constraints -> Core.Constraints.Constraints (Strict.Vector.fromList constraints)
               Nothing -> Core.Constraints.simplify prerequisites
         pure
@@ -511,7 +517,7 @@ checkBody position key Solve {solve} reflection information lookup members =
           Standard header ::: _ -> header
           DerivedInstance header ::: _ -> header
         let prerequisites = Inferred.get needed
-        Core.Class.Class {constraints, methods} <- do
+        Core.Class.Class {constraints, definition = Core.Class.Definition {methods}} <- do
           let get index = assumeClass <$> TypeBinding.content (typeEnvironment Table.Type.! index)
           Builtin.index pure get index
         extra <- do
@@ -529,13 +535,13 @@ checkBody position key Solve {solve} reflection information lookup members =
                   Data {index1, head1} -> Evidence.Direct index1 (Type2.Index head1)
                   Class {index2, head2} -> Evidence.Direct (Type2.Index index2) head2
                 instanciation = case prerequisites of
-                  Core.Constraints.None -> Core.Mono
+                  Core.Constraints.Value {} -> Core.Mono {levity = Core.Type.lazy}
                   Core.Constraints.Constraints prerequisites -> Core.Instanciation $ Strict.Vector.fromList $ do
                     i <- [0 .. length prerequisites - 1]
                     pure
                       Core.Evidence.Variable
                         { variable = Evidence.Index (Evidence0.Assumed i),
-                          instanciation = Core.Instanciation.Mono
+                          instanciation = Core.Instanciation.Mono {levity = Core.Type.strict}
                         }
         context <- Scheme.augmentNeeding position parameters prerequisites Mask.Runtime context
         -- Inside the instance, a parameter that is required to be a type

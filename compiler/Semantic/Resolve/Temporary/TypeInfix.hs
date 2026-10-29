@@ -1,10 +1,9 @@
 module Semantic.Resolve.Temporary.TypeInfix where
 
-import Data.Functor.Identity (Identity (..))
 import Data.Void (Void, absurd)
 import qualified Semantic.Index.Constructor as Constructor (cons)
 import qualified Semantic.Index.Type2 as Type2
-import qualified Semantic.Resolve.Binding.Constructor as Constructor (BindingF (..), Detail (..))
+import qualified Semantic.Resolve.Binding.Constructor as Constructor (Detail (..), get)
 import Semantic.Resolve.Context
   ( Context (..),
     typeFixity,
@@ -28,8 +27,7 @@ import qualified Semantic.Tree.Type as Type
       ),
   )
 import Syntax.Position (Position)
-import Syntax.Tree.Associativity (Associativity (..))
-import Syntax.Tree.Fixity (Fixity (..))
+import Syntax.Tree.Fixity (Associativity (..), Fixity (..))
 import Syntax.Tree.Marked (Marked ((:@)))
 import qualified Syntax.Tree.Type as SyntaxType (Type (..))
 import qualified Syntax.Tree.TypeInfix as Syntax (Infix (..))
@@ -97,12 +95,11 @@ fix = fixWith Nothing 0
 resolve :: Context scope -> Syntax.Infix Position -> Infix Void (Index scope) (Type Position Resolve scope)
 resolve context = \case
   Syntax.Type type1 -> Single (Type.resolve context type1)
-  Syntax.Infix {left, operator = operator@(operatorPosition :@ _), right}
-    | _ Constructor.:@ Identity binding <- context !=~ operator ->
-        Infix
-          (Type.resolve context left)
-          (Constructor operatorPosition binding)
-          (resolve context right)
+  Syntax.Infix {left, operator = operator@(operatorPosition :@ _), right} ->
+    Infix
+      (Type.resolve context left)
+      (Constructor operatorPosition $ Constructor.get $ context !=~ operator)
+      (resolve context right)
   Syntax.InfixCons {head, operatorPosition, tail} ->
     Infix (Type.resolve context head) (Cons operatorPosition) (resolve context tail)
   -- A type operator names a type, which is resolved as one written alone.

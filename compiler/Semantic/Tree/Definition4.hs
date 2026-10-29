@@ -174,4 +174,4 @@ ungroup index lookup definition = case definition of
         -- another is given.
         assumed = case constraints of
           Constraints required -> [Evidence0.Assumed index | index <- [0 .. length required - 1]]
-          None -> []
+          Value {} -> []

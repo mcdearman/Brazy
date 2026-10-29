@@ -14,9 +14,9 @@ import Control.Monad.ST (ST)
 import Core.Marshal (Call (..), Marshal (..), Target (..))
 import Core.Substitute (substituteType)
 import qualified Core.Tree.Constraints as Constraints (ConstraintsF (..))
-import Core.Tree.Constructor (Constructor (Constructor, entries))
-import Core.Tree.Data (Data (Data, brand, constructors))
-import Core.Tree.Entry (Entry (Entry, entry))
+import Core.Tree.Constructor (ConstructorF (Constructor, entries))
+import Core.Tree.Data (Data (Data, definition), DefinitionF (Definition, brand, constructors))
+import Core.Tree.Entry (EntryF (Entry, entry))
 import Core.Tree.Forall (ForallOver (..))
 import Core.Tree.Type (TypeF)
 import qualified Core.Tree.Type as Type
@@ -52,7 +52,7 @@ callThrough definition = callWith unwrap
     unwrap typex = case spine typex [] of
       (Type.Constructor (Type2.Index index), arguments)
         | Just found <- Shift.partialUnshift Nothing (Type2.Index index) -> do
-            Data {brand, constructors} <- definition found
+            Data {definition = Definition {brand, constructors}} <- definition found
             pure $ case (brand, toList constructors) of
               (Brand.Newtype, [Constructor {entries}])
                 | [Entry {entry = ForallOver {parameters, result}}] <- toList entries,

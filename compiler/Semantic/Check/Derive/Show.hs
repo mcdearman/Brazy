@@ -2,37 +2,33 @@ module Semantic.Check.Derive.Show where
 
 import {-# SOURCE #-} qualified Builtin.Show as Show
 import Control.Monad.ST (ST)
-import Core.Temporary.Definition (Definition (..))
-import qualified Core.Temporary.Definition as Definition
-import Core.Temporary.Function (Function (..))
-import Core.Temporary.Pattern (Bindings (..), Pattern (..))
-import qualified Core.Temporary.Pattern as Pattern
-import Core.Temporary.RightHandSide (RightHandSide (..))
 import qualified Core.Tree.Class as Class
 import Core.Tree.Data (Data)
-import Core.Tree.EntryInfo (EntryInfo (..))
+import Core.Tree.Evidence (Evidence)
+import Core.Tree.Expression (Direction (..), Expression)
 import qualified Core.Tree.Expression as Expression
 import qualified Core.Tree.Instanciation as Instanciation
-import Core.Tree.Statements (Statements (Bottom))
-import qualified Core.Tree.Type as Core
+import qualified Core.Tree.Statements as Statements
 import qualified Core.Tree.Type as Type
+import qualified Core.Tree.Type as Simple (TypeF (Variable))
 import qualified Core.Tree.TypeLambda as TypeLambda
 import Data.Foldable (toList)
 import Data.List (intersperse)
 import Data.Text (unpack)
 import Data.Text.Lazy (toStrict)
 import Data.Text.Lazy.Builder (Builder, fromString, fromText, toLazyText)
-import qualified Data.Vector.Strict as Strict
 import qualified Data.Vector.Strict as Strict.Vector
-import Semantic.Check.ConstructorInstance (ConstructorInstance (..))
-import qualified Semantic.Check.ConstructorInstance as ConstructorInstance
 import Semantic.Check.Context (Context)
-import Semantic.Check.DataInstance (DataInstance (..))
-import Semantic.Check.EntryInstance (entry)
-import Semantic.Check.Simple.ConstructorInfo (ConstructorInfo (..))
+import Semantic.Check.Info.Constructor (ConstructorInfo (..))
+import qualified Semantic.Check.Info.Constructor as Semantic
+import Semantic.Check.Instanciate.Constructor (ConstructorInstance (..))
+import Semantic.Check.Info.Entry (EntryInfo (..))
+import qualified Semantic.Check.Instanciate.Constructor as ConstructorInstance
+import Semantic.Check.Instanciate.Data (DataInstance (..))
+import Semantic.Check.Instanciate.Entry (entry)
 import Semantic.Check.Simple.Data (instanciateApart)
-import qualified Semantic.Check.Temporary.Pattern as Apart (within)
 import qualified Semantic.Check.Temporary.ConstructorInfo as ConstructorInfo
+import qualified Semantic.Check.Temporary.Pattern as Apart (within)
 import qualified Semantic.Index.Constructor as Constructor (Index (..), cons)
 import qualified Semantic.Index.Local as Local
 import qualified Semantic.Index.Method as Method
@@ -89,7 +85,113 @@ printField = \case
       open = fromString "("
       close = fromString ")"
 
+showConstructor ::
+  Constructor.Syntax ->
+  Variable.Constructor ->
+  Strict.Vector.Vector (Evidence scope) ->
+  Expression scope ->
+  (Int -> Expression scope) ->
+  Expression scope
+showConstructor syntax name evidence numberVariable constructorVariable
+  | null evidence = show [] []
+  | otherwise = show [bracket '('] [bracket ')']
+  where
+    letter character = Expression.Lambda $ before character
+    -- A bracket, which is written when the constructor is where it needs
+    -- brackets. Each of the two finds that out for itself, so that what is
+    -- between them is written once: it was written twice, with brackets and
+    -- without, and that was half of every instance.
+    bracket character =
+      Expression.Lambda $
+        Expression.ifx
+          ( Expression.lessThenEqualInt
+              (shift numberVariable)
+              (Expression.int precedence)
+          )
+          Expression.lambdaVariable
+          (before character)
+    before character =
+        Expression.simplifyConstructorExact
+          Constructor.cons
+          ConstructorInfo
+            { entries =
+                Strict.Vector.fromList
+                  [ EntryInfo {levity = Type.Constructor Type2.Lazy},
+                    EntryInfo {levity = Type.Constructor Type2.Lazy}
+                  ]
+            }
+          ( Strict.Vector.fromList
+              [ Expression.Character {character},
+                Expression.lambdaVariable
+              ]
+          )
+    space = letter ' '
+    identifier infixed =
+      map letter $ unpack $ toStrict $ toLazyText $ printConstructor infixed name
+    item = itemAt (precedence + 1)
+    -- What a constructor holds is shown in brackets if it needs them to be
+    -- an argument. What a field is equal to never does.
+    itemAt level index evidence =
+      Expression.Method
+        { method = Method.showsPrec,
+          evidence,
+          instanciation = Instanciation.monoLazy,
+          constraintCount = Class.info $ Show.definition
+        }
+        `Expression.call` Expression.int level
+        `Expression.call` constructorVariable index
+    sections start end = case syntax of
+      Constructor.Standard ->
+        concat
+          [ start,
+            identifier False,
+            concat $ map (\item -> [space, item]) $ zipWith item [0 ..] $ toList evidence,
+            end
+          ]
+      Constructor.Infix {} ->
+        concat
+          [ start,
+            [item 0 (evidence Strict.Vector.! 0)],
+            [space],
+            identifier True,
+            [space],
+            [item 1 (evidence Strict.Vector.! 1)],
+            end
+          ]
+      Constructor.Record fields ->
+        concat
+          [ start,
+            identifier False,
+            [space],
+            [letter '{'],
+            concat $
+              intersperse [letter ',', space] $
+                zipWith3 field [0 ..] (toList fields) (toList evidence),
+            [letter '}'],
+            end
+          ]
+        where
+          field index name evidence =
+            concat
+              [ map letter $ unpack $ toStrict $ toLazyText $ printField name,
+                [space],
+                [letter '='],
+                [space],
+                [itemAt 0 index evidence]
+              ]
+    precedence = case syntax of
+      Constructor.Standard -> 10
+      Constructor.Infix Fixity {precedence} -> precedence
+      Constructor.Record {} -> 10
+    show start end =
+      Expression.Lambda
+        { body =
+            let main = map shift (sections start end)
+             in foldr Expression.call Expression.lambdaVariable main
+        }
+
 showsPrec ::
+  forall s scope layout.
   Context s (Local ':+ scope) ->
   Position ->
   Type2.Index scope ->
@@ -97,153 +199,68 @@ showsPrec ::
   ST s (Unify.Solve s (MethodConcrete Auto layout Check scope))
 showsPrec context position typeIndex datax = do
   datay@DataInstance {types, constructors} <- instanciateApart context position (shift datax)
-  let unify index typex = Unify.unify context position typex (Core.Variable $ Local.Local index)
-  sequence $ zipWith unify [0 ..] (toList types)
-  let generate index constructor@ConstructorInstance {name, syntax, entries} = do
-        let patterns :: Strict.Vector (Pattern scope)
-            patterns = Strict.Vector.replicate (length entries) Wildcard
-            types = entry <$> entries
+  let unify index typex = Unify.unify context position typex (Simple.Variable $ Local.Local index)
+  sequence_ $ zipWith unify [0 ..] (toList types)
+  let generate constructorIndex constructor@ConstructorInstance {name, syntax, entries} = do
+        let types = entry <$> entries
         inside <- Apart.within context position datay (shift typeIndex) constructor
         evidence <- traverse (Unify.constrain inside position Type2.Show) types
         pure $ do
           evidence <- traverse (Unify.solveEvidence position) evidence
           info <- ConstructorInfo.solve $ ConstructorInstance.info constructor
-          let before character =
-                Expression.simplifyConstructorExact
-                  Constructor.cons
-                  ConstructorInfo
-                    { entries =
-                        Strict.Vector.fromList
-                          [ EntryInfo {strict = Type.Constructor Type2.Lazy},
-                            EntryInfo {strict = Type.Constructor Type2.Lazy}
-                          ]
-                    }
-                  ( Strict.Vector.fromList
-                      [ Expression.Character {character},
-                        Expression.lambdaVariable
-                      ]
-                  )
-              letter character = Expression.Lambda $ before character
-              -- A bracket, which is written when the constructor is where
-              -- it needs brackets. Each of the two finds that out for
-              -- itself, so that what is between them is written once: it
-              -- was written twice, with brackets and without, and that was
-              -- half of every instance.
-              bracket character =
-                Expression.Lambda $
-                  Expression.ifx
-                    ( Expression.lessThenEqualInt
-                        (shift $ shift Expression.patternVariable)
-                        (Expression.int precedence)
-                    )
-                    Expression.lambdaVariable
-                    (before character)
-              space = letter ' '
-              identifier infixed =
-                map letter $ unpack $ toStrict $ toLazyText $ printConstructor infixed name
-              item = itemAt (precedence + 1)
-              -- What a constructor holds is shown in brackets if it needs
-              -- them to be an argument. What a field is equal to never does.
-              itemAt level index evidence =
-                Expression.Method
-                  { method = Method.showsPrec,
-                    evidence = shift $ shift $ evidence,
-                    instanciation = Instanciation.Mono,
-                    methodInfo = Class.info $ Show.definition
-                  }
-                  `Expression.call` Expression.int level
-                  `Expression.call` Expression.patternVariableAt' index
-              sections start end = case syntax of
-                Constructor.Standard ->
-                  concat
-                    [ start,
-                      identifier False,
-                      concat $
-                        map (\item -> [space, item]) $
-                          zipWith item [0 ..] $
-                            toList evidence,
-                      end
-                    ]
-                Constructor.Infix {} ->
-                  concat
-                    [ start,
-                      [item 0 (evidence Strict.Vector.! 0)],
-                      [space],
-                      identifier True,
-                      [space],
-                      [item 1 (evidence Strict.Vector.! 1)],
-                      end
-                    ]
-                Constructor.Record fields ->
-                  concat
-                    [ start,
-                      identifier False,
-                      [space],
-                      [letter '{'],
-                      concat $
-                        intersperse [letter ',', space] $
-                          zipWith3 field [0 ..] (toList fields) (toList evidence),
-                      [letter '}'],
-                      end
-                    ]
-                  where
-                    field index name evidence =
-                      concat
-                        [ map letter $ unpack $ toStrict $ toLazyText $ printField name,
-                          [space],
-                          [letter '='],
-                          [space],
-                          [itemAt 0 index evidence]
-                        ]
-              precedence = case syntax of
-                Constructor.Standard -> 10
-                Constructor.Infix Fixity {precedence} -> precedence
-                Constructor.Record {} -> 10
-              show start end =
-                Expression.Lambda
-                  { body =
-                      let main = map shift (sections start end)
-                       in foldr Expression.call Expression.lambdaVariable main
-                  }
-
-              branch
-                | null entries = show [] []
-                | otherwise = show [bracket '('] [bracket ')']
-              mainPattern =
-                Match
-                  { irrefutable = False,
-                    match =
-                      Constructor
-                        { constructor =
-                            Constructor.Index
-                              { typeIndex = shift typeIndex,
-                                constructorIndex = index
-                              },
-                          patterns,
-                          constructorInfo = info
+          let constructor = Constructor.Index {typeIndex, constructorIndex}
+          pure $ case info of
+            Semantic.ConstructorInfo {entries} ->
+              Statements.Bind
+                { constructor = shift $ shift $ shift constructor,
+                  entryCount = length entries,
+                  check = Expression.lambdaVariable,
+                  thenx =
+                    Statements.Done
+                      { done =
+                          let field index
+                                | EntryInfo {levity} <- entries Strict.Vector.! index =
+                                    Expression.patternVariableAt (shift $ shift levity) index
+                           in showConstructor
+                                syntax
+                                name
+                                (shift . shift . shift <$> evidence)
+                                (shift $ shift $ Expression.lambdaVariable)
+                                field
+                      }
+                }
+            Semantic.Holding {} -> error "a derived instance of a constructor that holds evidence"
+            Semantic.Newtype {} ->
+              Statements.Done
+                { done =
+                    showConstructor
+                      syntax
+                      name
+                      (shift . shift <$> evidence)
+                      (shift Expression.lambdaVariable)
+                      $ const
+                      $ Expression.Newtype
+                        { constructor = shift $ shift $ shift constructor,
+                          argument = Expression.lambdaVariable,
+                          direction = Destruct
                         }
-                  }
-          pure
-            Definition
-              { definition =
-                  Bound
-                    { patternx = Pattern.Wildcard,
-                      body =
-                        Bound
-                          { patternx = shift mainPattern,
-                            body =
-                              Plain
-                                { plain = Done {done = branch}
-                                }
-                          }
-                    }
-              }
+                }
   definitions <- sequence $ zipWith generate [0 ..] (toList constructors)
   pure $ do
     definitions <- sequence definitions
-    let bottom =
-          Definition
-            { definition = Plain {plain = Done {done = Expression.Join {statements = Bottom}}}
+    let branch left right = Statements.Branch {left, right}
+        body =
+          Expression.Lambda
+            { body =
+                Expression.Lambda
+                  { body =
+                      Expression.Join
+                        { statements =
+                            if null definitions
+                              then Statements.Bottom
+                              else foldr1 branch definitions
+                        }
+                  }
             }
-        body = Definition.desugar $ foldr (<>) bottom definitions
-    pure $ Generated $ Solved $ TypeLambda.mono body
+
+    pure $ Generated $ Solved $ TypeLambda.mono Type.lazy body

@@ -93,6 +93,7 @@ module Error
     derivingRequired,
     partialSynonym,
     derivingNonEnum,
+    strictDeclaration,
     unsupportedFeatureRunST,
     unsupportedFeatureConstraintedTypeDefaulting,
     unsupportedFeatureStrictFunctions,
@@ -309,6 +310,7 @@ data Type
   | CannotDerive
   | PartialSynonym
   | DerivingNonEnum
+  | StrictDeclaration
   deriving (Show, Eq, Enum, Bounded)
 
 types :: Map String Type
@@ -600,6 +602,9 @@ partialSynonym position = errorAt PartialSynonym position $ fromString "not enou
 
 derivingNonEnum :: Position -> a
 derivingNonEnum position = errorAt DerivingNonEnum position $ fromString "data type is not an enum"
+
+strictDeclaration :: Position -> a
+strictDeclaration position = errorAt StrictDeclaration position $ fromString "declarations cannot be strict"
 
 strictFunctions = fromString "strict functions"
 

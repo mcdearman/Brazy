@@ -1,11 +1,12 @@
 module Core.Tree.TypeDefinition where
 
+import Core.Instanciate (Store (Empty))
 import qualified Core.Substitute as Substitute
-import Core.Tree.Class (Class)
+import Core.Tree.Class (Class, TypeInfo (TypeNormal), EvidenceInfo (EvidenceNormal))
 import qualified Core.Tree.Class as Class
 import qualified Core.Tree.Constraint as Constraint
 import qualified Core.Tree.Constructor as Constructor
-import Core.Tree.Data (Data)
+import Core.Tree.Data (Data, TypesInfo (TypesNormal))
 import qualified Core.Tree.Data as Data
 import qualified Core.Tree.Forall as Forall
 import Core.Tree.Type (Type)
@@ -61,14 +62,25 @@ simplify (_ Solved.::: Identity definition) = case definition of
     Data
       Data.Data
         { parameters = fmap typex' parameters,
-          constructors = Constructor.simplify <$> constructors,
-          selectors,
-          brand
+          definition =
+            Data.Definition
+              { position = Empty,
+                types = TypesNormal,
+                constructors = Constructor.simplify <$> constructors,
+                selectors,
+                brand
+              }
         }
   Solved.Class {parameter = TypePattern {typex = Solved parameter}, constraints, methods} ->
     Class
       Class.Class
         { parameter,
           constraints = Constraint.simplify <$> constraints,
-          methods = Forall.simplify . Solved.Method.annotation <$> methods
+          definition =
+            Class.Definition
+              { typex = TypeNormal,
+                evidence = EvidenceNormal,
+                methods = Forall.simplify . Solved.Method.annotation <$> methods,
+                constraintCount = length constraints
+              }
         }

@@ -16,7 +16,6 @@ import Syntax.Parser
     betweenBraces,
     many,
     optional,
-    position,
     sepBy1Comma,
     sepByComma,
     token,
@@ -61,15 +60,20 @@ instance TermBindingVariables GADTConstructor where
 
 parse :: Parser (GADTConstructor Position)
 parse =
-  gadtConstructor . Strict.fromNonEmpty
+  (\names made -> made (Strict.fromNonEmpty names))
     <$> sepBy1Comma Marked.parseLiteral
-    <*> (token "::" *> position)
-    <*> optional forallx
-    <*> Constraints.parse
-    <*> asum
-      [ Left <$> record,
-        Right <$> Type.parse
-      ]
+    <*> ( token "::"
+            *> Scheme.parseWith
+              (\startPosition parameters constraints body names -> gadtConstructor names startPosition parameters constraints body)
+              (optional forallx)
+              Nothing
+              ( asum
+                  [ Left <$> record,
+                    Right <$> Type.parse
+                  ]
+              )
+              (Right <$> Type.parse3)
+        )
   where
     forallx = token "forall" *> (Strict.Vector.fromList <$> many TypePattern.parse) <* token "."
     record =
@@ -117,5 +121,5 @@ parse =
       Entry.Polymorphic {startPosition} -> unsupportedFeaturePolymorphicComponents startPosition
     plain :: Position -> Scheme Position -> Type Position
     plain startPosition = \case
-      Scheme.Implicit {constraints = Constraints.None, result} -> result
+      Scheme.Implicit {constraints = Constraints.Lazy, result} -> result
       _ -> unsupportedFeaturePolymorphicComponents startPosition

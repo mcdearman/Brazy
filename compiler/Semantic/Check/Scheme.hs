@@ -1,4 +1,4 @@
-module Semantic.Check.Simple.Scheme where
+module Semantic.Check.Scheme where
 
 import Control.Monad (zipWithM)
 import Control.Monad.ST (ST)
@@ -11,6 +11,7 @@ import qualified Core.Tree.Evidence as Evidence (EvidenceF (..))
 import Core.Tree.Forall (Forall, ForallOver (..))
 import qualified Core.Tree.Instanciation as Instanciation
 import Core.Tree.Type (Type)
+import qualified Core.Tree.Type as Type (strict)
 import Core.Tree.TypeDeclaration (assumeClass)
 import Data.Foldable (toList)
 import qualified Data.Map as Map
@@ -22,10 +23,10 @@ import qualified Data.Vector.Strict as Strict.Vector
 import Data.Void (Void)
 import Order (orderWithInt)
 import Semantic.Check.Context (Context (..))
-import Semantic.Check.LocalBinding (shiftEquality)
-import qualified Semantic.Check.LocalBinding as LocalBinding
+import Semantic.Check.Binding.Local (shiftEquality)
+import qualified Semantic.Check.Binding.Local as LocalBinding
 import Semantic.Check.Mask (Mask)
-import qualified Semantic.Check.TypeBinding as TypeBinding
+import qualified Semantic.Check.Binding.Type as TypeBinding
 import qualified Semantic.Index.Evidence as Evidence (assumed)
 import qualified Semantic.Index.Table.Local as Local
 import qualified Semantic.Index.Table.Term as Term
@@ -69,13 +70,13 @@ augmentNamed name _ parameters constraints mask Context {termEnvironment, localE
             let evidence =
                   Evidence.Variable
                     { variable = Evidence.assumed index,
-                      instanciation = Instanciation.Mono
+                      instanciation = Instanciation.Mono {levity = Type.strict}
                     }
             entail <- entailed classx arguments evidence
             pure (head, entail)
       collected <- case constraints of
         Constraints constraints -> zipWithM collect [0 ..] $ toList constraints
-        None -> pure []
+        Value {} -> pure []
       let ordered = orderWithInt (++) [] (length parameters) collected
           constraints = Vector.map (Map.fromListWith $ flip LocalBinding.combine) ordered
           rigid index typex constraints =

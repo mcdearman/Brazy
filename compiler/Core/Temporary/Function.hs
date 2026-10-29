@@ -1,12 +1,11 @@
 module Core.Temporary.Function where
 
-import Core.Temporary.Pattern (Pattern)
-import qualified Core.Temporary.Pattern as Pattern
 import Core.Temporary.RightHandSide (RightHandSide)
 import qualified Core.Temporary.RightHandSide as RightHandSide
 import {-# SOURCE #-} qualified Core.Tree.Expression as Expression
 import Core.Tree.Statements (Statements)
 import qualified Core.Tree.Statements as Statements
+import qualified Core.Tree.Type as Type
 import qualified Semantic.Index.Term as Term
 import Semantic.Layout (Normal)
 import Semantic.Scope (Environment ((:+)))
@@ -19,15 +18,17 @@ import qualified Semantic.Tree.Alternative as Semantic (Alternative (..))
 import qualified Semantic.Tree.Function as Semantic (Function (..))
 import qualified Semantic.Tree.Lambda as Semantic (Lambda)
 import qualified Semantic.Tree.Lambda as Semantic.Lambda
+import Semantic.Tree.Pattern (Pattern)
+import qualified Semantic.Tree.Pattern as Pattern
 
 data Function scope
   = Plain {plain :: !(RightHandSide scope)}
   | Bound
-      { patternx :: !(Pattern scope),
+      { patternx :: !(Pattern () Check scope),
         body :: !(Function (Scope.Pattern ':+ scope))
       }
   | Bind
-      { patternx :: !(Pattern scope),
+      { patternx :: !(Pattern () Check scope),
         variable :: !(Term.Index scope),
         thenx :: !(Function (Scope.Pattern ':+ scope))
       }
@@ -62,7 +63,7 @@ instance Simplify Semantic.Function where
     Semantic.Plain {rightHandSide} -> Plain {plain = RightHandSide.simplify rightHandSide}
     Semantic.Bound {patternx, function} ->
       Bound
-        { patternx = Pattern.simplify patternx,
+        { patternx = Pattern.anonymize patternx,
           body = simplify function
         }
 
@@ -71,14 +72,14 @@ instance Simplify Semantic.Lambda where
     Semantic.Lambda.Plain {plain} -> Plain {plain = RightHandSide.simplify plain}
     Semantic.Lambda.Bound {parameter, body} ->
       Bound
-        { patternx = Pattern.simplify parameter,
+        { patternx = Pattern.anonymize parameter,
           body = simplify body
         }
 
 instance Simplify Semantic.Alternative where
   simplify Semantic.Alternative {parameter, rightHandSide} =
     Bound
-      { patternx = Pattern.simplify parameter,
+      { patternx = Pattern.anonymize parameter,
         body =
           Plain
             { plain = RightHandSide.simplify rightHandSide
@@ -122,6 +123,6 @@ desugarUnitary = \case
   Bind {patternx, variable, thenx} ->
     Statements.bind
       patternx
-      (Expression.monoVariable variable)
+      (Expression.monoVariable Type.lazy variable)
       (desugarUnitary thenx)
   Bound {} -> error "desugarUnitary on bound"

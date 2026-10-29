@@ -4,15 +4,16 @@ import Control.Monad.ST (ST)
 import Core.Tree.Data (Data)
 import qualified Core.Tree.Expression as Expression
 import qualified Core.Tree.Type as Core
+import qualified Core.Tree.Type as Type
 import qualified Core.Tree.TypeLambda as TypeLambda
 import Data.Foldable (toList)
 import qualified Data.Vector.Strict as Strict.Vector
 import Error (derivingNonEnum)
-import Semantic.Check.ConstructorInstance (ConstructorInstance (..))
-import qualified Semantic.Check.ConstructorInstance as ConstructorInstance
+import Semantic.Check.Instanciate.Constructor (ConstructorInstance (..))
+import qualified Semantic.Check.Instanciate.Constructor as ConstructorInstance
 import Semantic.Check.Context (Context)
-import Semantic.Check.DataInstance (DataInstance (..))
-import Semantic.Check.EntryInstance (entry)
+import Semantic.Check.Instanciate.Data (DataInstance (..))
+import Semantic.Check.Instanciate.Entry (entry)
 import Semantic.Check.Simple.Data (instanciateApart)
 import qualified Semantic.Check.Temporary.Pattern as Apart (within)
 import qualified Semantic.Check.Temporary.ConstructorInfo as ConstructorInfo
@@ -80,7 +81,7 @@ bound bound context position typeIndex datax = do
       | otherwise -> derivingNonEnum position
   pure $ do
     body <- body
-    pure $ Generated $ Solved $ TypeLambda.mono body
+    pure $ Generated $ Solved $ TypeLambda.mono Type.lazy body
 
 minBound ::
   Context s (Local ':+ scope) ->

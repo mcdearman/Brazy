@@ -1,17 +1,20 @@
 module Core.Tree.Constructor where
 
+import Core.Instanciate (Normal, Store (Empty))
 import qualified Core.Substitute as Substitute
-import Core.Tree.Entry (Entry)
+import Core.Tree.Entry (EntryF)
 import qualified Core.Tree.Entry as Entry
 import Core.Tree.Type (Type)
 import qualified Core.Tree.Type as Type
 import qualified Data.Vector.Strict as Strict
 import qualified Semantic.Index.Type2 as Type2
+import Data.Void (Void)
 import qualified Semantic.Shift as Shift
 import qualified Semantic.Shift0 as Shift0
 import Semantic.Stage (Check)
 import Semantic.Tree.Constructor (Syntax)
 import qualified Semantic.Tree.Constructor as Solved
+import Syntax.Tree.Brand (Brand)
 import qualified Syntax.Variable as Variable
 
 -- |
@@ -34,24 +37,56 @@ data Asked scope = Asked
   }
   deriving (Show)
 
-data Constructor scope = Constructor
-  { name :: !Variable.Constructor,
+type Constructor = ConstructorF Normal Void
+
+data ConstructorF instanciate logical scope = Constructor
+  { brand :: !(Store instanciate Brand),
+    name :: !Variable.Constructor,
     syntax :: !Syntax,
-    entries :: !(Strict.Vector (Entry scope)),
+    entries :: !(Strict.Vector (EntryF instanciate logical scope)),
     shape :: !(Shape scope)
   }
   deriving (Show)
 
-instance Shift0.Functor Constructor where
+instance Shift0.Functor (ConstructorF instanciate logical) where
   map = Shift.mapDefault
 
-instance Shift.Functor Constructor where
-  map = Substitute.mapDefault
-
-instance Substitute.Functor Constructor where
-  map category Constructor {name, syntax, entries, shape} =
+instance Shift.Functor (ConstructorF instanciate logical) where
+  map category Constructor {brand, name, syntax, entries, shape} =
     Constructor
-      { name,
+      { brand,
+        name,
+        syntax,
+        entries = Shift.map category <$> entries,
+        shape = Shift.map category shape
+      }
+
+instance Shift0.Functor Shape where
+  map = Shift.mapDefault
+
+instance Shift.Functor Shape where
+  map category = \case
+    Ordinary -> Ordinary
+    Indexed {variables, asked, equated, arguments} ->
+      Indexed
+        { variables,
+          asked = Shift.map category <$> asked,
+          equated = fmap (\(left, right) -> (Shift.map category left, Shift.map category right)) equated,
+          arguments = Shift.map category <$> arguments
+        }
+
+instance Shift0.Functor Asked where
+  map = Shift.mapDefault
+
+instance Shift.Functor Asked where
+  map category Asked {classx, subject} =
+    Asked {classx = Shift.map category classx, subject = Shift.map category subject}
+
+instance (logical ~ Void) => Substitute.Functor (ConstructorF instanciate logical) where
+  map category Constructor {brand, name, syntax, entries, shape} =
+    Constructor
+      { brand,
+        name,
         syntax,
         entries = Substitute.map category <$> entries,
         shape = case shape of
@@ -75,7 +110,8 @@ simplify :: Solved.Constructor Check scope -> Constructor scope
 simplify = \case
   Solved.Constructor {name, syntax, entries, shape} ->
     Constructor
-      { name,
+      { brand = Empty,
+        name,
         syntax,
         entries = Entry.simplify <$> entries,
         shape = case shape of

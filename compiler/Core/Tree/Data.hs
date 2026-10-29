@@ -1,21 +1,22 @@
 module Core.Tree.Data where
 
+import Core.Instanciate (Normal, Store, Instanciated)
 import qualified Core.Substitute as Substitute
-import Core.Tree.Constructor (Constructor)
-import Core.Tree.Type (Type, (-#>))
+import Core.Tree.Constructor (ConstructorF)
+import Core.Tree.Type (Type, TypeF, (-#>))
 import qualified Core.Tree.Type as Type
 import qualified Data.Vector.Strict as Strict
+import Data.Void (Void)
 import Semantic.Scope (Environment ((:+)), Local)
 import qualified Semantic.Shift as Shift
 import qualified Semantic.Shift0 as Shift0
 import Semantic.Tree.Selector (Selector)
+import Syntax.Position (Position)
 import Syntax.Tree.Brand (Brand)
 
 data Data scope = Data
   { parameters :: !(Strict.Vector (Type scope)),
-    constructors :: !(Strict.Vector (Constructor (Local ':+ scope))),
-    selectors :: !(Strict.Vector Selector),
-    brand :: !Brand
+    definition :: !(Definition (Local ':+ scope))
   }
   deriving (Show)
 
@@ -26,10 +27,64 @@ instance Shift.Functor Data where
   map = Substitute.mapDefault
 
 instance Substitute.Functor Data where
-  map category Data {parameters, constructors, selectors, brand} =
+  map category Data {parameters, definition} =
     Data
       { parameters = Substitute.map category <$> parameters,
-        constructors = Substitute.map (Substitute.Over category) <$> constructors,
+        definition = Substitute.map (Substitute.Over category) definition
+      }
+
+type Definition = DefinitionF Normal Void
+
+data TypesInfo instanciate logical scope where
+  TypesInfo :: !(Strict.Vector (TypeF logical scope)) -> TypesInfo Instanciated logical scope
+  TypesNormal :: TypesInfo Normal logical scope
+
+instance Show logical => Show (TypesInfo instanciate logical scope) where
+  showsPrec k = \case
+    TypesInfo typex -> showParen (k > 10) $ showString "TypesInfo " . showsPrec 11 typex
+    TypesNormal -> showString "TypesNormal"
+
+instance Shift0.Functor (TypesInfo instanciate logical) where
+  map = Shift.mapDefault
+
+instance Shift.Functor (TypesInfo instanciate logical) where
+  map category = \case
+    TypesInfo typex -> TypesInfo (Shift.map category <$> typex)
+    TypesNormal -> TypesNormal
+
+instance logical ~ Void => Substitute.Functor (TypesInfo instanciate logical) where
+  map category = \case
+    TypesInfo typex -> TypesInfo (Substitute.map category <$> typex)
+    TypesNormal -> TypesNormal
+
+data DefinitionF instanciate logical scope = Definition
+  { position :: !(Store instanciate Position),
+    types :: !(TypesInfo instanciate logical scope),
+    constructors :: !(Strict.Vector (ConstructorF instanciate logical scope)),
+    selectors :: !(Strict.Vector Selector),
+    brand :: !Brand
+  }
+  deriving (Show)
+
+instance Shift0.Functor (DefinitionF instanciate logical) where
+  map = Shift.mapDefault
+
+instance Shift.Functor (DefinitionF instanciate logical) where
+  map category Definition {position, types, constructors, selectors, brand} =
+    Definition
+      { position,
+        types = Shift.map category types,
+        constructors = Shift.map category <$> constructors,
+        selectors,
+        brand
+      }
+
+instance (logical ~ Void) => Substitute.Functor (DefinitionF instanciate logical) where
+  map category Definition {position, types, constructors, selectors, brand} =
+    Definition
+      { position,
+        types = Substitute.map category types,
+        constructors = Substitute.map category <$> constructors,
         selectors,
         brand
       }

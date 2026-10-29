@@ -1,4 +1,4 @@
-module Semantic.Check.DataInstance where
+module Semantic.Check.Instanciate.Data where
 
 import Control.Monad.ST (ST)
 import Core.Tree.Type ((#), (-#>))
@@ -8,11 +8,11 @@ import qualified Data.Strict.Maybe as Strict (Maybe (..))
 import qualified Data.Vector.Strict as Strict (Vector)
 import qualified Data.Vector.Strict as Strict.Vector
 import Order (orderListInt')
-import Semantic.Check.ConstructorInstance (ConstructorInstance (..))
-import qualified Semantic.Check.ConstructorInstance as Constructor (info)
-import qualified Semantic.Check.ConstructorInstance as ConstructorInstance
+import Semantic.Check.Instanciate.Constructor (ConstructorInstance (..))
+import qualified Semantic.Check.Instanciate.Constructor as Constructor (info)
+import qualified Semantic.Check.Instanciate.Constructor as ConstructorInstance
 import {-# SOURCE #-} Semantic.Check.Context (Context)
-import Semantic.Check.EntryInstance (EntryInstance (..))
+import Semantic.Check.Instanciate.Entry (EntryInstance (..))
 import Semantic.Check.Temporary.SelectorInfo (Select (..), SelectorInfo (..))
 import Semantic.Check.Temporary.UpdateInfo (UpdateInfo (..))
 import qualified Semantic.Check.Temporary.UpdateInfo as UpdateInfo
@@ -80,10 +80,10 @@ selectorEntry DataInstance {constructors, selectors} selectorIndex = entries Str
 
 selectorInfo :: DataInstance s scope -> Int -> SelectorInfo s scope
 selectorInfo DataInstance {position, constructors, selectors} index = case selectors Strict.Vector.! index of
-  Selector {first, index, uniform = Selector.Uniform} -> Uniform {position, strict}
+  Selector {first, index, uniform = Selector.Uniform} -> Uniform {position, levity}
     where
       ConstructorInstance {entries} = constructors Strict.Vector.! first
-      EntryInstance {strict} = entries Strict.Vector.! index
+      EntryInstance {levity} = entries Strict.Vector.! index
   Selector {uniform = Selector.Disjoint {indexes}} ->
     Disjoint
       { select = Strict.Vector.imap pick indexes

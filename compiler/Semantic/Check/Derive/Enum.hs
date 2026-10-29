@@ -1,30 +1,28 @@
 module Semantic.Check.Derive.Enum where
 
+import qualified Core.Tree.Type as Levity (lazy)
 import {-# SOURCE #-} qualified Builtin.Enum as Enum
 import Control.Monad.ST (ST)
-import Core.Temporary.Definition (Definition (..))
-import qualified Core.Temporary.Definition as Definition
-import Core.Temporary.Function (Function (..))
-import Core.Temporary.Pattern (Bindings (..), Pattern (..))
-import qualified Core.Temporary.Pattern as Pattern
-import Core.Temporary.RightHandSide (RightHandSide (..))
 import qualified Core.Tree.Class as Class
 import Core.Tree.Data (Data)
 import Core.Tree.Evidence (Evidence)
 import qualified Core.Tree.Evidence as Evidence
-import Core.Tree.Expression (Expression)
+import Core.Tree.Expression (Expression, lambdaVariable)
 import qualified Core.Tree.Expression as Expression
 import qualified Core.Tree.Instanciation as Instanciation
-import qualified Core.Tree.Type as Core
+import qualified Core.Tree.Statements as Statements
+import qualified Core.Tree.Type as Simple (TypeF (Variable))
+import qualified Core.Tree.Type as Type
 import qualified Core.Tree.TypeLambda as TypeLambda
 import Data.Foldable (toList)
 import qualified Data.Vector.Strict as Strict
 import qualified Data.Vector.Strict as Strict.Vector
 import Error (derivingNonEnum)
-import Semantic.Check.ConstructorInstance (ConstructorInstance (..))
-import qualified Semantic.Check.ConstructorInstance as ConstructorInstance
 import Semantic.Check.Context (Context)
-import Semantic.Check.DataInstance (DataInstance (..))
+import Semantic.Check.Info.Constructor (ConstructorInfo (..))
+import Semantic.Check.Instanciate.Constructor (ConstructorInstance (..))
+import qualified Semantic.Check.Instanciate.Constructor as ConstructorInstance
+import Semantic.Check.Instanciate.Data (DataInstance (..))
 import Semantic.Check.Simple.Data (instanciateMark)
 import qualified Semantic.Check.Temporary.ConstructorInfo as ConstructorInfo
 import qualified Semantic.Index.Constructor as Constructor
@@ -46,36 +44,40 @@ fromEnum' ::
   Strict.Vector (ConstructorInstance s scope) ->
   Unify.Solve s (Expression scope)
 fromEnum' typeIndex constructors = do
-  let toIntN index constructor@ConstructorInstance {entries} =
+  let toIntN constructorIndex constructor =
         do
           info <- ConstructorInfo.solve $ ConstructorInstance.info constructor
-          let patterns :: Strict.Vector (Pattern scope)
-              patterns = Strict.Vector.replicate (length entries) Wildcard
-              patternx =
-                Match
-                  { irrefutable = False,
-                    match =
-                      Constructor
-                        { constructor =
-                            Constructor.Index
-                              { typeIndex,
-                                constructorIndex = index
-                              },
-                          patterns,
-                          constructorInfo = info
+          let index =
+                Constructor.Index
+                  { typeIndex,
+                    constructorIndex
+                  }
+          case info of
+            ConstructorInfo {entries} ->
+              pure
+                Statements.Bind
+                  { constructor = shift index,
+                    entryCount = length entries,
+                    check = lambdaVariable,
+                    thenx =
+                      Statements.Done
+                        { done = Expression.int constructorIndex
                         }
                   }
-              done = Expression.int index
-          pure
-            Definition
-              { definition =
-                  Bound
-                    { patternx,
-                      body = Plain {plain = Done {done}}
-                    }
-              }
+            Holding {} -> error "a derived instance of a constructor that holds evidence"
+            Newtype {} ->
+              pure
+                Statements.Done
+                  { done = Expression.int 0
+                  }
   declarations <- sequence $ zipWith toIntN [0 ..] (toList constructors)
-  pure $ Definition.desugar $ foldr1 (<>) declarations
+  pure $
+    Expression.Lambda $
+      Expression.Join
+        { statements =
+            let branch left right = Statements.Branch {left, right}
+             in foldr branch Statements.Bottom declarations
+        }
 
 toEnum' ::
   Position ->
@@ -86,46 +88,31 @@ toEnum' _ typeIndex constructors
   | let singleton ConstructorInstance {entries} = null entries,
     all singleton constructors = do
       pure $ do
-        let fromInt index constructor@ConstructorInstance {} =
+        let fromInt constructorIndex constructor =
               do
                 info <- ConstructorInfo.solve $ ConstructorInstance.info constructor
-                let patternx =
-                      Match
-                        { irrefutable = False,
-                          match =
-                            Pattern.Integer
-                              { integer = fromIntegral index,
-                                evidence =
-                                  Evidence.Variable
-                                    { variable = Index.Evidence.Direct Type2.Num Type2.Int,
-                                      instanciation = Instanciation.Mono
-                                    },
-                                equal =
-                                  Evidence.Variable
-                                    { variable = Index.Evidence.Direct Type2.Eq Type2.Int,
-                                      instanciation = Instanciation.Mono
-                                    }
-                              }
+                let index =
+                      Constructor.Index
+                        { typeIndex,
+                          constructorIndex = constructorIndex
                         }
-                    done =
-                      shift $
-                        Expression.simplifyConstructorExact
-                          Constructor.Index
-                            { typeIndex,
-                              constructorIndex = index
-                            }
-                          info
-                          Strict.Vector.empty
-                pure
-                  Definition
-                    { definition =
-                        Bound
-                          { patternx,
-                            body = Plain {plain = Done {done}}
+                pure $
+                  let eqInt =
+                        Evidence.Variable
+                          { variable = Index.Evidence.Direct Type2.Eq Type2.Int,
+                            instanciation = Instanciation.monoLazy
                           }
-                    }
+                      check = Expression.eq eqInt lambdaVariable $ Expression.int constructorIndex
+                      done = Expression.simplifyConstructorExact (shift index) (shift info) Strict.Vector.empty
+                   in Statements.ifx check done
         declarations <- sequence $ zipWith fromInt [0 ..] (toList constructors)
-        pure $ Definition.desugar $ foldr1 (<>) declarations
+        pure $
+          Expression.Lambda $
+            Expression.Join
+              { statements =
+                  let branch left right = Statements.Branch {left, right}
+                   in foldr branch Statements.Bottom declarations
+              }
 toEnum' position _ _ = derivingNonEnum position
 
 fromEnum,
@@ -137,21 +124,21 @@ fromEnum,
     ST s (Unify.Solve s (MethodConcrete Auto layout Check scope))
 fromEnum context position typeIndex datax = do
   DataInstance {types, constructors} <- instanciateMark context position (shift datax)
-  let unify index typex = Unify.unify context position typex (Core.Variable $ Local.Local index)
+  let unify index typex = Unify.unify context position typex (Simple.Variable $ Local.Local index)
   sequence $ zipWith unify [0 ..] (toList types)
   pure $ do
     body <- do
       fromEnum <- fromEnum' (shift typeIndex) constructors
       pure fromEnum
-    pure $ Generated $ Solved $ TypeLambda.mono body
+    pure $ Generated $ Solved $ TypeLambda.mono Type.lazy body
 toEnum context position typeIndex datax = do
   DataInstance {types, constructors} <- instanciateMark context position (shift datax)
-  let unify index typex = Unify.unify context position typex (Core.Variable $ Local.Local index)
+  let unify index typex = Unify.unify context position typex (Simple.Variable $ Local.Local index)
   sequence $ zipWith unify [0 ..] (toList types)
   body <- toEnum' position (shift typeIndex) constructors
   pure $ do
     body <- body
-    pure $ Generated $ Solved $ TypeLambda.mono $ body
+    pure $ Generated $ Solved $ TypeLambda.mono Type.lazy $ body
 
 -- |
 -- Everything from a constructor on: @enumFrom x = enumFromTo x last@. What
@@ -166,7 +153,7 @@ enumFrom ::
   ST s (Unify.Solve s (MethodConcrete Auto layout Check scope))
 enumFrom context position evidence typeIndex datax = do
   DataInstance {types, constructors} <- instanciateMark context position (shift datax)
-  let unify index typex = Unify.unify context position typex (Core.Variable $ Local.Local index)
+  let unify index typex = Unify.unify context position typex (Simple.Variable $ Local.Local index)
   sequence $ zipWith unify [0 ..] (toList types)
   pure $ do
     maxInfo <- ConstructorInfo.solve $ ConstructorInstance.info (Strict.Vector.last constructors)
@@ -185,13 +172,13 @@ enumFrom context position evidence typeIndex datax = do
                 Expression.Method
                   { method = Method.enumFromTo,
                     evidence = shift evidence,
-                    instanciation = Instanciation.Mono,
-                    methodInfo = Class.info $ Enum.definition
+                    instanciation = Instanciation.Mono {levity = Levity.lazy},
+                    constraintCount = Class.info $ Enum.definition
                   }
                   `Expression.call` Expression.lambdaVariable
                   `Expression.call` max
             }
-    pure $ Generated $ Solved $ TypeLambda.mono body
+    pure $ Generated $ Solved $ TypeLambda.mono Levity.lazy body
 
 enumFromThen ::
   Context s (Local ':+ scope) ->
@@ -202,7 +189,7 @@ enumFromThen ::
   ST s (Unify.Solve s (MethodConcrete Auto layout Check scope))
 enumFromThen context position evidence typeIndex datax = do
   DataInstance {types, constructors} <- instanciateMark context position (shift datax)
-  let unify index typex = Unify.unify context position typex (Core.Variable $ Local.Local index)
+  let unify index typex = Unify.unify context position typex (Simple.Variable $ Local.Local index)
   sequence $ zipWith unify [0 ..] (toList types)
   pure $ do
     minInfo <- ConstructorInfo.solve $ ConstructorInstance.info (Strict.Vector.head constructors)
@@ -240,12 +227,12 @@ enumFromThen context position evidence typeIndex datax = do
                       Expression.Method
                         { method = Method.enumFromThenTo,
                           evidence = shift $ shift evidence,
-                          instanciation = Instanciation.Mono,
-                          methodInfo = Class.info $ Enum.definition
+                          instanciation = Instanciation.monoLazy,
+                          constraintCount = Class.info $ Enum.definition
                         }
                         `Expression.call` shift Expression.lambdaVariable
                         `Expression.call` Expression.lambdaVariable
                         `Expression.call` Expression.ifx condition max min
                   }
             }
-    pure $ Generated $ Solved $ TypeLambda.mono body
+    pure $ Generated $ Solved $ TypeLambda.mono Type.lazy body

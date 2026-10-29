@@ -4,7 +4,6 @@ import Core.Arity (Arity)
 import qualified Core.Arity as Arity (measure)
 import qualified Core.Foreign as Foreign
 import qualified Core.Substitute as Substitute
-import qualified Core.Temporary.Pattern as Pattern
 import Core.Tree.Expression (Expression)
 import qualified Core.Tree.Expression as Expression
 import Core.Tree.Forall (Forall)
@@ -17,6 +16,7 @@ import Data.Void (Void)
 import qualified Semantic.Check.Go.Scheme as Semantic (Scheme)
 import qualified Semantic.Index.Term as Semantic.Term
 import Semantic.Layout (Normal)
+import Semantic.Shift (shift)
 import qualified Semantic.Shift as Shift
 import qualified Semantic.Shift0 as Shift0
 import Semantic.Stage (Check)
@@ -29,6 +29,7 @@ import qualified Semantic.Tree.Definition2 as Semantic.Definition2
 import qualified Semantic.Tree.Definition3 as Semantic (Definition3 (..))
 import qualified Semantic.Tree.Definition4 as Semantic (Definition4 (..))
 import qualified Semantic.Tree.Expression as Semantic (Expression)
+import qualified Semantic.Tree.Pattern as Pattern
 
 data Declaration scope = Declaration
   { name :: !Key,
@@ -88,20 +89,27 @@ simplify = \case
             exported = definition2 solved exported
           }
       Semantic.Definition definition -> Expression.simplify definition
-      Semantic.Piece Semantic.Choice {index, instanciation = Solved instanciation, patternx, bound} ->
-        Expression.Join
-          { statements =
-              Statements.bind
-                (Pattern.simplify patternx)
-                Expression.Variable
-                  { variable = index,
-                    instanciation
-                  }
-                Statements.Done
-                  { done =
-                      Expression.monoVariable $ Semantic.Term.Pattern bound
-                  }
-          }
+      Semantic.Piece
+        Semantic.Choice
+          { index,
+            instanciation = Solved instanciation,
+            levity = Solved levity,
+            patternx,
+            bound
+          } ->
+          Expression.Join
+            { statements =
+                Statements.bind
+                  (Pattern.anonymize patternx)
+                  Expression.Variable
+                    { variable = index,
+                      instanciation
+                    }
+                  Statements.Done
+                    { done =
+                        Expression.monoVariable (shift levity) $ Semantic.Term.Pattern bound
+                    }
+            }
       Semantic.Definition2.Shared shared -> Expression.simplify shared
 
 annotation ::

@@ -1,40 +1,30 @@
 module Semantic.Unify.Type where
 
-import Control.Monad (filterM, foldM, when, zipWithM)
+import Control.Monad (foldM, when, zipWithM)
 import Control.Monad.ST (ST)
-import Core.Substitute (logicalEvidence, logicalType, substituteType)
-import qualified Core.Tree.Constraint as Simple (argument)
-import qualified Core.Tree.Constraint as Simple.Constraint
-import Core.Tree.Constraints (ConstraintsF (..))
-import qualified Core.Tree.Constraints as Instance (Prerequisites (..))
+import Core.Substitute (logicalType)
 import qualified Core.Tree.Evidence as Evidence (EvidenceF (..))
-import Core.Tree.Instanciation (InstanciationF (Instanciation))
-import qualified Core.Tree.Instanciation as Instanciation (InstanciationF (..))
-import Core.Tree.Type (TypeF (..), (#))
+import Core.Tree.Type (TypeF (..))
 import qualified Core.Tree.Type as Simple (Type)
-import Core.Type.Functor (shiftLogical)
-import Data.Foldable (for_, toList, traverse_)
+import Data.Foldable (for_)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.STRef (STRef, newSTRef, readSTRef, writeSTRef)
 import Data.Traversable (for)
-import qualified Data.Vector as Vector
+import Core.Type.Functor (shiftLogical)
+import Data.Void (Void)
 import Error (unsupportedFeatureConstraintedTypeDefaulting)
+import qualified Semantic.Check.Binding.Local as Local (LocalBinding (..))
 import Semantic.Check.Context (Context (..))
 import qualified Semantic.Check.Context as Context
-import qualified Semantic.Check.LocalBinding as Local (Constraint (..), Equality (..), LocalBinding (..))
+import qualified Semantic.Check.Binding.Local as Local (Equality (..))
 import qualified Semantic.Index.Local as Local.Index (Index)
 import qualified Semantic.Check.Mask as Mask
-import Semantic.Check.TypeBinding (TypeBinding (TypeBinding))
-import qualified Semantic.Check.TypeBinding as TypeBinding
-import qualified Semantic.Index.Evidence as Evidence (Index (..))
 import qualified Semantic.Index.Table.Local as Local.Table
-import qualified Semantic.Index.Table.Type as Type.Table
 import qualified Semantic.Index.Type2 as Type2
 import Semantic.Scope (Environment (..))
 import qualified Semantic.Shift as Shift
 import qualified Semantic.Shift0 as Shift0
-import qualified Semantic.Unify.Builtin as Builtin (constrain)
 import {-# SOURCE #-} Semantic.Unify.Error (Error (..), abort)
 import Semantic.Unify.Evidence (Evidence)
 import qualified Semantic.Unify.Evidence as Evidence
@@ -51,6 +41,7 @@ import qualified Semantic.Unify.Evidence as Evidence
 import qualified Semantic.Default as Default
 import Semantic.Default (Default)
 import Data.List (find)
+import {-# SOURCE #-} Semantic.Unify.Type1 (constrainWith)
 import Syntax.Position (Position)
 import Prelude hiding (Functor, head, map)
 
@@ -199,7 +190,7 @@ unify context_ position term1_ term2_ = unifyWith context_ term1_ term2_
                               found <- firstM (\Delay {arguments = arguments1} -> sameAll arguments1 arguments2) known
                               case found of
                                 Just Delay {evidence = evidence1} -> do
-                                  Evidence.unify evidence1 evidence2
+                                  Evidence.unify context position evidence1 evidence2
                                   pure known
                                 Nothing -> pure (known ++ [delay])
                         foldM add left right =
@@ -640,201 +631,6 @@ occurs context position erasure reference term_ = do
       Levity -> pure ()
     occurrenece = abort position (Occurs context reference term_)
 
-constrain ::
-  Context s scope ->
-  Position ->
-  Type2.Index scope ->
-  Type s scope ->
-  ST s (Evidence s scope)
-constrain context position classx term = constrainWith context position classx term []
-
-constrainWith ::
-  forall s scope.
-  Context s scope ->
-  Position ->
-  Type2.Index scope ->
-  Type s scope ->
-  [Type s scope] ->
-  ST s (Evidence s scope)
-constrainWith context_ position classx_ term_ arguments_ = constrainWith context_ classx_ term_ arguments_
-  where
-    constrainWith ::
-      forall scope.
-      Context s scope ->
-      Type2.Index scope ->
-      Type s scope ->
-      [Type s scope] ->
-      ST s (Evidence s scope)
-    constrainWith context@Context {equalities, localEnvironment} classx term arguments = do
-      -- What a match that this is inside says holds, holds. So does what
-      -- is known of a type variable that a match says is this type: what
-      -- was required of the variable is had of the type.
-      let whole = foldl (#) term arguments
-          known = [(subject, evidence) | Local.Given classx' subject evidence <- equalities, classx' == classx]
-          told =
-            [ (foldl (#) typex (logicalType <$> toList arguments'), logicalEvidence evidence)
-            | Local.Equality index typex <- equalities,
-              Local.Rigid {constraints} <- [localEnvironment Local.Table.! index],
-              Just candidates <- [Map.lookup classx constraints],
-              Local.Constraint {arguments = arguments', evidence} <- candidates
-            ]
-      given <- firstM (\(subject, _) -> compared False subject whole) (known ++ told)
-      case given of
-        Just (_, evidence) -> pure evidence
-        Nothing ->
-          hidden term >>= \case
-            -- Of a type that stands for itself alone, only what is known
-            -- of it where this is can be had.
-            Just logical
-              | Just known <- equatedHidden context logical -> constrainWith context classx known arguments
-              | otherwise -> abort position (Constrain context_ classx_ term_ arguments_)
-            Nothing -> plainly context classx term arguments
-    plainly ::
-      forall scope.
-      Context s scope ->
-      Type2.Index scope ->
-      Type s scope ->
-      [Type s scope] ->
-      ST s (Evidence s scope)
-    plainly context classx term@(Logical (Box reference)) arguments =
-      readSTRef reference >>= \case
-        Solved term -> constrainWith context classx term arguments
-        Skolem {} -> error "plain constraint of a type that stands for itself"
-        Unsolved {kind, constraints, erasure} -> do
-          case Map.lookup classx constraints of
-            Nothing -> do
-              universe <- fresh Universe
-              target <- fresh (Type universe)
-              real <- Context.lookupKind position context classx
-              unify context position (Function target Constraint) real
-
-              typeCheck context position target (foldl (#) term arguments)
-              let fallback = do
-                    classx <- Evidence.defaultable classx
-                    pure Evidence.Fallback {classx, permitted = defaults (defaulting context) reference}
-              logical <- newSTRef Evidence.Unsolved {fallback}
-              let delay = Delay {arguments, evidence = Evidence.Logical (Evidence.Box logical)}
-              writeSTRef reference $! Unsolved {kind, constraints = Map.insert classx [delay] constraints, erasure}
-              pure $ Evidence.Logical (Evidence.Box logical)
-            -- The class is asked of the variable already. If it is asked
-            -- of it given these same arguments, this is the same question.
-            -- Otherwise it is one more.
-            Just delays -> do
-              found <- firstM (\Delay {arguments = arguments'} -> sameAll arguments arguments') delays
-              case found of
-                Just Delay {evidence} -> pure evidence
-                Nothing -> do
-                  logical <- newSTRef Evidence.Unsolved {fallback = Nothing}
-                  let delay = Delay {arguments, evidence = Evidence.Logical (Evidence.Box logical)}
-                  writeSTRef reference $!
-                    Unsolved {kind, constraints = Map.insert classx (delays ++ [delay]) constraints, erasure}
-                  pure $ Evidence.Logical (Evidence.Box logical)
-    plainly context classx (Logical (Shift logical)) arguments = do
-      arguments <- traverse (unshift context position) arguments
-      let quit = abort position $ Unshift context (Constructor classx)
-      classx <- Shift.partialUnshift quit classx
-      shiftLogical <$> constrainWith (Shift.unshift context) classx (Logical logical) arguments
-    plainly context@Context {localEnvironment} classx (Variable index) arguments
-      | Local.Rigid {constraints} <- localEnvironment Local.Table.! index,
-        Just known <- Map.lookup classx constraints,
-        candidates@(_ : _) <-
-          [ ([logicalType argument | argument <- toList arguments'], evidence)
-          | Local.Constraint {arguments = arguments', evidence} <- known,
-            length arguments' == length arguments,
-            not (everywhere (toList arguments'))
-          ] = do
-          -- What is known of the variable may be known for several lists of
-          -- arguments. The one that is meant is the one these arguments can
-          -- be: if only one can, they are made to be it.
-          let use (arguments', evidence) = do
-                traverse_ (uncurry $ unify context position) (zip arguments arguments')
-                pure (logicalEvidence evidence)
-              quit = abort position (Constrain context_ classx_ term_ arguments_)
-          case candidates of
-            [only] -> use only
-            _ -> do
-              exact <- filterM (sameAll arguments . fst) candidates
-              possible <- filterM (alikeAll arguments . fst) candidates
-              case (exact, possible) of
-                (first : _, _) -> use first
-                ([], [only]) -> use only
-                _ -> quit
-    -- What is known of the variable may be known of it given every type
-    -- that has the class: then it is known of it given this type, if this
-    -- type has the class, and the evidence is made of the evidence for
-    -- that.
-    plainly context@Context {localEnvironment} classx (Variable index) arguments@(_ : _)
-      | Local.Rigid {constraints} <- localEnvironment Local.Table.! index,
-        Just known <- Map.lookup classx constraints,
-        (before, evidence) : _ <-
-          [ ([logicalType argument | argument <- init (toList arguments')], evidence)
-          | Local.Constraint {arguments = arguments', evidence} <- known,
-            length arguments' == length arguments,
-            everywhere (toList arguments')
-          ] = do
-          traverse_ (uncurry $ unify context position) (zip (init arguments) before)
-          given <- constrainWith context classx (last arguments) []
-          pure Evidence.Applied {function = logicalEvidence evidence, arguments = [given]}
-    -- A variable that is known here to be some type is asked as that type.
-    plainly context classx (Variable index) arguments
-      | Just known <- equated context index = constrainWith context classx known arguments
-    plainly context@Context {typeEnvironment} (Type2.Index classx) (Constructor index) arguments
-      | TypeBinding {classInstances} <- typeEnvironment Type.Table.! classx,
-        Just instancex <- Map.lookup index classInstances = do
-          Instance.Prerequisites {required = dependencies, equated = fixed} <- TypeBinding.prerequisites instancex
-          -- What the instance requires its type to be given, it is given.
-          for_ fixed $ \(index, typex) -> case drop index arguments of
-            argument : _ -> unify context position argument (substituteType (Vector.fromList arguments) typex)
-            [] -> pure ()
-          case dependencies of
-            Constraints dependencies -> do
-              arguments <- for dependencies $ \constraint@Simple.Constraint.Constraint {classx} ->
-                let argument = substituteType (Vector.fromList arguments) (Simple.argument constraint)
-                 in constrain context position classx argument
-              pure $ Evidence.Variable variable (Instanciation arguments)
-            None -> pure $ Evidence.Variable variable Instanciation.Mono
-      where
-        variable = Evidence.Direct (Type2.Index classx) index
-    plainly context@Context {typeEnvironment} classx (Constructor (Type2.Index index)) arguments
-      | TypeBinding {dataInstances} <- typeEnvironment Type.Table.! index,
-        Just instancex <- Map.lookup classx dataInstances = do
-          Instance.Prerequisites {required = dependencies, equated = fixed} <- TypeBinding.prerequisites instancex
-          -- What the instance requires its type to be given, it is given.
-          for_ fixed $ \(index, typex) -> case drop index arguments of
-            argument : _ -> unify context position argument (substituteType (Vector.fromList arguments) typex)
-            [] -> pure ()
-          case dependencies of
-            Constraints dependencies -> do
-              arguments <- for dependencies $ \constraint@Simple.Constraint.Constraint {classx} ->
-                let argument = substituteType (Vector.fromList arguments) (Simple.argument constraint)
-                 in constrain context position classx argument
-              pure $ Evidence.Variable variable (Instanciation arguments)
-            None -> pure $ Evidence.Variable variable Instanciation.Mono
-      where
-        variable = Evidence.Direct classx (Type2.Index index)
-    plainly context classx (Call function argument) arguments =
-      constrainWith context classx function (argument : arguments)
-    plainly context classx (Function argument result) arguments = do
-      typeCheck context position (Type Small) argument
-      typeCheck context position (Type Small) result
-      constrainWith context classx (Constructor Type2.Arrow `Call` argument `Call` result) arguments
-    plainly context classx typex arguments = case typex of
-      Constructor typex -> Builtin.constrain quit constrain classx typex arguments
-      _ -> quit
-      where
-        constrain classx typex = constrainWith context classx typex []
-        quit = abort position (Constrain context_ classx_ term_ arguments_)
-
--- |
--- Whether what a class is required of is something given every type: the
--- last thing it is given is the type that stands for them all.
-everywhere :: [Simple.Type scope] -> Bool
-everywhere = \case
-  [] -> False
-  arguments -> case last arguments of
-    Constructor Type2.Every -> True
-    _ -> False
-
 reconstrain ::
   Context s scope ->
   Position ->
@@ -845,7 +641,7 @@ reconstrain context position constraints term =
   for_ (Map.toList constraints) $ \(classx, delays) ->
     for_ delays $ \Delay {arguments, evidence} -> do
       evidence' <- constrainWith context position classx term arguments
-      Evidence.unify evidence evidence'
+      Evidence.unify context position evidence evidence'
 
 -- |
 -- The first of some things that passes a test.
@@ -956,12 +752,22 @@ compared open = go
       Logical (Shift _) -> pure open
       _ -> pure False
 
-unshiftBox misshift unshift reference kind constraints erasure = do
+unshiftBox ::
+  Context s (scope1 ':+ scopes) ->
+  Position ->
+  ST s Void ->
+  (Type s (scope1 ':+ scopes) -> ST s (Type s scopes)) ->
+  STRef s (Box s (scope2 ':+ scopes)) ->
+  TypeF (Logical s (scope1 ':+ scopes)) (scope1 ':+ scopes) ->
+  Map (Type2.Index (scope3 ':+ scopes)) [Delay s (scope1 ':+ scopes)] ->
+  Mask.Erasure ->
+  ST s (Logical s scopes)
+unshiftBox context position misshift unshift reference kind constraints erasure = do
   let unshiftDelay (key, delays) = do
         key <- Shift.partialUnshift misshift key
         delays <- for delays $ \Delay {arguments, evidence} -> do
           arguments <- traverse unshift arguments
-          evidence <- Evidence.unshift evidence
+          evidence <- Evidence.unshift context position evidence
           pure Delay {arguments, evidence}
         pure (key, delays)
   kind <- unshift kind
@@ -987,7 +793,7 @@ unshift context position typex = unshift typex
       Logical (Box reference) ->
         readSTRef reference >>= \case
           Unsolved {kind, constraints, erasure} -> do
-            box <- unshiftBox misshift unshift reference kind constraints erasure
+            box <- unshiftBox context position misshift unshift reference kind constraints erasure
             pure $ Logical box
           Solved term -> unshift term
           -- It is of this scope, and cannot be said further out.

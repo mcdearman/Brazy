@@ -2,6 +2,7 @@
 -- Unification public api
 module Semantic.Unify
   ( Logical,
+    LogicalEvidence,
     Type,
     Forall,
     ForallOver,
@@ -42,6 +43,7 @@ import Core.Tree.Forall (ForallOver)
 import Semantic.Unify.Constraint (Constraint)
 import Semantic.Unify.Constraints (Constraints)
 import Semantic.Unify.Evidence (Evidence)
+import qualified Semantic.Unify.Evidence as Evidence
 import {-# SOURCE #-} Semantic.Unify.Forall
   ( Body ((:::)),
     Forall,
@@ -69,7 +71,6 @@ import {-# SOURCE #-} Semantic.Unify.Solve
 import {-# SOURCE #-} Semantic.Unify.Type
   ( Logical,
     Type,
-    constrain,
     fresh,
     skolem,
     sealed,
@@ -80,7 +81,12 @@ import {-# SOURCE #-} Semantic.Unify.Type
     lowerEquality,
     alike,
   )
+import {-# SOURCE #-} Semantic.Unify.Type1
+  ( constrain,
+  )
 import {-# SOURCE #-} Semantic.Unify.Zonk
   ( Zonk (..),
     Zonker,
   )
+
+type LogicalEvidence = Evidence.Logical

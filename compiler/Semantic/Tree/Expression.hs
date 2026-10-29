@@ -8,8 +8,8 @@ import qualified Core.Tree.TypeLambda as Simple (Map (..), TypeLambdaOver (..), 
 import qualified Data.Strict.Vector1 as Strict (Vector1)
 import qualified Data.Strict.Vector2 as Strict (Vector2)
 import qualified Data.Vector.Strict as Strict (Vector)
-import Semantic.Check.Simple.ConstructorInfo (ConstructorInfo)
-import Semantic.Check.Simple.UpdateInfo (UpdateInfo)
+import Semantic.Check.Info.Constructor (ConstructorInfo)
+import Semantic.Check.Info.Update (UpdateInfo)
 import Semantic.Connect (Connect (..))
 import Semantic.FreeVariables (FreeTermVariables (..))
 import qualified Semantic.FreeVariables as FreeVariables
@@ -24,12 +24,10 @@ import Semantic.Tree.Alternative (Alternative (..))
 import Semantic.Tree.CallHead (CallHead)
 import Semantic.Tree.Combinators.Inferred (Inferred (..))
 import {-# SOURCE #-} qualified Semantic.Tree.Declarations as Declarations
-import Semantic.Tree.ExpressionField (Field)
 import Semantic.Tree.Lambda (Lambda (..))
 import Semantic.Tree.Pattern (Pattern)
 import Semantic.Tree.RightHandSide (RightHandSide)
 import Semantic.Tree.Scheme (Scheme)
-import Semantic.Tree.Select (Select (..))
 import Semantic.Tree.Statements (Statements)
 import qualified Semantic.Tree.Statements as Statements (Comprehension, Do)
 import Syntax.Position (Position)
@@ -39,7 +37,8 @@ import qualified Prelude
 
 data Expression layout stage scope
   = CallHead
-      { callHead :: !(CallHead layout stage scope)
+      { callHead :: !(CallHead layout stage scope),
+        arguments :: !(Strict.Vector (Expression layout stage scope))
       }
   | Integer
       { startPosition :: !Position,
@@ -81,7 +80,7 @@ data Expression layout stage scope
       { base :: !(Expression layout stage scope),
         updatePosition :: !Position,
         updateType :: !(Type2.Index scope),
-        updates :: !(Strict.Vector1 (Select layout stage scope)),
+        updates :: !(Strict.Vector1 (Field layout stage scope)),
         updateInfo :: !(Inferred UpdateInfo stage scope),
         permissive :: !Prelude.Bool
       }
@@ -112,7 +111,7 @@ data Expression layout stage scope
       }
   | Lambda
       { startPosition :: !Position,
-        parameter :: !(Pattern stage scope),
+        parameter :: !(Pattern Position stage scope),
         body :: !(Lambda layout stage (Scope.Pattern ':+ scope))
       }
   | LambdaCase
@@ -169,9 +168,10 @@ instance Shift0.Functor (Expression layout stage) where
 
 instance Shift.Functor (Expression layout stage) where
   map category = \case
-    CallHead {callHead} ->
+    CallHead {callHead, arguments} ->
       CallHead
-        { callHead = Shift.map category callHead
+        { callHead = Shift.map category callHead,
+          arguments = Shift.map category <$> arguments
         }
     Integer {startPosition, integer, evidence} ->
       Integer
@@ -295,7 +295,9 @@ instance Shift.Functor (Expression layout stage) where
 
 instance FreeTermVariables Expression where
   freeTermVariables target = \case
-    CallHead {callHead} -> freeTermVariables target callHead
+    CallHead {callHead, arguments} ->
+      freeTermVariables target callHead
+        <> foldMap (freeTermVariables target) arguments
     Integer {} -> []
     Float {} -> []
     Character {} -> []
@@ -348,9 +350,10 @@ instance FreeTermVariables Expression where
 
 instance Connect Expression where
   connect = \case
-    CallHead {callHead} ->
+    CallHead {callHead, arguments} ->
       CallHead
-        { callHead = connect callHead
+        { callHead = connect callHead,
+          arguments = connect <$> arguments
         }
     Integer {startPosition, integer} ->
       Integer
@@ -480,9 +483,10 @@ instance Connect Expression where
           negative = connect negative
         }
   seperate = \case
-    CallHead {callHead} ->
+    CallHead {callHead, arguments} ->
       CallHead
-        { callHead = seperate callHead
+        { callHead = seperate callHead,
+          arguments = seperate <$> arguments
         }
     Integer {startPosition, integer, evidence} -> Integer {startPosition, integer, evidence}
     Float {startPosition, float, evidence} -> Float {startPosition, float, evidence}
@@ -594,6 +598,38 @@ instance Connect Expression where
           negative = seperate negative
         }
 
+data Field layout stage scope
+  = Field
+  { index :: !Int,
+    field :: !(Expression layout stage scope)
+  }
+  deriving (Show)
+
+instance Shift0.Functor (Field layout stage) where
+  map = Shift.mapDefault
+
+instance Shift.Functor (Field layout stage) where
+  map category Field {index, field} =
+    Field
+      { index,
+        field = Shift.map category field
+      }
+
+instance FreeTermVariables Field where
+  freeTermVariables target Field {field} = freeTermVariables target field
+
+instance Connect Field where
+  connect Field {index, field} =
+    Field
+      { index,
+        field = connect field
+      }
+  seperate Field {index, field} =
+    Field
+      { index,
+        field = seperate field
+      }
+
 data Explicit layout stage scope where
   Explicit :: !(Expression layout Resolve (Scope.Local ':+ scope)) -> Explicit layout Resolve scope
   Known :: !(Simple.TypeLambdaOver (Expression layout Check) scope) -> Explicit layout Check scope
@@ -617,6 +653,3 @@ instance FreeTermVariables Explicit where
 instance Connect Explicit where
   connect (Explicit expression) = Explicit (connect expression)
   seperate (Known expression) = Known (Simple.map (Simple.Map seperate) expression)
-
-callHead_ :: CallHead layout stage scope -> Expression layout stage scope
-callHead_ callHead = CallHead {callHead}

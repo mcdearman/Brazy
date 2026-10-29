@@ -2,7 +2,7 @@ module Semantic.Check.Simple.Constructor where
 
 import Control.Monad.ST (ST)
 import Core.Substitute (substituteType)
-import Core.Tree.Constructor (Asked (..), Constructor (..), Shape (..))
+import Core.Tree.Constructor (Asked (..), Constructor, ConstructorF (..), Shape (..))
 import qualified Core.Tree.Type as Core
 import qualified Data.Vector.Strict as Strict
 import Data.Traversable (for)
@@ -10,11 +10,11 @@ import qualified Data.Vector.Strict as Strict.Vector
 import Core.Tree.Type (TypeF (Variable))
 import Data.Foldable (toList)
 import Data.Maybe (catMaybes, isNothing)
-import Semantic.Check.ConstructorInstance (ConstructorInstance (ConstructorInstance), Use (..))
+import Semantic.Check.Instanciate.Constructor (ConstructorInstance (ConstructorInstance), Use (..))
 import qualified Semantic.Index.Local as Local
 import qualified Semantic.Index.Type2 as Type2
-import qualified Semantic.Check.ConstructorInstance as ConstructorInstance
-import qualified Semantic.Check.EntryInstance as EntryInstance
+import qualified Semantic.Check.Instanciate.Constructor as ConstructorInstance
+import qualified Semantic.Check.Instanciate.Entry as EntryInstance
 import Semantic.Scope (Environment ((:+)), Local)
 import qualified Semantic.Unify as Unify
 import Syntax.Position (Position)

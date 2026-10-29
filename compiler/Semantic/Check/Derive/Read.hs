@@ -5,13 +5,12 @@
 -- @Hazy.Helper@), as @lex@ has them.
 module Semantic.Check.Derive.Read (readsPrec) where
 
+import qualified Core.Tree.Type as Levity (lazy)
 import {-# SOURCE #-} qualified Builtin.Read as Read
 import {-# SOURCE #-} qualified Builtin.Semigroup as Semigroup
 import Control.Monad.ST (ST)
 import qualified Core.Tree.Class as Class
-import qualified Core.Tree.ConstructorInfo as Core.ConstructorInfo
 import Core.Tree.Data (Data)
-import Core.Tree.EntryInfo (EntryInfo (..))
 import Core.Tree.Evidence (Evidence, EvidenceF (Variable, instanciation, variable))
 import Core.Tree.Expression (Expression)
 import qualified Core.Tree.Expression as Expression
@@ -24,13 +23,13 @@ import Data.Text.Lazy (toStrict)
 import Data.Text.Lazy.Builder (fromString, toLazyText)
 import qualified Data.Vector.Strict as Strict.Vector
 import Error (cannotDerive)
-import Semantic.Check.ConstructorInstance (ConstructorInstance (..))
-import qualified Semantic.Check.ConstructorInstance as ConstructorInstance
+import Semantic.Check.Instanciate.Constructor (ConstructorInstance (..))
+import qualified Semantic.Check.Instanciate.Constructor as ConstructorInstance
 import Semantic.Check.Context (Context)
-import Semantic.Check.DataInstance (DataInstance (..))
+import Semantic.Check.Instanciate.Data (DataInstance (..))
 import Semantic.Check.Derive.Show (printConstructor, printField)
-import Semantic.Check.EntryInstance (entry)
-import Semantic.Check.Simple.ConstructorInfo (ConstructorInfo)
+import Semantic.Check.Instanciate.Entry (entry)
+import Semantic.Check.Info.Constructor (ConstructorInfo)
 import Semantic.Check.Simple.Data (instanciateApart)
 import qualified Semantic.Check.Temporary.ConstructorInfo as ConstructorInfo
 import qualified Semantic.Check.Temporary.Pattern as Apart (within)
@@ -72,11 +71,10 @@ data Alternative scope = Alternative
     info :: ConstructorInfo scope
   }
 
-lazy :: Int -> Core.ConstructorInfo.ConstructorInfo scope
-lazy count =
-  Core.ConstructorInfo.ConstructorInfo
-    { entries = Strict.Vector.replicate count EntryInfo {strict = Core.Constructor Type2.Lazy}
-    }
+-- |
+-- Something a constructor holds lazily.
+lazily :: Expression scope -> TypeLambda.TypeLambda scope
+lazily = TypeLambda.mono Levity.lazy
 
 string :: String -> Expression scope
 string = foldr cons nil
@@ -84,16 +82,14 @@ string = foldr cons nil
     cons character rest =
       Expression.Constructor
         { constructor = Constructor.cons,
-          arguments = Strict.Vector.fromList [Expression.Character {character}, rest],
-          constructorInfo = lazy 2
+          arguments = lazily <$> Strict.Vector.fromList [Expression.Character {character}, rest]
         }
 
 nil :: Expression scope
 nil =
   Expression.Constructor
     { constructor = Constructor.nil,
-      arguments = Strict.Vector.empty,
-      constructorInfo = lazy 0
+      arguments = Strict.Vector.empty
     }
 
 helper :: String -> Expression scope
@@ -114,19 +110,19 @@ chain [] held constructor info rest =
   Expression.Constructor
     { constructor = Constructor.cons,
       arguments =
-        Strict.Vector.fromList
+        lazily
+          <$> Strict.Vector.fromList
           [ Expression.Constructor
               { constructor = Constructor.tuple 2,
                 arguments =
-                  Strict.Vector.fromList
+                  lazily
+                    <$> Strict.Vector.fromList
                     [ Expression.simplifyConstructorExact constructor info (Strict.Vector.fromList (reverse held)),
                       rest
-                    ],
-                constructorInfo = lazy 2
+                    ]
               },
             nil
-          ],
-      constructorInfo = lazy 2
+          ]
     }
 chain (step : steps) held constructor info rest =
   helper "derivedBind"
@@ -148,8 +144,8 @@ chain (step : steps) held constructor info rest =
         ( Expression.Method
             { method = Method.readsPrec,
               evidence,
-              instanciation = Mono,
-              methodInfo = Class.info Read.definition
+              instanciation = Mono {levity = Levity.lazy},
+              constraintCount = Class.info Read.definition
             }
             `Expression.call` Expression.int precedence
             `Expression.call` rest,
@@ -244,13 +240,13 @@ readsPrec context position typeIndex datax = do
         append left right =
           Expression.Method
             { method = Method.combine,
-              evidence = Variable {variable = Index.Evidence.Direct Type2.Semigroup Type2.List, instanciation = Mono},
-              instanciation = Mono,
-              methodInfo = Class.info Semigroup.definition
+              evidence = Variable {variable = Index.Evidence.Direct Type2.Semigroup Type2.List, instanciation = Mono {levity = Levity.lazy}},
+              instanciation = Mono {levity = Levity.lazy},
+              constraintCount = Class.info Semigroup.definition
             }
             `Expression.call` left
             `Expression.call` right
         body = case alternatives of
           [] -> nil
           _ -> foldr1 append (map alternative alternatives)
-    pure $ Generated $ Solved $ TypeLambda.mono $ Expression.Lambda $ Expression.Lambda body
+    pure $ Generated $ Solved $ TypeLambda.mono Levity.lazy $ Expression.Lambda $ Expression.Lambda body

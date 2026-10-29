@@ -1,21 +1,20 @@
 module Semantic.Check.Temporary.Definition3 where
 
 import Control.Monad.ST (ST)
-import qualified Core.Tree.Constructor (Constructor (..), Shape (..))
-import qualified Core.Tree.Data (Data (..))
+import qualified Core.Tree.Constructor (ConstructorF (..), Shape (..))
+import qualified Core.Tree.Data (Data (..), DefinitionF (..))
 import Core.Tree.TypeDeclaration (assumeData)
 import Data.Foldable (toList)
 import qualified Core.Builtin as Builtin
 import Semantic.Check.Context (Context (..))
-import qualified Semantic.Check.TypeBinding as TypeBinding
+import qualified Semantic.Check.Binding.Type as TypeBinding
 import qualified Semantic.Index.Constructor as Constructor
 import qualified Semantic.Index.Table.Type as Type
 import qualified Semantic.Shift as Shift
 import qualified Semantic.Tree.Alternative as Alternative (Alternative (..))
 import qualified Semantic.Tree.Body as Body (Body (..))
 import qualified Semantic.Tree.Expression as Expression (Expression (..))
-import qualified Semantic.Tree.Pattern as Pattern (Pattern (..))
-import qualified Semantic.Tree.PatternField as PatternField (Field (..))
+import qualified Semantic.Tree.Pattern as Pattern (Bindings (..), Field (..), Pattern (..))
 import qualified Semantic.Tree.RightHandSide as RightHandSide (RightHandSide (..))
 import Semantic.Check.Temporary.Definition2 (Definition2)
 import qualified Semantic.Check.Temporary.Definition2 as Definition2
@@ -88,11 +87,14 @@ indexed Context {typeEnvironment} (Semantic.Label _ definition) = case definitio
         if found then pure True else anyM check rest
     alternative Alternative.Alternative {parameter} = anyM constructor (constructors parameter)
     constructors = \case
-      Pattern.Constructor {constructor, patterns} -> constructor : concatMap constructors (toList patterns)
-      Pattern.Record {constructor, fields} ->
-        constructor : concat [constructors patternx | PatternField.Field {patternx} <- toList fields]
-      Pattern.List {items} -> concatMap constructors (toList items)
-      _ -> []
+      Pattern.Match {match} -> case match of
+        Pattern.Constructor {constructor, patterns} -> constructor : concatMap constructors (toList patterns)
+        Pattern.Record {constructor, fields} ->
+          constructor : concat [constructors field | Pattern.Field {field} <- toList fields]
+        Pattern.List {items} -> concatMap constructors (toList items)
+        _ -> []
+      Pattern.Signature {patternx} -> constructors patternx
+      Pattern.Wildcard {} -> []
     -- The patterns are two scopes in: that of the definitions this one is
     -- defined with, and that of what it defines for itself. A type that
     -- is defined in the second is not looked for.
@@ -100,7 +102,7 @@ indexed Context {typeEnvironment} (Semantic.Label _ definition) = case definitio
       Nothing -> pure False
       Just typeIndex -> do
         let get index = assumeData <$> TypeBinding.content (typeEnvironment Type.! index)
-        Core.Tree.Data.Data {constructors = declared} <- Builtin.index pure get typeIndex
+        Core.Tree.Data.Data {definition = Core.Tree.Data.Definition {constructors = declared}} <- Builtin.index pure get typeIndex
         pure $ any telling declared
     telling Core.Tree.Constructor.Constructor {shape} = case shape of
       Core.Tree.Constructor.Ordinary -> False

@@ -1,10 +1,8 @@
 module Semantic.Resolve.Temporary.ExpressionInfix where
 
-import Data.Functor.Identity (Identity (..))
-import Data.List.Reverse (List (..))
 import qualified Semantic.Index.Constructor as Constructor (cons)
 import Semantic.Layout (Normal)
-import qualified Semantic.Resolve.Binding.Constructor as Constructor (BindingF (..), Detail (..))
+import qualified Semantic.Resolve.Binding.Constructor as Constructor (Detail (..), get)
 import qualified Semantic.Resolve.Binding.Term as Term
 import Semantic.Resolve.Context
   ( Context (..),
@@ -23,9 +21,8 @@ import Semantic.Tree.Combinators.Inferred (Inferred (Inferred))
 import Semantic.Tree.Expression (Expression)
 import qualified Semantic.Tree.Expression as Expression (Expression (..))
 import Syntax.Position (Position)
-import Syntax.Tree.Associativity (Associativity (..))
 import qualified Syntax.Tree.ExpressionInfix as Syntax (Infix (..))
-import Syntax.Tree.Fixity (Fixity (..))
+import Syntax.Tree.Fixity (Associativity (..), Fixity (..))
 import Syntax.Tree.Marked (Marked (..))
 import Syntax.Variable (QualifiedName (..))
 import Prelude hiding (Either (Left, Right))
@@ -58,12 +55,10 @@ resolve context = \case
     Infix (Expression.resolve context left) (lookup operator) (resolve context right)
     where
       lookup = \case
-        operatorPosition :@ QualifiedVariable operator
-          | _ Term.:@ Identity binding <- context !- operatorPosition :@ operator ->
-              Term operatorPosition binding
-        operatorPosition :@ QualifiedConstructor operator
-          | _ Constructor.:@ Identity binding <- context !=~ operatorPosition :@ operator ->
-              Constructor operatorPosition binding
+        operatorPosition :@ QualifiedVariable operator ->
+          Term operatorPosition $ Term.get $ context !- operatorPosition :@ operator
+        operatorPosition :@ QualifiedConstructor operator ->
+          Constructor operatorPosition $ Constructor.get $ context !=~ operatorPosition :@ operator
   Syntax.InfixCons {head, operatorPosition, tail} ->
     Infix (Expression.resolve context head) (Cons operatorPosition) (resolve context tail)
   Syntax.Negate {startPosition, negative} -> Prefix (Negate startPosition) (resolve context negative)
@@ -92,8 +87,8 @@ fixWith = Infix.fixWith negate operator
       Expression Normal Resolve scope
     operator left index right = case index of
       Term position Term.Binding {index} ->
-        Expression.resolveTerm2 position index (Nil :> left :> right)
+        Expression.resolveTerm2 position index [left, right]
       Constructor position Constructor.Binding {index} ->
-        Expression.resolveConstructor2 position index (Nil :> left :> right)
+        Expression.resolveConstructor2 position index [left, right]
       Cons position ->
-        Expression.resolveConstructor2 position Constructor.cons (Nil :> left :> right)
+        Expression.resolveConstructor2 position Constructor.cons [left, right]

@@ -2,6 +2,7 @@ module Semantic.Check.Temporary.Statements where
 
 import Control.Monad.ST (ST)
 import qualified Core.Tree.Type as Core
+import qualified Core.Tree.Type as Type
 import Core.Type.Functor (shiftLogical)
 import Semantic.Check.Context (Context)
 import qualified Semantic.Check.Go.Declarations as Declarations
@@ -15,7 +16,6 @@ import qualified Semantic.Scope as Scope (Declaration, Pattern)
 import Semantic.Stage (Check, Resolve)
 import Semantic.Tree.Combinators.Inferred (Inferred (..))
 import qualified Semantic.Tree.Declarations as Proper.Declarations
-import qualified Semantic.Tree.Pattern as Semantic.Pattern
 import qualified Semantic.Tree.Statements as Semantic
 import qualified Semantic.Tree.Statements as Solved
 import qualified Semantic.Unify as Unify
@@ -35,7 +35,8 @@ data Statements s scope
       { startPosition :: !Position,
         patternx :: !(Pattern s scope),
         effect :: !(Expression s scope),
-        thenx :: !(Statements s (Scope.Pattern ':+ scope))
+        thenx :: !(Statements s (Scope.Pattern ':+ scope)),
+        fail :: !Bool
       }
   | Let
       { startPosition :: !Position,
@@ -56,13 +57,13 @@ check context typex = \case
     effect <- Expression.check context Core.bool effect
     after <- check context typex after
     pure Run {startPosition, effect, after}
-  Semantic.Bind {startPosition, patternx, effect, thenx} -> do
+  Semantic.Bind {startPosition, patternx, effect, thenx, fail} -> do
     binder <- Unify.fresh Core.typex
     effect <- Expression.check context binder effect
-    patternx <- Pattern.check context binder patternx
+    patternx <- Pattern.check context Type.lazy binder patternx
     thenx <- check (Pattern.augment patternx context) (shiftLogical typex) thenx
     Pattern.sealed context patternx [binder, typex]
-    pure Bind {startPosition, patternx, effect, thenx}
+    pure Bind {startPosition, patternx, effect, thenx, fail}
   Semantic.Let {startPosition, declarations, body} -> do
     context Declarations.:& declarations <- Declarations.check context declarations
     body <- check context (shiftLogical typex) body
@@ -82,10 +83,10 @@ solve (Run startPosition expression statements) = do
         effect,
         after
       }
-solve (Bind startPosition patternx expression statements) = do
+solve Bind {startPosition, patternx, effect, thenx, fail} = do
   patternx <- Pattern.solve patternx
-  effect <- Expression.solve expression
-  thenx <- solve statements
+  effect <- Expression.solve effect
+  thenx <- solve thenx
   pure $
     Solved.Bind
       { startPosition,
@@ -93,7 +94,7 @@ solve (Bind startPosition patternx expression statements) = do
         evidence = Solved Semantic.Bool,
         effect,
         thenx,
-        fail = not $ Semantic.Pattern.neverFails patternx
+        fail
       }
 solve (Let startPosition declarations statements) = do
   declarations <- declarations

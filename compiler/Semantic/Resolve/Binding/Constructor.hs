@@ -2,7 +2,7 @@ module Semantic.Resolve.Binding.Constructor where
 
 import Data.Functor.Classes (Show1 (..), showsPrec1)
 import Data.Functor.Compose (Compose (..))
-import Data.Functor.Identity (Identity)
+import Data.Functor.Identity (Identity (..))
 import Data.Map (Map)
 import Data.NaturalTransformation (NaturalTransformation (..))
 import qualified Data.Strict.Maybe as Strict (Maybe)
@@ -12,6 +12,8 @@ import qualified Semantic.Index.Constructor as Constructor
 import Semantic.Resolve.Functor2 (Traversable2 (..))
 import qualified Semantic.Shift as Shift
 import qualified Semantic.Shift0 as Shift0
+import Semantic.Stage (Resolve)
+import Semantic.Tree.Pattern (Failable)
 import Syntax.Position (Position)
 import Syntax.Tree.Fixity (Fixity)
 import Syntax.Variable (Variable)
@@ -42,6 +44,9 @@ instance (Applicative loeb) => Semigroup (BindingF loeb scope) where
 instance Traversable2 BindingF where
   traverse2 (Morph f) (position :@ binding) = (:@) position <$> getCompose (f binding)
 
+get :: BindingF Identity scope -> Detail scope
+get (:@) {value = Identity value} = value
+
 data Detail scope = Binding
   { index :: !(Constructor.Index scope),
     fixity :: !Fixity,
@@ -50,7 +55,7 @@ data Detail scope = Binding
     selections :: !(Strict.Vector (Strict.Maybe Int)),
     unordered :: !Bool,
     fielded :: !Bool,
-    single :: !Bool
+    failable :: !(Failable Resolve)
   }
   deriving (Show)
 
@@ -62,7 +67,7 @@ instance Shift0.Functor Detail where
   map = Shift.mapDefault
 
 instance Shift.Functor Detail where
-  map category Binding {index, fixity, fields, selections, unordered, fielded, single} =
+  map category Binding {index, fixity, fields, selections, unordered, fielded, failable} =
     Binding
       { index = Shift.map category index,
         fixity,
@@ -70,5 +75,5 @@ instance Shift.Functor Detail where
         selections,
         unordered,
         fielded,
-        single
+        failable
       }

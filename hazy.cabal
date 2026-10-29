@@ -109,23 +109,22 @@ executable hazy
     Core.Eta
     Core.Foreign
     Core.Marshal
+    Core.Evidence.Functor
     Core.Index.Table.Term
+    Core.Instanciate
     Core.Substitute
     Core.Temporary.Definition
     Core.Temporary.Function
-    Core.Temporary.Pattern
     Core.Temporary.RightHandSide
     Core.Tree.Class
     Core.Tree.ClassExtra
     Core.Tree.Constraint
     Core.Tree.Constraints
     Core.Tree.Constructor
-    Core.Tree.ConstructorInfo
     Core.Tree.Data
     Core.Tree.Declaration
     Core.Tree.Declarations
     Core.Tree.Entry
-    Core.Tree.EntryInfo
     Core.Tree.Evidence
     Core.Tree.EvidenceSet
     Core.Tree.Expression
@@ -133,7 +132,6 @@ executable hazy
     Core.Tree.Instance
     Core.Tree.Instanciation
     Core.Tree.MethodConcrete
-    Core.Tree.MethodInfo
     Core.Tree.Module
     Core.Tree.Statements
     Core.Tree.Type
@@ -171,10 +169,10 @@ executable hazy
     Package
     Repl
     Repl.Entry
-    Semantic.Check.ClassInstance
-    Semantic.Check.ConstructorInstance
+    Semantic.Check.Instanciate.Class
+    Semantic.Check.Instanciate.Constructor
     Semantic.Check.Context
-    Semantic.Check.DataInstance
+    Semantic.Check.Instanciate.Data
     Semantic.Check.Derive.Bounded
     Semantic.Check.Derive.Enum
     Semantic.Check.Derive.Eq
@@ -184,7 +182,7 @@ executable hazy
     Semantic.Check.Derive.Read
     Semantic.Check.Derive.Show
     Semantic.Default
-    Semantic.Check.EntryInstance
+    Semantic.Check.Instanciate.Entry
     Semantic.Check.Go.Declaration
     Semantic.Check.Go.Declarations
     Semantic.Check.Go.Definition4
@@ -197,17 +195,16 @@ executable hazy
     Semantic.Check.Go.TypeDeclaration
     Semantic.Check.Go.TypeDeclarationExtra
     Semantic.Check.Go.TypeDefinition2
-    Semantic.Check.LocalBinding
+    Semantic.Check.Info.Constructor
+    Semantic.Check.Info.Entry
+    Semantic.Check.Info.Method
+    Semantic.Check.Info.Selector
+    Semantic.Check.Info.Update
+    Semantic.Check.Binding.Local
     Semantic.Check.Mask
-    Semantic.Check.Simple.Class
     Semantic.Check.Simple.Constructor
-    Semantic.Check.Simple.ConstructorInfo
     Semantic.Check.Simple.Data
-    Semantic.Check.Simple.EntryInfo
-    Semantic.Check.Simple.MethodInfo
-    Semantic.Check.Simple.Scheme
-    Semantic.Check.Simple.SelectorInfo
-    Semantic.Check.Simple.UpdateInfo
+    Semantic.Check.Scheme
     Semantic.Check.Temporary.Alternative
     Semantic.Check.Temporary.Body
     Semantic.Check.Temporary.CallHead
@@ -223,15 +220,12 @@ executable hazy
     Semantic.Check.Temporary.Entry
     Semantic.Check.Temporary.EntryInfo
     Semantic.Check.Temporary.Expression
-    Semantic.Check.Temporary.ExpressionField
     Semantic.Check.Temporary.Function
     Semantic.Check.Temporary.Lambda
     Semantic.Check.Temporary.Method
     Semantic.Check.Temporary.Pattern
-    Semantic.Check.Temporary.PatternField
     Semantic.Check.Temporary.RightHandSide
     Semantic.Check.Temporary.Scheme
-    Semantic.Check.Temporary.Select
     Semantic.Check.Temporary.SelectorInfo
     Semantic.Check.Temporary.Statements
     Semantic.Check.Temporary.StrictnessAnnotation
@@ -239,9 +233,9 @@ executable hazy
     Semantic.Check.Temporary.TypeDefinition
     Semantic.Check.Temporary.TypePattern
     Semantic.Check.Temporary.UpdateInfo
-    Semantic.Check.TermBinding
+    Semantic.Check.Binding.Term
     Semantic.Check.TypeAnnotation
-    Semantic.Check.TypeBinding
+    Semantic.Check.Binding.Type
     Semantic.Connect
     Semantic.FreeVariables
     Semantic.Functor2
@@ -292,16 +286,13 @@ executable hazy
     Semantic.Resolve.Go.Declarations
     Semantic.Resolve.Go.Entry
     Semantic.Resolve.Go.Expression
-    Semantic.Resolve.Go.ExpressionField
     Semantic.Resolve.Go.Function
     Semantic.Resolve.Go.Instance
     Semantic.Resolve.Go.Lambda
     Semantic.Resolve.Go.Module
     Semantic.Resolve.Go.Pattern
-    Semantic.Resolve.Go.PatternField
     Semantic.Resolve.Go.RightHandSide
     Semantic.Resolve.Go.Scheme
-    Semantic.Resolve.Go.Select
     Semantic.Resolve.Go.Statements
     Semantic.Resolve.Go.Type
     Semantic.Resolve.Go.TypePattern
@@ -359,7 +350,6 @@ executable hazy
     Semantic.Tree.Definition4
     Semantic.Tree.Entry
     Semantic.Tree.Expression
-    Semantic.Tree.ExpressionField
     Semantic.Tree.Function
     Semantic.Tree.GADTConstructor
     Semantic.Tree.Group
@@ -372,10 +362,8 @@ executable hazy
     Semantic.Tree.MethodConcrete
     Semantic.Tree.Module
     Semantic.Tree.Pattern
-    Semantic.Tree.PatternField
     Semantic.Tree.RightHandSide
     Semantic.Tree.Scheme
-    Semantic.Tree.Select
     Semantic.Tree.Selector
     Semantic.Tree.Statements
     Semantic.Tree.StrictnessAnnotation
@@ -398,6 +386,7 @@ executable hazy
     Semantic.Unify.Instanciation
     Semantic.Unify.Solve
     Semantic.Unify.Type
+    Semantic.Unify.Type1
     Semantic.Unify.Zonk
     Sequent.Borrow
     Sequent.FromCore
@@ -422,7 +411,6 @@ executable hazy
     Syntax.StringLiteral
     Syntax.Tree.Alias
     Syntax.Tree.Alternative
-    Syntax.Tree.Associativity
     Syntax.Tree.Body
     Syntax.Tree.Brand
     Syntax.Tree.ClassDeclaration
@@ -437,7 +425,6 @@ executable hazy
     Syntax.Tree.Exports
     Syntax.Tree.ExportSymbol
     Syntax.Tree.Expression
-    Syntax.Tree.ExpressionField
     Syntax.Tree.ExpressionInfix
     Syntax.Tree.Field
     Syntax.Tree.Fixity
@@ -453,7 +440,6 @@ executable hazy
     Syntax.Tree.Marked
     Syntax.Tree.Module
     Syntax.Tree.Pattern
-    Syntax.Tree.PatternField
     Syntax.Tree.PatternInfix
     Syntax.Tree.Qualification
     Syntax.Tree.RightHandSide
