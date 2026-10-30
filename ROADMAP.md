@@ -1511,6 +1511,21 @@ kept, and eval and apply:
       since the loop it went through was copied once where it was copied
       twice. And not putting what goes through a list from the left
       together with what makes it, which was worse for both
+- [x] Two thunks that work out the same thing are one, as GHC's common
+      subexpressions are ("Sequent.Common", after the rounds of putting
+      functions where they are called). Thunks are the same if they are
+      written the same but for the names they bind; two given to one
+      constructor or one call are named once before it, and one named
+      where one that is the same was named, with nothing it uses named
+      again in between, is a name for that one. A thunk that calls
+      something with no arguments runs an action, or asks for a value that
+      is called by name, and is never one with another (test `by-name`).
+      `binarytrees`, whose `make` gives both halves of a tree the same
+      call, makes 80 million blocks where it made 189 million, and takes
+      0.41 seconds where it took 0.56: each half is made once. A thunk
+      that threw and is asked for again has to throw again for this, since
+      what threw may now be asked for by something else (test
+      `common-thunks`)
 - [ ] A function that does not call itself, given an instance that is
       known, is not copied for it. Tried for `queens`, whose `safe` is
       given the instances of `Int` as a local function with a class in its
@@ -1525,7 +1540,8 @@ Where it stands against GHC with `-O1`, on 2026-10-29, each workload made
 big enough to be timed (in `~/perf2` of the machine it was measured on).
 Seconds, the best of three, and how many times GHC's; the output of each is
 the same as GHC's. `binarytrees` is against GHC without `-fcse` and
-`-ffull-laziness` too, which take the repeated work out of it:
+`-ffull-laziness` too, which take the repeated work out of it; Hazy now
+has the first (see above):
 
 | Workload | Brazy | GHC | Times | What most of it is |
 | - | - | - | - | - |
