@@ -35,7 +35,7 @@ import Error
     unsupportedFeaturePolymorphicComponents,
   )
 import qualified Semantic.Check.Instanciate.Constructor as ConstructorInstance
-import Semantic.Check.Context (Context (..))
+import Semantic.Check.Context (Context (..), shiftDefaulting)
 import Semantic.Check.Instanciate.Data (DataInstance (DataInstance))
 import qualified Semantic.Check.Instanciate.Data as DataInstance
 import Semantic.Check.Instanciate.Entry (EntryInstance (..))
@@ -245,7 +245,7 @@ augment patternx Context {termEnvironment, localEnvironment, typeEnvironment, eq
       localEnvironment = Local.Pattern localEnvironment,
       typeEnvironment = Type.Pattern typeEnvironment,
       equalities = fmap shiftEquality (learnt patternx ++ equalities) ++ given id patternx,
-      defaulting
+      defaulting = shiftDefaulting defaulting
     }
 
 -- |

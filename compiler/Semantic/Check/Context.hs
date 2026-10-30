@@ -8,14 +8,13 @@
 module Semantic.Check.Context where
 
 import Control.Monad.ST (ST)
-import Semantic.Default (Default)
 import qualified Semantic.Default as Default
 import qualified Core.Builtin as Builtin
 import Core.Substitute (logicalType)
 import qualified Core.Tree.Type as Core
 import Core.Tree.TypeDeclaration (assumeData)
 import qualified Data.Kind
-import Data.Maybe (mapMaybe)
+import Data.Maybe (fromMaybe, mapMaybe)
 import Data.STRef (STRef, newSTRef, readSTRef, writeSTRef)
 import Data.Vector (Vector)
 import qualified Data.Vector as Vector
@@ -63,8 +62,13 @@ data Context s scope = Context
     equalities :: ![Equality s scope],
     -- | What a type that is never worked out may be taken to be, in order:
     -- see "Semantic.Default".
-    defaulting :: ![Default]
+    defaulting :: ![Type2.Index scope]
   }
+
+-- |
+-- The types to default to, from inside a scope that the context goes into.
+shiftDefaulting :: [Type2.Index scope] -> [Type2.Index (scope' ':+ scope)]
+shiftDefaulting = map Shift.shift
 
 typeEnvironment_ = typeEnvironment
 
@@ -114,7 +118,8 @@ instance Shift.Unshift (Context s) where
         -- What is known here is known further out as far as it can be
         -- said there.
         equalities = mapMaybe Unify.lowerEquality equalities,
-        defaulting
+        -- They are types of the module's, which are there further out too.
+        defaulting = map (fromMaybe (error "bad default") . Shift.partialUnshift Nothing) defaulting
       }
 
 globalBindings ::
@@ -172,7 +177,7 @@ localBindings
         localEnvironment = Local.Declaration localEnvironment,
         typeEnvironment = Type.Declaration typeBindings typeEnvironment,
         equalities = shiftEquality <$> equalities,
-        defaulting
+        defaulting = shiftDefaulting defaulting
       }
     where
       termBindings = TermBinding.local <$> terms
@@ -197,7 +202,7 @@ groupTermBindings used declarations Context {termEnvironment, localEnvironment, 
       localEnvironment = Local.GroupTerm localEnvironment,
       typeEnvironment = Type.GroupTerm typeEnvironment,
       equalities = shiftEquality <$> equalities,
-      defaulting
+      defaulting = shiftDefaulting defaulting
     }
   where
     termBindings = TermBinding.group used <$> declarations
@@ -221,7 +226,7 @@ groupTypeBindings
         localEnvironment = Local.GroupType localEnvironment,
         typeEnvironment = Type.GroupType typeBindings typeEnvironment,
         equalities = shiftEquality <$> (Grouping (zip (Vector.toList outside) (Vector.toList declarations)) : equalities),
-        defaulting
+        defaulting = shiftDefaulting defaulting
       }
   where
     typeBindings = Vector.zipWith3 TypeBinding.group positions labels declarations

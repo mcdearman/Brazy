@@ -59,7 +59,6 @@ import qualified Core.Tree.Class as Class (Class (..))
 import Core.Tree.TypeDeclaration (assumeClass)
 import Data.List (find)
 import Data.Maybe (isJust)
-import qualified Semantic.Default as Default (typeOf)
 import Syntax.Position (Position)
 import Prelude hiding (Functor, head, map)
 
@@ -277,12 +276,16 @@ defaulted context position typex = case typex of
       Unsolved {constraints} -> do
         let classes = Map.keys constraints
             alone Delay {arguments} = null arguments
-            fits candidate = all (\classx -> instanced context classx (Default.typeOf candidate)) classes
+            fits candidate = all (\classx -> instanced context classx candidate) classes
         numbers <- isJust <$> firstM (numeric context) classes
+        -- What a default declaration lists has to be a number, as the
+        -- report has it: that is asked of each, as of any type.
+        for_ (defaulting context) $ \candidate ->
+          constrain context position Type2.Num (Constructor candidate)
         case find fits (defaulting context) of
           Just candidate
             | numbers && all alone (concat (Map.elems constraints)) -> do
-                unify context position typex (Constructor (Default.typeOf candidate))
+                unify context position typex (Constructor candidate)
                 pure True
           _ -> pure False
   _ -> pure True

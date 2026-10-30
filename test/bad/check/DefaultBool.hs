@@ -1,4 +1,6 @@
 module DefaultBool where
 
--- Only the builtin types of numbers can be listed.
+-- What a default declaration lists has to be an instance of Num.
 default (Integer, Bool)
+
+shown = show (1 + 2)
