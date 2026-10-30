@@ -21,7 +21,7 @@
 -- The bodies that are put in are those of the definitions as they were
 -- before this was done to them. So this can be done over again, each time
 -- reaching one call further, and it always ends.
-module Sequent.Inline (inline, specialize, copy, isCopy, uses) where
+module Sequent.Inline (inline, specialize, copy, isCopy, uses, lastly) where
 
 import Control.Monad.ST (ST, runST)
 import Data.Map (Map)
@@ -54,9 +54,12 @@ import Sequent.Tree
 -- |
 -- The time over that what lists are made and gone through with is put where
 -- it is called. Before it, a list that is made by 'build' and gone through
--- by 'listFoldr' at once can be seen as that.
+-- by 'listFoldr' at once can be seen as that. It is the last round: what
+-- goes through a list may come to 'listFoldr' only after a few, as @and@
+-- does by way of 'Foldable', and held back one round less, @and@ over a
+-- comprehension made the list.
 lastly :: Int
-lastly = 4
+lastly = 5
 
 -- |
 -- What lists are made and gone through with, in "Hazy.Helper", as fusion
