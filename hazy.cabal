@@ -389,6 +389,7 @@ executable hazy
     Semantic.Unify.Type1
     Semantic.Unify.Zonk
     Sequent.Borrow
+    Sequent.Common
     Sequent.FromCore
     Sequent.Hoist
     Sequent.Inline

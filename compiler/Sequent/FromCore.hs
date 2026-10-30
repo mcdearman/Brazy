@@ -71,6 +71,7 @@ import qualified Semantic.Scope as Scope
 import Sequent.Primitive (Primitive (Export, Field))
 import Sequent.Borrow (Lending, lending)
 import Sequent.Hoist (Unshared (..), hoist)
+import Sequent.Common (common)
 import Sequent.Inline (copy, inline, isCopy, lastly, specialize, uses)
 import qualified Sequent.Uncurry as Uncurry (direct, rewrite, shape, split, whole)
 import qualified Sequent.Runtime as Runtime
@@ -262,7 +263,9 @@ tables modules = Tables {members = family, borrowed = lends, lost = unshared, ta
                 copies = Map.unions (map snd (Map.elems made))
              in Map.union (Map.map fst made) (Map.mapWithKey Map.singleton copies)
        in Map.map improving before
-    inlined = foldl improve finished [1 .. lastly]
+    -- Then two thunks that work out the same thing are one: see
+    -- "Sequent.Common".
+    inlined = Map.map (Map.map (Map.map (simplify . common))) (foldl improve finished [1 .. lastly])
     -- Whether calling a definition with every argument runs an action,
     -- which it does when one of the functions it is made of takes none.
     acts global = maybe False (elem 0) (known (Uncurry.whole global))
