@@ -1528,6 +1528,19 @@ kept, and eval and apply:
       that threw and is asked for again has to throw again for this, since
       what threw may now be asked for by something else (test
       `common-thunks`)
+- [x] A function that calls itself and adds a number to what the call gives
+      back, as `collatz n = 1 + collatz m` does, adds as it goes
+      ("Sequent.Accumulate"). There is no stack: what is to be done with
+      what a call gives back is a consumer made before the call, so
+      `collatz` made one for each step. A copy of the function takes what
+      has been added so far as a parameter more, adds the number to it
+      where it called itself and calls itself last; where it gives a value
+      back, it gives back the sum. Adding `Int`s is associative, wrapping
+      round or not, so the sum is the same. `collatz` makes 6 million
+      blocks where it made 137 million, and takes 0.41 seconds where it
+      took 0.61, GHC's 0.36; `binarytrees`, whose `check` adds what one
+      half gives to what the other does, makes 43 million where it made 80
+      (test `accumulate`)
 - [ ] A function that does not call itself, given an instance that is
       known, is not copied for it. Tried for `queens`, whose `safe` is
       given the instances of `Int` as a local function with a class in its
