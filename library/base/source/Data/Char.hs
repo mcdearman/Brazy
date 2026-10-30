@@ -44,7 +44,6 @@ import Hazy.Prelude
     isDigit,
     isSpace,
     lexLitChar,
-    placeholder,
     readLitChar,
     showLitChar,
   )

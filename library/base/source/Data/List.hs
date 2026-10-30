@@ -122,7 +122,6 @@ where
 
 import Data.Foldable (find, maximumBy, minimumBy)
 import Data.Traversable (mapAccumL, mapAccumR)
-import Hazy.Prelude (placeholder)
 
 uncons :: [a] -> Maybe (a, [a])
 uncons = \case

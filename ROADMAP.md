@@ -1094,13 +1094,14 @@ The order to take it in:
     ask it of the programs and not of the compiler
   - Its interactive session reads lines as they are given. There is no
     editing, completing, colour or history: the library's `Lambline` is a
-    plain one, and `Viewer` is a placeholder
+    plain one, and `Viewer` writes each page out one after another
 - [ ] What the library still does not do:
   - Exceptions are told apart by a name each type gives itself
     (`exceptionTag`). Types that give none are taken for each other. An
     exit is an exception, as in GHC's library, and `error` is not one
-  - `Viewer` is a placeholder, and `Lambline` reads lines without editing
-    them
+  - `Viewer` writes its pages out one after another, where the viewer of
+    the compiler GHC makes shows one at a time in a window of the terminal,
+    and `Lambline` reads lines without editing them
   - `toUpper` and `toLower` change the letters of Latin-1 only
   - An `Int` is 63 bits, where GHC's is 64: see Track A
   - Whatever is read from a handle is read at once, not as it is wanted
@@ -1236,7 +1237,8 @@ the compiler builds itself natively (see `tools/bootstrap.sh`):
       `parser-combinators`, `text` and `vector`, written in `library/base`
 - [x] The three libraries the tools added, `diagnose`, `lambline` and
       `brick`, behind `Diagnostics`, `Repl` and `Viewer`. The first is drawn
-      by hand, the second reads plain lines, and the third is a placeholder
+      by hand, the second reads plain lines, and the third writes its pages
+      out one after another
 - [x] Exceptions, in `Control.Exception`
 - [x] File and process IO in the Rust runtime: the compiler made by Hazy
       reads its source, writes its LLVM and runs clang
@@ -1581,7 +1583,7 @@ Found while comparing the two backends:
       code
 - [x] `trace` is only reachable as `Hazy.Prelude.trace`; `base` has no
       `Debug.Trace`. It has one now
-- [ ] Much of `library/base` is placeholders that fail when called
+- [x] Much of `library/base` is placeholders that fail when called
       (`Data.List.sort`, `Data.Char.toUpper`, `Data.Maybe.fromMaybe`), which
       shows up quickly at the prompt. What is done:
   - The modules every program reaches for have none left: `Data.List`,
@@ -1653,7 +1655,10 @@ Found while comparing the two backends:
     and read bytes as they are, between memory and a file the runtime has
     open (`hazy_put_buf`, `hazy_get_buf`; test `buffers`, which agrees with
     GHC)
-  - Left: only `Viewer`, which is a placeholder (see below)
+  - `Viewer`, the last, writes out what `:ir` shows, each page with its
+    title over it (test `viewer`). The compiler GHC makes shows the pages
+    in a window of the terminal with a tab each, over `brick`, which needs
+    more of the terminal than the library has
   - The report's modules that were not there at all are: `Data.Ix`, with
     instances for the numbers, characters, `Bool`, `Ordering`, `()` and
     tuples to five; `Data.Array`, kept as one of the runtime's arrays;
