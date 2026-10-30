@@ -1494,6 +1494,23 @@ kept, and eval and apply:
       `primes` takes 0.03 seconds where it took 0.07, `queens` 0.26 where it
       took 0.42, and `spectral` 0.19 where it took 0.36; the compiler's own
       LLVM is 1% shorter (test `comprehension-build`)
+- [x] Functions are put where they are called five times over, where it was
+      four, and what makes lists and goes through them is held back until
+      the fifth (`lastly`, in "Sequent.Inline"). `and`, which is `foldr` of
+      `Foldable`, which for a list is its instance's, which is `listFoldr`,
+      came to `listFoldr` in the round that `build` was put where it was
+      called, so `and` over a comprehension made the list and went through
+      it. Now neither list is made: `queens` makes 51.0 million blocks
+      where it made 67.5 million, and takes 0.21 seconds where it took
+      0.29; `wordfreq` takes 0.76 where it took 0.82. Compiling upstream
+      Hazy takes as long as it did, and its LLVM is 0.3% longer. A sixth
+      round does no more. Tried as well, and not kept: what is named before
+      `build` is given its function, as `zipWith` names its lists, named in
+      the function instead, so that `zip [0 ..] v` goes through no list
+      either; `spectral` then made 87 million blocks where it made 48,
+      since the loop it went through was copied once where it was copied
+      twice. And not putting what goes through a list from the left
+      together with what makes it, which was worse for both
 - [ ] A function that does not call itself, given an instance that is
       known, is not copied for it. Tried for `queens`, whose `safe` is
       given the instances of `Int` as a local function with a class in its
