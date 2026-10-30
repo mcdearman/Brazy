@@ -25,7 +25,7 @@ where
 
 import Control.Applicative (Alternative (empty, (<|>)))
 import Control.Monad (MonadPlus)
-import Hazy.Prelude (Foldable (..), placeholder)
+import Hazy.Prelude (Foldable (..))
 
 foldrM :: (Foldable t, Monad m) => (a -> b -> m b) -> b -> t a -> m b
 foldrM f z0 xs = foldl (\k x z -> f x z >>= k) pure xs z0

@@ -6,7 +6,6 @@ module Lambline where
 
 import Data.IORef (IORef, newIORef, readIORef, writeIORef)
 import Data.Text (pack, unpack)
-import Hazy.Prelude (placeholder)
 import System.IO (hFlush, hIsTerminalDevice, stdin, stdout)
 import qualified System.IO.Internal as Internal
 
