@@ -71,6 +71,7 @@ import qualified Semantic.Scope as Scope
 import Sequent.Primitive (Primitive (Export, Field))
 import Sequent.Borrow (Lending, lending)
 import Sequent.Hoist (Unshared (..), hoist)
+import Sequent.Accumulate (accumulate)
 import Sequent.Common (common)
 import Sequent.Inline (copy, inline, isCopy, lastly, specialize, uses)
 import qualified Sequent.Uncurry as Uncurry (direct, rewrite, shape, split, whole)
@@ -265,7 +266,16 @@ tables modules = Tables {members = family, borrowed = lends, lost = unshared, ta
        in Map.map improving before
     -- Then two thunks that work out the same thing are one: see
     -- "Sequent.Common".
-    inlined = Map.map (Map.map (Map.map (simplify . common))) (foldl improve finished [1 .. lastly])
+    -- And a function that adds a number to what calling itself gives back
+    -- is given the sum instead: see "Sequent.Accumulate".
+    inlined = Map.map accumulated (Map.map (Map.map (Map.map (simplify . common))) (foldl improve finished [1 .. lastly]))
+    accumulated = Map.map $ \members ->
+      Map.unions
+        [ case accumulate global found of
+            Just (start, (copy, worker)) -> Map.fromList [(global, simplify start), (copy, simplify worker)]
+            Nothing -> Map.singleton global found
+          | (global, found) <- Map.toList members
+        ]
     -- Whether calling a definition with every argument runs an action,
     -- which it does when one of the functions it is made of takes none.
     acts global = maybe False (elem 0) (known (Uncurry.whole global))
