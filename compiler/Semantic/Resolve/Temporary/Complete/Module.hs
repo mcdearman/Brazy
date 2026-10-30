@@ -98,8 +98,7 @@ resolve modules = mfix $ \main ->
                 | null more ->
                     Just
                       ( startPosition,
-                        [ numeric startPosition $
-                            Type3.toType2 (unsupportedFeatureConstraintedTypeDefaulting startPosition) (context !=.* typeName)
+                        [ Type3.toType2 (unsupportedFeatureConstraintedTypeDefaulting startPosition) (context !=.* typeName)
                         | typeName <- toList defaultTypes
                         ]
                       )
@@ -136,14 +135,6 @@ resolve modules = mfix $ \main ->
 
 -- |
 -- A type a default declaration can list: a builtin type of numbers.
-numeric :: Position -> Type2.Index scope -> Type2.Index scope
-numeric position index = case index of
-  Type2.Integer -> index
-  Type2.Int -> index
-  Type2.Double -> index
-  Type2.Float -> index
-  _ -> unsupportedFeatureConstraintedTypeDefaulting position
-
 shrink :: Module -> Real.Module Identity Normal Resolve Global
 shrink Module {name, declarations, defaulting} =
   Real.Module

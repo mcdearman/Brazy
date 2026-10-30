@@ -14,7 +14,6 @@ import qualified Data.Vector as Vector
 import Data.Void (Void)
 import Graph.Topological (Loeb (..), loeb)
 import qualified Graph.Topological as Topological
-import Error (unsupportedFeatureConstraintedTypeDefaulting)
 import Semantic.Check.Context (Context (..), globalBindings)
 import qualified Semantic.Default as Default
 import qualified Semantic.Check.Go.Declarations as Declarations
@@ -107,13 +106,7 @@ checkModule written global Module {name, declarations, defaultDeclaration} =
         -- report's when it has none.
         listed = case defaultDeclaration of
           Nothing -> Default.standard
-          Just (position, types) -> map (known position) types
-        known position = \case
-          Type2.Integer -> Default.Integer
-          Type2.Int -> Default.Int
-          Type2.Double -> Default.Double
-          Type2.Float -> Default.Float
-          _ -> unsupportedFeatureConstraintedTypeDefaulting position
+          Just (_, types) -> types
 
 check :: Vector (Module Identity Group Resolve Global) -> Vector (Module Identity Group Check Global)
 check modules =

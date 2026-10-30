@@ -25,7 +25,7 @@ import Data.STRef (STRef, readSTRef, writeSTRef)
 import Data.Traversable (for)
 import qualified Data.Vector as Vector
 import qualified Data.Vector.Strict as Strict.Vector
-import Semantic.Check.Context (Context (..))
+import Semantic.Check.Context (Context (..), shiftDefaulting)
 import Semantic.Check.Binding.Local (shiftEquality)
 import Semantic.Check.Mask (Erasure (Known))
 import qualified Semantic.Check.Mask as Mask
@@ -145,7 +145,7 @@ generalizeBody position context requiring varying (Generalize run) = do
               localEnvironment = Table.Local.Local Vector.empty localEnvironment,
               typeEnvironment = Table.Type.Local typeEnvironment,
               equalities = shiftEquality <$> equalities,
-              defaulting
+              defaulting = shiftDefaulting defaulting
             }
   typex ::: term <- run inner
   allowed <- requiring
