@@ -1484,6 +1484,16 @@ kept, and eval and apply:
       a call of any function that never goes on to what it is given
       (`Sequent.Inline`). `primes` makes 22.5 million blocks where it made
       26.2 million
+- [x] A list comprehension is made as GHC makes one (`comprehension`, in
+      "Core.Tree.Expression"): the list by `build`, each generator going
+      through its list with `listFoldr`, its pattern matched against each
+      element and an element it does not match skipped, each guard going
+      on or skipping to the rest, and what is made put before the rest. It
+      was made through the list monad, whose `>>=` made a list of one
+      element, or of none, for each element and then went through it.
+      `primes` takes 0.03 seconds where it took 0.07, `queens` 0.26 where it
+      took 0.42, and `spectral` 0.19 where it took 0.36; the compiler's own
+      LLVM is 1% shorter (test `comprehension-build`)
 - [ ] A function that does not call itself, given an instance that is
       known, is not copied for it. Tried for `queens`, whose `safe` is
       given the instances of `Int` as a local function with a class in its
