@@ -14,7 +14,7 @@ import Core.Type.Functor (shiftLogical)
 import Data.Vector.Strict as Strict (Vector)
 import qualified Data.Vector.Strict as Strict.Vector
 import Semantic.Check.Binding.Local (LocalBinding (Wobbly, label, wobbly))
-import Semantic.Check.Context (Context (..))
+import Semantic.Check.Context (Context (..), shiftDefaulting)
 import Semantic.Check.Binding.Local (shiftEquality)
 import qualified Semantic.Check.Go.Scheme as Solved (Scheme (..))
 import Semantic.Check.Temporary.Constraints (Constraints)
@@ -71,7 +71,7 @@ augment scheme Context {termEnvironment, localEnvironment, typeEnvironment, equa
           localEnvironment = Local.Local (fmap wobbly scheme) localEnvironment,
           typeEnvironment = Type.Local typeEnvironment,
           equalities = shiftEquality <$> equalities,
-          defaulting
+          defaulting = shiftDefaulting defaulting
         }
   where
     wobbly
@@ -93,7 +93,7 @@ augmentSolve scheme Context {termEnvironment, localEnvironment, typeEnvironment,
           localEnvironment = Local.Local (fmap wobbly scheme) localEnvironment,
           typeEnvironment = Type.Local typeEnvironment,
           equalities = shiftEquality <$> equalities,
-          defaulting
+          defaulting = shiftDefaulting defaulting
         }
   where
     wobbly :: Solved.TypePattern position Check scope -> LocalBinding s (scope' ':+ scope)

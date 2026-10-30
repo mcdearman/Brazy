@@ -19,7 +19,7 @@ import qualified System.IO.Internal as Internal
 import Prelude hiding (appendFile, getContents, getLine, interact, putStr, putStrLn, readFile, writeFile)
 import qualified Prelude
 import Data.Text (Text)
-import Hazy.Prelude (placeholder, putStrLnText)
+import Hazy.Prelude (putStrLnText)
 import System.IO (Handle)
 
 readFile :: FilePath -> IO Text

@@ -4,4 +4,3 @@ module Data.Map
 where
 
 import qualified Data.Map.Lazy
-import Hazy.Prelude (placeholder)
