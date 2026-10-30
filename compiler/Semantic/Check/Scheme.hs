@@ -26,7 +26,7 @@ import qualified Data.Vector.Strict as Strict
 import qualified Data.Vector.Strict as Strict.Vector
 import Data.Void (Void)
 import Order (orderWithInt)
-import Semantic.Check.Context (Context (..))
+import Semantic.Check.Context (Context (..), shiftDefaulting)
 import Semantic.Check.Binding.Local (shiftEquality)
 import qualified Semantic.Check.Binding.Local as LocalBinding
 import Semantic.Check.Mask (Mask)
@@ -98,7 +98,7 @@ augmentNamed name _ parameters constraints mask Context {termEnvironment, localE
             localEnvironment = Local.Local locals localEnvironment,
             typeEnvironment = Type.Local typeEnvironment,
             equalities = shiftEquality <$> equalities,
-            defaulting
+            defaulting = shiftDefaulting defaulting
           }
 
 augment ::

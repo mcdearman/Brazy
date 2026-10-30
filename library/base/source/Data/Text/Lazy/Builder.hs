@@ -14,7 +14,6 @@ import qualified Data.Text as Strict (pack, singleton)
 import qualified Data.Text.Lazy as Lazy (fromChunks, toChunks)
 import Data.Text (Text)
 import qualified Data.Text.Lazy as Lazy (Text)
-import Hazy.Prelude (placeholder)
 
 -- A builder is the pieces of text it puts before whatever comes after it,
 -- so that two are joined without either being gone over again.
