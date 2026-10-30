@@ -3360,13 +3360,7 @@ forcing linkage =
          call void @hazy_loop()
          unreachable
        again:
-         ; It threw, and what threw was caught: what it holds throws the same
-         ; again, and is forced in its place.
-         %thrower.place = getelementptr i64, ptr %pointer, i64 1
-         %thrower = load i64, ptr %thrower.place
-         call void @hazy_share(i64 %thrower)
-         call void @hazy_erase(i64 %value)
-         musttail call tailcc void @hazy_force(i64 %consumer, i64 %thrower)
+         musttail call tailcc void @hazy_again(i64 %consumer, i64 %value)
          ret void
        done:
          ; The value is read and the thunk given up. If that was the last
@@ -3383,6 +3377,19 @@ forcing linkage =
        counted:
          call void @hazy_open(i64 %value)
          musttail call tailcc void @hazy_return(i64 %consumer, i64 %result)
+         ret void
+       }
+
+       ; A thunk that threw, the throw having been caught: what it holds
+       ; throws the same again, and is forced in its place. It is a function
+       ; of its own so that forcing is not a loop.
+       define internal tailcc void @hazy_again(i64 %consumer, i64 %value) noinline {
+         %pointer = inttoptr i64 %value to ptr
+         %thrower.place = getelementptr i64, ptr %pointer, i64 1
+         %thrower = load i64, ptr %thrower.place
+         call void @hazy_share(i64 %thrower)
+         call void @hazy_erase(i64 %value)
+         musttail call tailcc void @hazy_force(i64 %consumer, i64 %thrower)
          ret void
        }
 

@@ -1913,7 +1913,11 @@ Missing:
       keeps where the list was when it began. A throw that a catch catches
       first makes a thunk that throws the value again, and every thunk
       begun since the catch began holds it where its code was, with a tag
-      that says it threw (`catch_abandon`); forcing one forces that. The
+      that says it threw (`catch_abandon`); forcing one forces that, in a
+      function of its own (`hazy_again`): forcing it from `hazy_force` made
+      that a loop, which kept more registers for every force, and programs
+      ran 2% more instructions. They run 0.4% more at most now (`wordfreq`;
+      `binarytrees` and `set` the same). The
       AxCut machine does the same (test `thrown-again`, which agrees with
       GHC, for definitions at the top, one inside another, one made while
       the program runs, and one asked for again by its handler)
