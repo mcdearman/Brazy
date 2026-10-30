@@ -1484,6 +1484,16 @@ kept, and eval and apply:
       a call of any function that never goes on to what it is given
       (`Sequent.Inline`). `primes` makes 22.5 million blocks where it made
       26.2 million
+- [x] A list comprehension is made as GHC makes one (`comprehension`, in
+      "Core.Tree.Expression"): the list by `build`, each generator going
+      through its list with `listFoldr`, its pattern matched against each
+      element and an element it does not match skipped, each guard going
+      on or skipping to the rest, and what is made put before the rest. It
+      was made through the list monad, whose `>>=` made a list of one
+      element, or of none, for each element and then went through it.
+      `primes` takes 0.03 seconds where it took 0.07, `queens` 0.26 where it
+      took 0.42, and `spectral` 0.19 where it took 0.36; the compiler's own
+      LLVM is 1% shorter (test `comprehension-build`)
 - [ ] A function that does not call itself, given an instance that is
       known, is not copied for it. Tried for `queens`, whose `safe` is
       given the instances of `Int` as a local function with a class in its
@@ -1670,13 +1680,12 @@ Missing:
       fractions, `Double` if one is and `Integral` is not, and neither if
       both are (tests `defaulting-double` and `IntegralFraction`).
       A module's `default` declaration lists the types in its place, in its
-      order, of `Integer`, `Int`, `Double` and `Float`, and each is taken
-      only for the classes it is an instance of; `Bounded` takes part too,
-      which `Int` is an instance of (test `default-declaration`, whose
-      modules have each their own; `default ()` and a list of another type
-      are refused, tests `DefaultNone` and `DefaultBool`). The declaration
-      is resolved with the module, and the checker gives each module's
-      definitions the list it has (`defaulting`, in the context). For this
+      order, and each is taken only for the classes it is an instance of;
+      `Bounded` takes part too, which `Int` is an instance of (test
+      `default-declaration`, whose modules have each their own; `default ()`
+      is refused, test `DefaultNone`). The declaration is resolved with the
+      module, and the checker gives each module's definitions the list it
+      has (`defaulting`, in the context, shifted as the context is). For this
       `Float` and `Double` are
       builtin types, and `Floating`, `RealFrac` and `RealFloat` builtin
       classes, as `Int` and `Fractional` are: their instances are newtypes
@@ -1696,9 +1705,12 @@ Missing:
       have (test `defaulting-lookup`). A pattern keeps a tree of its own,
       since what is inside a match is checked with it; so does the
       checking of types
-- [ ] What defaulting does not do yet. A `default` declaration lists only
-      `Integer`, `Int`, `Double` and `Float`, where the report has it list
-      any type that is an instance of `Num`
+- [x] A `default` declaration lists any type, as the report has it, where
+      it listed only `Integer`, `Int`, `Double` and `Float`: a type of the
+      program's own is taken as any other is (test `default-own`). Each has
+      to be an instance of `Num`, which is asked of it when something is
+      taken to be one of them, and a type that is not is an error there
+      (test `DefaultBool`)
 - [x] Floating point. A `Float` or a `Double` is a block of its own in the
       native heap, which holds the 64 bits of a double; a `Float` is kept
       as the double it is exactly, and what is worked out of it is worked

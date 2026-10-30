@@ -24,7 +24,7 @@ import Error
     universeMustBeSmall,
     unsupportedFeatureStrictFunctions,
   )
-import Semantic.Check.Context (Context (..))
+import Semantic.Check.Context (Context (..), shiftDefaulting)
 import qualified Semantic.Check.Context as Context
 import qualified Semantic.Check.Binding.Local as LocalBinding (Equality (Expanding), LocalBinding (..), shiftEquality)
 import qualified Semantic.Check.Temporary.TypePattern as Unsolved (TypePattern (..))
@@ -159,7 +159,7 @@ inside constructor parameters Context {termEnvironment, localEnvironment, typeEn
       localEnvironment = Local.Table.Local (fmap wobbly (Strict.Vector.toLazy parameters)) localEnvironment,
       typeEnvironment = Type.Table.Local typeEnvironment,
       equalities = LocalBinding.Expanding (Shift0.map Shift0.Shift constructor) : (LocalBinding.shiftEquality <$> equalities),
-      defaulting
+      defaulting = shiftDefaulting defaulting
     }
   where
     wobbly Unsolved.TypePattern {name, typex} =
