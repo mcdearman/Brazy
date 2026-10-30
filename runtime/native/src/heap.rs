@@ -18,7 +18,11 @@
 //! * `CLOSURE`: its code, and then what it captured, as many as the count.
 //! * `THUNK`: the same as a closure.
 //! * `WORKING`: a thunk whose code is running. What it captured has been
-//!   taken by the code, and the words are stale.
+//!   taken by the code, and the words are stale. Where its code was is the
+//!   thunk begun before it that is still running (`hazy_working`). One
+//!   whose tag is `THREW` threw while it was forced, the throw having been
+//!   caught, and will never be given its value: where its code was is a
+//!   thunk that throws the same again, which forcing it forces.
 //! * `DONE`: a thunk that has been forced. Its value is where its code was.
 //! * `INTEGER`: the address of the number, which Rust keeps.
 //! * `TEXT`: its length in bytes, and then the bytes, as UTF-8.
@@ -99,6 +103,8 @@ pub const SLICE: u64 = 8;
 pub const ARRAY: u64 = 9;
 /// A floating-point number.
 pub const FLOAT: u64 = 10;
+/// The tag of a `WORKING` thunk that threw, which throws again.
+pub const THREW: u64 = 1;
 /// A slot that holds no block.
 const FREE: u64 = 15;
 
@@ -208,6 +214,7 @@ unsafe fn children(block: *mut u64) -> &'static [Value] {
         DATA => std::slice::from_raw_parts(block.add(1), count(head)),
         CLOSURE | THUNK => std::slice::from_raw_parts(block.add(2), count(head)),
         DONE | SLICE => std::slice::from_raw_parts(block.add(1), 1),
+        WORKING if tag(head) == THREW => std::slice::from_raw_parts(block.add(1), 1),
         ARRAY => std::slice::from_raw_parts(block.add(2), *block.add(1) as usize),
         _ => &[],
     }
@@ -258,11 +265,13 @@ struct Heap {
     large: HashMap<*mut u64, usize>,
     /// The blocks waiting to be taken apart.
     pending: Vec<*mut u64>,
-    /// The thunks at the top of the program that have been forced.
+    /// The thunks at the top of the program that have been forced, or that
+    /// threw.
     roots: Vec<*mut u64>,
-    /// What catches a thrown value, the last begun last: a handler and where
-    /// to go on with what it gives. The program holds these through here.
-    catching: Vec<(Value, Value)>,
+    /// What catches a thrown value, the last begun last: a handler, where
+    /// to go on with what it gives, and the thunk being worked out when the
+    /// catch began. The program holds the first two through here.
+    catching: Vec<(Value, Value, Value)>,
     /// The functions of C that wrappers made, each by its address, with the
     /// place of the two values it calls, which the program holds there.
     wrapped: HashMap<u64, *mut Value>,
@@ -429,7 +438,7 @@ impl Heap {
     unsafe fn examine(&mut self, given: &[Value]) {
         // Inside a call from C into the program, what the program held
         // before it called C is held where this cannot see it.
-        if self.catching.iter().any(|&(handler, _)| handler == BARRIER) {
+        if self.catching.iter().any(|&(handler, _, _)| handler == BARRIER) {
             self.since = 0;
             hazy_check_due = 0;
             return;
@@ -452,7 +461,7 @@ impl Heap {
         for &thunk in &self.roots {
             reach(*thunk.add(1), &mut stack);
         }
-        for &(handler, resume) in &self.catching {
+        for &(handler, resume, _) in &self.catching {
             reach(handler, &mut stack);
             reach(resume, &mut stack);
         }
@@ -511,7 +520,7 @@ impl Heap {
         for &thunk in &self.roots {
             refer(*thunk.add(1), "a definition");
         }
-        for &(handler, resume) in &self.catching {
+        for &(handler, resume, _) in &self.catching {
             refer(handler, "a catch");
             refer(resume, "a catch");
         }
@@ -567,8 +576,34 @@ pub fn release(value: Value) {
 pub const BARRIER: Value = 0;
 
 /// What catches a thrown value.
-pub fn catching() -> &'static mut Vec<(Value, Value)> {
+pub fn catching() -> &'static mut Vec<(Value, Value, Value)> {
     &mut heap().catching
+}
+
+/// The thunk being worked out that was begun last, or nothing. Each that is
+/// being worked out holds the one begun before it where its code was. The
+/// compiled program keeps this itself, as it forces thunks and as they are
+/// given their values.
+#[no_mangle]
+pub static mut hazy_working: Value = 0;
+
+/// A value was thrown, and the catch begun last catches it. Every thunk
+/// begun since that catch began will never be given its value: each throws
+/// the value again instead, by forcing `again`.
+pub fn abandon(again: Value) {
+    let Some(&(_, _, mark)) = heap().catching.last() else { return };
+    unsafe {
+        while hazy_working != mark {
+            let block = hazy_working as *mut u64;
+            hazy_working = *block.add(1);
+            *block |= THREW << 6;
+            *block.add(1) = share(again);
+            // A definition at the top holds it from now on.
+            if *block & IMMORTAL != 0 {
+                heap().roots.push(block);
+            }
+        }
+    }
 }
 
 /// The functions of C that wrappers made.
