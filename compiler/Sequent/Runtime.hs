@@ -553,6 +553,10 @@ catch =
 --
 -- > primThrow value = (handler, resume) = pop; resume (force handler value ())
 --
+-- Before that, every thunk begun since the catch began, which will never be
+-- given its value, is made to throw the value again when it is asked for
+-- again, as GHC's are: it was left being worked out, and seemed to loop.
+--
 -- A value that nothing catches is the library's @Thrown@, which says second
 -- what the program exits with and third how the value is shown.
 throw :: Producer
@@ -561,7 +565,15 @@ throw =
     Primitive (outside "catching") [] $
       Case
         [ Alternative 1 [] $
-            Primitive (outside "catch_pop") [] $
+            Cut
+              ( Thunk (pack "thrown") $
+                  Cut (Global (global (pack "Hazy") (pack "primThrow"))) $
+                    Apply [variable "value"] (covariable "thrown")
+              )
+              $ MuTilde (byValue "again")
+              $ Primitive (outside "catch_abandon") [variable "again"]
+              $ MuTilde (byValue "abandoned")
+              $ Primitive (outside "catch_pop") [] $
               Case
                 [ Alternative 0 [byNeed "handler", byNeed "resume"] $
                     Cut (variable "handler") $
