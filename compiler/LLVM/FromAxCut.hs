@@ -3000,6 +3000,7 @@ helpers =
   @hazy_reused = external global i64
   @hazy_lent = external global i64
   @hazy_free_lists = external global [33 x ptr]
+  @hazy_working = external global i64
   @hazy_alloc_slow = external global i64
   @hazy_allocated = external global i64
   @hazy_freed = external global i64
@@ -3269,6 +3270,11 @@ forcing linkage =
     call void @hazy_open(i64 %self)
     %block = inttoptr i64 %thunk to ptr
     %header = load i64, ptr %block
+    ; The thunk is no longer being worked out: the one begun before it is
+    ; the last that is.
+    %before.place = getelementptr i64, ptr %block, i64 1
+    %before = load i64, ptr %before.place
+    store i64 %before, ptr @hazy_working
     ; If this is the only reference to the thunk, nobody will ask for its
     ; value again: the thunk is freed and the value goes on unshared.
     %held = lshr i64 %header, 32
@@ -3337,11 +3343,25 @@ forcing linkage =
          %updater = ptrtoint ptr %update to i64
          %place = getelementptr i64, ptr %pointer, i64 1
          %code = load ptr, ptr %place
+         ; It is the last thunk being worked out, and where its code was is
+         ; the one before it.
+         %before = load i64, ptr @hazy_working
+         store i64 %before, ptr %place
+         store i64 %value, ptr @hazy_working
          musttail call tailcc void %code(i64 %value, i64 %updater)
          ret void
        working:
+         ; A thunk being worked out whose tag says it threw is one that
+         ; never will be given its value.
+         %threw = and i64 %header, 64
+         %caught = icmp ne i64 %threw, 0
+         br i1 %caught, label %again, label %looping
+       looping:
          call void @hazy_loop()
          unreachable
+       again:
+         musttail call tailcc void @hazy_again(i64 %consumer, i64 %value)
+         ret void
        done:
          ; The value is read and the thunk given up. If that was the last
          ; reference to the thunk, the value is taken and not shared.
@@ -3357,6 +3377,19 @@ forcing linkage =
        counted:
          call void @hazy_open(i64 %value)
          musttail call tailcc void @hazy_return(i64 %consumer, i64 %result)
+         ret void
+       }
+
+       ; A thunk that threw, the throw having been caught: what it holds
+       ; throws the same again, and is forced in its place. It is a function
+       ; of its own so that forcing is not a loop.
+       define internal tailcc void @hazy_again(i64 %consumer, i64 %value) noinline {
+         %pointer = inttoptr i64 %value to ptr
+         %thrower.place = getelementptr i64, ptr %pointer, i64 1
+         %thrower = load i64, ptr %thrower.place
+         call void @hazy_share(i64 %thrower)
+         call void @hazy_erase(i64 %value)
+         musttail call tailcc void @hazy_force(i64 %consumer, i64 %thrower)
          ret void
        }
 

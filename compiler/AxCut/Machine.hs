@@ -101,7 +101,11 @@ data Value
 -- thrown value, the catch begun last first, the files that are open and
 -- what each was opened as, and what was said of the last that could not be.
 data World = World
-  { catching :: !(IORef [(Value, Value)]),
+  { -- | Each catch's handler, where it goes on, and how many thunks were
+    -- being worked out when it began.
+    catching :: !(IORef [(Value, Value, Int)]),
+    -- | The thunks being worked out, the last begun first.
+    working :: !(IORef [IORef Cell]),
     files :: !(IORef (Map Int (Text, Handle))),
     failure :: !(IORef Text),
     -- | The arguments and the name of the program, which it can change for
@@ -146,6 +150,9 @@ data Cell
     Working
   | -- | A thunk that has been forced.
     Done Value
+  | -- | A thunk that threw, the throw having been caught: a thunk that
+    -- throws the same again.
+    Again Value
   | -- | The consumer a thunk's body is given: it keeps the value in the
     -- thunk and then hands it to the consumer that asked.
     Update !(IORef Cell) Value
@@ -161,6 +168,7 @@ run :: Program -> IO ()
 run Program {definitions, entry} = do
   globals <- traverse (\object -> allocate object []) definitions
   catching <- newIORef []
+  working <- newIORef []
   files <- newIORef Map.empty
   failure <- newIORef Text.empty
   arguments <- newIORef []
@@ -172,7 +180,7 @@ run Program {definitions, entry} = do
   errno <- newIORef 0
   returned <- newIORef unit
   wrappers <- newIORef Map.empty
-  let world = World {catching, files, failure, arguments, programName, building, memory, blocks, symbols, errno, exported, returned, wrappers, enter}
+  let world = World {catching, working, files, failure, arguments, programName, building, memory, blocks, symbols, errno, exported, returned, wrappers, enter}
       exported =
         Map.fromList
           [ (symbol, cell)
@@ -341,9 +349,11 @@ execute world globals = go
         readIORef cell >>= \case
           Delayed parameters body environment -> do
             writeIORef cell Working
+            modifyIORef (working world) (cell :)
             update <- newIORef (Update cell consumer)
             go body (zip parameters [Reference update] ++ environment)
           Done value -> deliver value consumer
+          Again thrower -> force thrower consumer
           Working -> do
             hPutStrLn stderr "<<loop>>"
             exitFailure
@@ -360,6 +370,7 @@ execute world globals = go
             go body ((parameter, value) : environment)
           Update thunk consumer -> do
             writeIORef thunk (Done value)
+            modifyIORef (working world) (drop 1)
             deliver value consumer
           _ -> bug "a value was given to something that is not a consumer"
       _ -> bug "a value was given to something that is not an object"
@@ -804,7 +815,7 @@ callC World {memory, blocks, errno, files} Foreign.Call {symbol, result} given =
 -- |
 -- What the runtime does under a name of its own, as the machine does it.
 outside :: World -> String -> [Value] -> IO Value
-outside World {catching, files, failure, building, arguments, programName, returned} name given = case (name, given) of
+outside World {catching, working, files, failure, building, arguments, programName, returned} name given = case (name, given) of
   ("callback_result", [value]) -> unit <$ writeIORef returned value
   ("new_ref", [value]) -> Box <$> newIORef value
   ("read_ref", [Box box]) -> readIORef box
@@ -986,7 +997,17 @@ outside World {catching, files, failure, building, arguments, programName, retur
   -- The machine keeps no time.
   ("clock", []) -> pure $ Int 0
   ("os", []) -> pure $ Text $ Text.pack os
-  ("catch_push", [handler, resume]) -> unit <$ modifyIORef catching ((handler, resume) :)
+  ("catch_push", [handler, resume]) -> do
+    depth <- length <$> readIORef working
+    unit <$ modifyIORef catching ((handler, resume, depth) :)
+  ("catch_abandon", [again]) ->
+    readIORef catching >>= \case
+      (_, _, depth) : _ -> do
+        thunks <- readIORef working
+        let (abandoned, left) = splitAt (length thunks - depth) thunks
+        for_ abandoned $ \thunk -> writeIORef thunk (Again again)
+        unit <$ writeIORef working left
+      [] -> pure unit
   ("catching", []) -> bool . not . null <$> readIORef catching
   ("uncaught", [Int code, Text shown])
     | code == 0 -> exitSuccess
@@ -1000,7 +1021,7 @@ outside World {catching, files, failure, building, arguments, programName, retur
         exitFailure
   ("catch_pop", []) ->
     readIORef catching >>= \case
-      (handler, resume) : rest -> do
+      (handler, resume, _) : rest -> do
         writeIORef catching rest
         pure $ Data 0 [handler, resume]
       [] -> do
